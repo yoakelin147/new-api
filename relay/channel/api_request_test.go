@@ -1,11 +1,19 @@
 package channel
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -190,4 +198,140 @@ func TestProcessHeaderOverride_PassHeadersTemplateSetsRuntimeHeaders(t *testing.
 	require.Equal(t, "Codex CLI", upstreamReq.Header.Get("Originator"))
 	require.Equal(t, "sess-123", upstreamReq.Header.Get("Session_id"))
 	require.Empty(t, upstreamReq.Header.Get("X-Codex-Beta-Features"))
+}
+
+func TestDoRequestCircuitBreakerTimeoutNonStream(t *testing.T) {
+	originalSetting := *operation_setting.GetUpstreamCircuitBreakerSetting()
+	originalRelayTimeout := common.RelayTimeout
+	t.Cleanup(func() {
+		*operation_setting.GetUpstreamCircuitBreakerSetting() = originalSetting
+		common.RelayTimeout = originalRelayTimeout
+		service.InitHttpClient()
+	})
+	common.RelayTimeout = 0
+	service.InitHttpClient()
+
+	setting := operation_setting.GetUpstreamCircuitBreakerSetting()
+	setting.Enabled = true
+	setting.TimeoutSeconds = 1
+	setting.RetryEnabled = true
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(1500 * time.Millisecond)
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	t.Cleanup(server.Close)
+
+	c := newDoRequestTestContext(t)
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{},
+	}
+
+	resp, err := doRequest(c, req, info)
+
+	require.Nil(t, resp)
+	var newAPIError *types.NewAPIError
+	require.ErrorAs(t, err, &newAPIError)
+	require.Equal(t, types.ErrorCodeChannelUpstreamTimeout, newAPIError.GetErrorCode())
+	require.Equal(t, 599, newAPIError.StatusCode)
+}
+
+func TestDoRequestCircuitBreakerTimeoutBeforeStreamHeaders(t *testing.T) {
+	originalSetting := *operation_setting.GetUpstreamCircuitBreakerSetting()
+	originalRelayTimeout := common.RelayTimeout
+	t.Cleanup(func() {
+		*operation_setting.GetUpstreamCircuitBreakerSetting() = originalSetting
+		common.RelayTimeout = originalRelayTimeout
+		service.InitHttpClient()
+	})
+	common.RelayTimeout = 0
+	service.InitHttpClient()
+
+	setting := operation_setting.GetUpstreamCircuitBreakerSetting()
+	setting.Enabled = true
+	setting.TimeoutSeconds = 1
+	setting.RetryEnabled = true
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(1500 * time.Millisecond)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: ok\n\n")
+	}))
+	t.Cleanup(server.Close)
+
+	c := newDoRequestTestContext(t)
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	info := &relaycommon.RelayInfo{
+		IsStream: true,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ApiType: constant.APITypeOpenAI,
+		},
+	}
+
+	resp, err := doRequest(c, req, info)
+
+	require.Nil(t, resp)
+	var newAPIError *types.NewAPIError
+	require.ErrorAs(t, err, &newAPIError)
+	require.Equal(t, types.ErrorCodeChannelUpstreamTimeout, newAPIError.GetErrorCode())
+	require.Equal(t, 599, newAPIError.StatusCode)
+}
+
+func TestDoRequestCircuitBreakerDoesNotSetTotalStreamTimeout(t *testing.T) {
+	originalSetting := *operation_setting.GetUpstreamCircuitBreakerSetting()
+	originalRelayTimeout := common.RelayTimeout
+	t.Cleanup(func() {
+		*operation_setting.GetUpstreamCircuitBreakerSetting() = originalSetting
+		common.RelayTimeout = originalRelayTimeout
+		service.InitHttpClient()
+	})
+	common.RelayTimeout = 0
+	service.InitHttpClient()
+
+	setting := operation_setting.GetUpstreamCircuitBreakerSetting()
+	setting.Enabled = true
+	setting.TimeoutSeconds = 1
+	setting.RetryEnabled = true
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		time.Sleep(1500 * time.Millisecond)
+		_, _ = fmt.Fprint(w, "data: ok\n\n")
+	}))
+	t.Cleanup(server.Close)
+
+	c := newDoRequestTestContext(t)
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	info := &relaycommon.RelayInfo{
+		IsStream: true,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ApiType: constant.APITypeOpenAI,
+		},
+	}
+
+	resp, err := doRequest(c, req, info)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+
+	require.NoError(t, err)
+	require.Equal(t, "data: ok\n\n", string(body))
+}
+
+func newDoRequestTestContext(t *testing.T) *gin.Context {
+	t.Helper()
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/chat/completions", nil)
+	return c
 }

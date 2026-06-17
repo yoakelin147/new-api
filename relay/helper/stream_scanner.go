@@ -57,6 +57,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}()
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	if operation_setting.IsUpstreamCircuitBreakerEnabled() {
+		streamingTimeout = operation_setting.UpstreamCircuitBreakerTimeout()
+	}
 
 	var (
 		stopChan   = make(chan bool, 3) // 增加缓冲区避免阻塞

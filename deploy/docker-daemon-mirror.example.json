@@ -1,0 +1,7 @@
+{
+  "registry-mirrors": [
+    "https://docker.1ms.run",
+    "https://docker.1panel.live",
+    "https://dockerpull.cn"
+  ]
+}

@@ -230,15 +230,23 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
 
-		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
+		shouldContinue := shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry())
+		if shouldContinue && newAPIError.GetErrorCode() == types.ErrorCodeChannelUpstreamTimeout {
+			c.Set("upstream_circuit_breaker_retry", true)
+		}
+		if !shouldContinue {
 			break
 		}
 	}
 
 	useChannel := c.GetStringSlice("use_channel")
 	if len(useChannel) > 1 {
-		retryLogStr := fmt.Sprintf("重试：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
+		retryChannelChain := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]")
+		retryLogStr := fmt.Sprintf("重试：%s", retryChannelChain)
 		logger.LogInfo(c, retryLogStr)
+		if c.GetBool("upstream_circuit_breaker_retry") {
+			logger.LogInfo(c, fmt.Sprintf("upstream circuit breaker timeout, retry channel #%s", strings.ReplaceAll(retryChannelChain, "->", " -> #")))
+		}
 	}
 	if newAPIError != nil {
 		gopool.Go(func() {

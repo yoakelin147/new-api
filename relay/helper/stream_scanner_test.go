@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,6 +81,79 @@ func TestStreamScannerHandler_NilInputs(t *testing.T) {
 
 	StreamScannerHandler(c, nil, info, func(data string, sr *StreamResult) {})
 	StreamScannerHandler(c, &http.Response{Body: io.NopCloser(strings.NewReader(""))}, info, nil)
+}
+
+func TestUpstreamCircuitBreakerStreamError_BeforeFirstResponse(t *testing.T) {
+	original := *operation_setting.GetUpstreamCircuitBreakerSetting()
+	t.Cleanup(func() {
+		*operation_setting.GetUpstreamCircuitBreakerSetting() = original
+	})
+
+	setting := operation_setting.GetUpstreamCircuitBreakerSetting()
+	setting.Enabled = true
+	setting.TimeoutSeconds = 2
+	setting.RetryEnabled = true
+	setting.RetryBeforeFirstResponseOnly = true
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{
+		StreamStatus: relaycommon.NewStreamStatus(),
+	}
+	info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+
+	err := UpstreamCircuitBreakerStreamError(c, info)
+
+	require.NotNil(t, err)
+	require.Equal(t, types.ErrorCodeChannelUpstreamTimeout, err.GetErrorCode())
+	require.Equal(t, 599, err.StatusCode)
+}
+
+func TestUpstreamCircuitBreakerStreamError_AfterResponseDoesNotRetry(t *testing.T) {
+	original := *operation_setting.GetUpstreamCircuitBreakerSetting()
+	t.Cleanup(func() {
+		*operation_setting.GetUpstreamCircuitBreakerSetting() = original
+	})
+
+	setting := operation_setting.GetUpstreamCircuitBreakerSetting()
+	setting.Enabled = true
+	setting.TimeoutSeconds = 2
+	setting.RetryEnabled = true
+	setting.RetryBeforeFirstResponseOnly = true
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{
+		ReceivedResponseCount: 1,
+		StreamStatus:          relaycommon.NewStreamStatus(),
+	}
+	info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+
+	require.Nil(t, UpstreamCircuitBreakerStreamError(c, info))
+}
+
+func TestUpstreamCircuitBreakerStreamError_Disabled(t *testing.T) {
+	original := *operation_setting.GetUpstreamCircuitBreakerSetting()
+	t.Cleanup(func() {
+		*operation_setting.GetUpstreamCircuitBreakerSetting() = original
+	})
+
+	setting := operation_setting.GetUpstreamCircuitBreakerSetting()
+	setting.Enabled = false
+	setting.TimeoutSeconds = 2
+	setting.RetryEnabled = true
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{
+		StreamStatus: relaycommon.NewStreamStatus(),
+	}
+	info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+
+	require.Nil(t, UpstreamCircuitBreakerStreamError(c, info))
 }
 
 func TestNewStreamScanner_AllowsLargeStreamLine(t *testing.T) {

@@ -55,6 +55,16 @@ const OPERATIONS_SECTIONS = [
           AutomaticDisableKeywords: settings.AutomaticDisableKeywords,
           AutomaticDisableStatusCodes: settings.AutomaticDisableStatusCodes,
           AutomaticRetryStatusCodes: settings.AutomaticRetryStatusCodes,
+          'upstream_circuit_breaker.enabled':
+            settings['upstream_circuit_breaker.enabled'],
+          'upstream_circuit_breaker.timeout_seconds':
+            settings['upstream_circuit_breaker.timeout_seconds'],
+          'upstream_circuit_breaker.retry_enabled':
+            settings['upstream_circuit_breaker.retry_enabled'],
+          'upstream_circuit_breaker.retry_before_first_response_only':
+            settings[
+              'upstream_circuit_breaker.retry_before_first_response_only'
+            ],
           'monitor_setting.auto_test_channel_enabled':
             settings['monitor_setting.auto_test_channel_enabled'],
           'monitor_setting.auto_test_channel_minutes':

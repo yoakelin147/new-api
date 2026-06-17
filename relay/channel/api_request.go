@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -94,6 +95,17 @@ var passthroughSkipHeaderNamesLower = map[string]struct{}{
 }
 
 var headerPassthroughRegexCache sync.Map // map[string]*regexp.Regexp
+
+type cleanupOnCloseReadCloser struct {
+	io.ReadCloser
+	cleanup func()
+}
+
+func (r *cleanupOnCloseReadCloser) Close() error {
+	err := r.ReadCloser.Close()
+	r.cleanup()
+	return err
+}
 
 func getHeaderPassthroughRegex(pattern string) (*regexp.Regexp, error) {
 	pattern = strings.TrimSpace(pattern)
@@ -495,6 +507,39 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	} else {
 		client = service.GetHttpClient()
 	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	var breakerTimeout time.Duration
+	var cleanupAfterRequest func()
+	if operation_setting.IsUpstreamCircuitBreakerEnabled() {
+		breakerTimeout = operation_setting.UpstreamCircuitBreakerTimeout()
+		if info.IsStream {
+			req = req.WithContext(c.Request.Context())
+			var transport *http.Transport
+			if client.Transport == nil {
+				if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok {
+					transport = defaultTransport.Clone()
+				}
+			} else if baseTransport, ok := client.Transport.(*http.Transport); ok {
+				transport = baseTransport.Clone()
+			}
+			if transport != nil {
+				transport.ResponseHeaderTimeout = breakerTimeout
+				streamClient := *client
+				streamClient.Transport = transport
+				client = &streamClient
+				cleanupAfterRequest = transport.CloseIdleConnections
+			}
+		} else {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), breakerTimeout)
+			cleanupAfterRequest = cancel
+			req = req.WithContext(ctx)
+		}
+	} else {
+		req = req.WithContext(c.Request.Context())
+	}
 
 	var stopPinger context.CancelFunc
 	if info.IsStream {
@@ -516,19 +561,47 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if cleanupAfterRequest != nil {
+			cleanupAfterRequest()
+		}
 		logger.LogError(c, "do request failed: "+err.Error())
+		if c.Request.Context().Err() != nil {
+			return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry(), types.ErrOptionWithHideErrMsg("client disconnected during upstream request"))
+		}
+		var netErr net.Error
+		isUpstreamTimeout := errors.Is(req.Context().Err(), context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout()
+		if operation_setting.IsUpstreamCircuitBreakerRetryEnabled() && isUpstreamTimeout {
+			return nil, types.NewError(
+				fmt.Errorf("upstream circuit breaker timeout after %d seconds", int64(breakerTimeout.Seconds())),
+				types.ErrorCodeChannelUpstreamTimeout,
+				types.ErrOptionWithStatusCode(599),
+			)
+		}
 		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
 	}
 	if resp == nil {
+		if cleanupAfterRequest != nil {
+			cleanupAfterRequest()
+		}
 		return nil, errors.New("resp is nil")
+	}
+	if cleanupAfterRequest != nil && resp.Body != nil {
+		resp.Body = &cleanupOnCloseReadCloser{
+			ReadCloser: resp.Body,
+			cleanup:    cleanupAfterRequest,
+		}
 	}
 
 	if upID := resp.Header.Get(common2.RequestIdKey); upID != "" {
 		c.Set(common2.UpstreamRequestIdKey, upID)
 	}
 
-	_ = req.Body.Close()
-	_ = c.Request.Body.Close()
+	if req.Body != nil {
+		_ = req.Body.Close()
+	}
+	if c.Request.Body != nil {
+		_ = c.Request.Body.Close()
+	}
 	return resp, nil
 }
 

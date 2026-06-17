@@ -42,6 +42,10 @@ export default function SettingsMonitoring(props) {
     AutomaticDisableStatusCodes: '401',
     AutomaticRetryStatusCodes:
       '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
+    'upstream_circuit_breaker.enabled': false,
+    'upstream_circuit_breaker.timeout_seconds': 300,
+    'upstream_circuit_breaker.retry_enabled': true,
+    'upstream_circuit_breaker.retry_before_first_response_only': true,
     'monitor_setting.auto_test_channel_enabled': false,
     'monitor_setting.auto_test_channel_minutes': 10,
   });
@@ -198,6 +202,76 @@ export default function SettingsMonitoring(props) {
                     setInputs({
                       ...inputs,
                       QuotaRemindThreshold: String(value),
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'upstream_circuit_breaker.enabled'}
+                  label={t('上游熔断')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  extraText={t('上游请求超时后中止当前请求，并允许在首个有效输出前重试其他渠道')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'upstream_circuit_breaker.enabled': value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'upstream_circuit_breaker.retry_enabled'}
+                  label={t('熔断后自动重试')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  extraText={t('复用失败重试次数和渠道优先级规则')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'upstream_circuit_breaker.retry_enabled': value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('熔断时间')}
+                  step={1}
+                  min={1}
+                  suffix={t('秒')}
+                  extraText={t('默认 300 秒；启用后也用于流式空闲超时')}
+                  field={'upstream_circuit_breaker.timeout_seconds'}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'upstream_circuit_breaker.timeout_seconds':
+                        parseInt(value),
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={
+                    'upstream_circuit_breaker.retry_before_first_response_only'
+                  }
+                  label={t('仅首个输出前重试')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  extraText={t('已发送有效模型输出后不会静默切换渠道')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'upstream_circuit_breaker.retry_before_first_response_only':
+                        value,
                     })
                   }
                 />

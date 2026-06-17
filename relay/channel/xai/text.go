@@ -66,6 +66,9 @@ func xAIStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			sr.Error(err)
 		}
 	})
+	if err := helper.UpstreamCircuitBreakerStreamError(c, info); err != nil {
+		return nil, err
+	}
 
 	if !containStreamUsage {
 		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())

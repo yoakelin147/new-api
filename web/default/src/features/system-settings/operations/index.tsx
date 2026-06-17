@@ -38,6 +38,10 @@ const defaultOperationsSettings: OperationsSettings = {
   AutomaticDisableStatusCodes: '401',
   AutomaticRetryStatusCodes:
     '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
+  'upstream_circuit_breaker.enabled': false,
+  'upstream_circuit_breaker.timeout_seconds': 300,
+  'upstream_circuit_breaker.retry_enabled': true,
+  'upstream_circuit_breaker.retry_before_first_response_only': true,
   'monitor_setting.auto_test_channel_enabled': false,
   'monitor_setting.auto_test_channel_minutes': 10,
   SMTPServer: '',

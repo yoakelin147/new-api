@@ -1379,6 +1379,9 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			sr.Stop(fmt.Errorf("gemini callback stopped"))
 		}
 	})
+	if err := helper.UpstreamCircuitBreakerStreamError(c, info); err != nil {
+		return nil, err
+	}
 
 	if imageCount != 0 {
 		if usage.CompletionTokens == 0 {

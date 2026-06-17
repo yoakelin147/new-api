@@ -61,6 +61,15 @@ const monitoringSchema = z
     AutomaticDisableKeywords: z.string(),
     AutomaticDisableStatusCodes: z.string(),
     AutomaticRetryStatusCodes: z.string(),
+    upstream_circuit_breaker: z.object({
+      enabled: z.boolean(),
+      timeout_seconds: z.coerce
+        .number()
+        .int()
+        .min(1, 'Timeout must be at least 1 second'),
+      retry_enabled: z.boolean(),
+      retry_before_first_response_only: z.boolean(),
+    }),
     monitor_setting: z.object({
       auto_test_channel_enabled: z.boolean(),
       auto_test_channel_minutes: z.coerce
@@ -109,6 +118,10 @@ type MonitoringSettingsSectionProps = {
     AutomaticDisableKeywords: string
     AutomaticDisableStatusCodes: string
     AutomaticRetryStatusCodes: string
+    'upstream_circuit_breaker.enabled': boolean
+    'upstream_circuit_breaker.timeout_seconds': number
+    'upstream_circuit_breaker.retry_enabled': boolean
+    'upstream_circuit_breaker.retry_before_first_response_only': boolean
     'monitor_setting.auto_test_channel_enabled': boolean
     'monitor_setting.auto_test_channel_minutes': number
   }
@@ -126,6 +139,10 @@ type NormalizedMonitoringValues = {
   AutomaticDisableKeywords: string
   AutomaticDisableStatusCodes: string
   AutomaticRetryStatusCodes: string
+  'upstream_circuit_breaker.enabled': boolean
+  'upstream_circuit_breaker.timeout_seconds': number
+  'upstream_circuit_breaker.retry_enabled': boolean
+  'upstream_circuit_breaker.retry_before_first_response_only': boolean
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
 }
@@ -142,6 +159,13 @@ const buildFormDefaults = (
   ),
   AutomaticDisableStatusCodes: defaults.AutomaticDisableStatusCodes ?? '',
   AutomaticRetryStatusCodes: defaults.AutomaticRetryStatusCodes ?? '',
+  upstream_circuit_breaker: {
+    enabled: defaults['upstream_circuit_breaker.enabled'],
+    timeout_seconds: defaults['upstream_circuit_breaker.timeout_seconds'],
+    retry_enabled: defaults['upstream_circuit_breaker.retry_enabled'],
+    retry_before_first_response_only:
+      defaults['upstream_circuit_breaker.retry_before_first_response_only'],
+  },
   monitor_setting: {
     auto_test_channel_enabled:
       defaults['monitor_setting.auto_test_channel_enabled'],
@@ -166,6 +190,14 @@ const normalizeDefaults = (
   AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
     defaults.AutomaticRetryStatusCodes ?? ''
   ).normalized,
+  'upstream_circuit_breaker.enabled':
+    defaults['upstream_circuit_breaker.enabled'],
+  'upstream_circuit_breaker.timeout_seconds':
+    defaults['upstream_circuit_breaker.timeout_seconds'],
+  'upstream_circuit_breaker.retry_enabled':
+    defaults['upstream_circuit_breaker.retry_enabled'],
+  'upstream_circuit_breaker.retry_before_first_response_only':
+    defaults['upstream_circuit_breaker.retry_before_first_response_only'],
   'monitor_setting.auto_test_channel_enabled':
     defaults['monitor_setting.auto_test_channel_enabled'],
   'monitor_setting.auto_test_channel_minutes':
@@ -188,6 +220,14 @@ const normalizeFormValues = (
   AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
     values.AutomaticRetryStatusCodes
   ).normalized,
+  'upstream_circuit_breaker.enabled':
+    values.upstream_circuit_breaker.enabled,
+  'upstream_circuit_breaker.timeout_seconds':
+    values.upstream_circuit_breaker.timeout_seconds,
+  'upstream_circuit_breaker.retry_enabled':
+    values.upstream_circuit_breaker.retry_enabled,
+  'upstream_circuit_breaker.retry_before_first_response_only':
+    values.upstream_circuit_breaker.retry_before_first_response_only,
   'monitor_setting.auto_test_channel_enabled':
     values.monitor_setting.auto_test_channel_enabled,
   'monitor_setting.auto_test_channel_minutes':
@@ -298,6 +338,101 @@ export function MonitoringSettingsSection({
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='grid gap-6 md:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='upstream_circuit_breaker.enabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('上游熔断')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        '上游请求超时后中止当前请求，并允许在首个有效输出前重试其他渠道'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='upstream_circuit_breaker.retry_enabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('熔断后自动重试')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        '复用现有失败重试次数和渠道优先级规则'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
+          </div>
+
+          <div className='grid gap-6 md:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='upstream_circuit_breaker.timeout_seconds'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('熔断时间（秒）')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      step={1}
+                      {...safeNumberFieldProps(field)}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('默认 300 秒；启用后也用于流式空闲超时')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='upstream_circuit_breaker.retry_before_first_response_only'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('仅首个输出前重试')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        '已发送有效模型输出后不会静默切换渠道'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
               )}
             />
           </div>

@@ -295,6 +295,15 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case "upstream_circuit_breaker.timeout_seconds":
+		timeoutSeconds, parseErr := strconv.Atoi(strings.TrimSpace(option.Value.(string)))
+		if parseErr != nil || timeoutSeconds <= 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "upstream circuit breaker timeout must be a positive integer",
+			})
+			return
+		}
 	case "console_setting.api_info":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "ApiInfo")
 		if err != nil {

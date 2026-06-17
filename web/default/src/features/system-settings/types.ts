@@ -281,6 +281,10 @@ export type OperationsSettings = {
   AutomaticDisableKeywords: string
   AutomaticDisableStatusCodes: string
   AutomaticRetryStatusCodes: string
+  'upstream_circuit_breaker.enabled': boolean
+  'upstream_circuit_breaker.timeout_seconds': number
+  'upstream_circuit_breaker.retry_enabled': boolean
+  'upstream_circuit_breaker.retry_before_first_response_only': boolean
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
   SMTPServer: string

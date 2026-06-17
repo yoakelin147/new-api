@@ -887,6 +887,9 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	if err != nil {
 		return nil, err
 	}
+	if err := helper.UpstreamCircuitBreakerStreamError(c, info); err != nil {
+		return nil, err
+	}
 
 	HandleStreamFinalResponse(c, info, claudeInfo)
 	return claudeInfo.Usage, nil
