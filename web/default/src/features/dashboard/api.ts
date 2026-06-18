@@ -61,6 +61,17 @@ export async function getUserQuotaDataByUsers(params: {
   return res.data
 }
 
+export async function getUserQuotaDataByChannels(params: {
+  start_timestamp: number
+  end_timestamp: number
+}) {
+  const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
+    '/api/data/channels',
+    { params }
+  )
+  return res.data
+}
+
 // Get uptime monitoring status for all services
 export async function getUptimeStatus() {
   const res = await api.get<{ success: boolean; data: UptimeGroupResult[] }>(

@@ -21,6 +21,15 @@ type QuotaData struct {
 	Quota     int    `json:"quota" gorm:"default:0"`
 }
 
+type ChannelQuotaData struct {
+	ChannelId   int    `json:"channel_id"`
+	ChannelName string `json:"channel_name"`
+	CreatedAt   int64  `json:"created_at"`
+	TokenUsed   int    `json:"token_used"`
+	Count       int    `json:"count"`
+	Quota       int    `json:"quota"`
+}
+
 func UpdateQuotaData() {
 	for {
 		if common.DataExportEnabled {
@@ -123,6 +132,79 @@ func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*Quota
 		Group("username, created_at").
 		Find(&quotaDatas).Error
 	return quotaDatas, err
+}
+
+func GetQuotaDataGroupByChannel(startTime int64, endTime int64) ([]*ChannelQuotaData, error) {
+	var quotaDatas []*ChannelQuotaData
+	bucketExpr := channelQuotaBucketExpr()
+	query := LOG_DB.Table("logs").
+		Select(fmt.Sprintf("channel_id, %s as created_at, count(*) as count, sum(quota) as quota, sum(prompt_tokens) + sum(completion_tokens) as token_used", bucketExpr)).
+		Where("type = ? and channel_id <> 0", LogTypeConsume).
+		Group(fmt.Sprintf("channel_id, %s", bucketExpr)).
+		Order("created_at asc")
+	if startTime > 0 {
+		query = query.Where("created_at >= ?", startTime)
+	}
+	if endTime > 0 {
+		query = query.Where("created_at <= ?", endTime)
+	}
+	if err := query.Find(&quotaDatas).Error; err != nil {
+		return nil, err
+	}
+
+	channelIds := make([]int, 0)
+	channelSeen := make(map[int]struct{})
+	for _, quotaData := range quotaDatas {
+		if quotaData.ChannelId == 0 {
+			continue
+		}
+		if _, ok := channelSeen[quotaData.ChannelId]; ok {
+			continue
+		}
+		channelSeen[quotaData.ChannelId] = struct{}{}
+		channelIds = append(channelIds, quotaData.ChannelId)
+	}
+	if len(channelIds) == 0 {
+		return quotaDatas, nil
+	}
+
+	channelNames := make(map[int]string, len(channelIds))
+	if common.MemoryCacheEnabled {
+		missingChannelIds := make([]int, 0)
+		for _, channelId := range channelIds {
+			cacheChannel, err := CacheGetChannel(channelId)
+			if err == nil && cacheChannel != nil {
+				channelNames[channelId] = cacheChannel.Name
+				continue
+			}
+			missingChannelIds = append(missingChannelIds, channelId)
+		}
+		channelIds = missingChannelIds
+	}
+	if len(channelIds) > 0 {
+		var channels []struct {
+			Id   int    `gorm:"column:id"`
+			Name string `gorm:"column:name"`
+		}
+		if err := DB.Table("channels").Select("id, name").Where("id IN ?", channelIds).Find(&channels).Error; err != nil {
+			return quotaDatas, err
+		}
+		for _, channel := range channels {
+			channelNames[channel.Id] = channel.Name
+		}
+	}
+	for _, quotaData := range quotaDatas {
+		quotaData.ChannelName = channelNames[quotaData.ChannelId]
+	}
+
+	return quotaDatas, nil
+}
+
+func channelQuotaBucketExpr() string {
+	if common.UsingMySQL {
+		return "FLOOR(created_at / 3600) * 3600"
+	}
+	return "(created_at / 3600) * 3600"
 }
 
 func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaData []*QuotaData, err error) {

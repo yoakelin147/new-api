@@ -26,6 +26,8 @@ export interface QuotaDataItem {
   id?: number
   user_id?: number
   username?: string
+  channel_id?: number
+  channel_name?: string
   model_name?: string
   created_at: number
   token_used?: number
@@ -110,6 +112,11 @@ export interface ProcessedChartData {
 export interface ProcessedUserChartData {
   spec_user_rank: VChartSpec
   spec_user_trend: VChartSpec
+}
+
+export interface ProcessedChannelChartData {
+  spec_channel_rank: VChartSpec
+  spec_channel_trend: VChartSpec
 }
 
 // ============================================================================

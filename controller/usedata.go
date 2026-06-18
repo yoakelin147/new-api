@@ -3,12 +3,15 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
 )
+
+const maxDashboardChannelStatsRangeSeconds = 31 * 24 * 60 * 60
 
 func GetAllQuotaDates(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
@@ -31,6 +34,41 @@ func GetQuotaDatesByUser(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	dates, err := model.GetQuotaDataGroupByUser(startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    dates,
+	})
+}
+
+func GetQuotaDatesByChannel(c *gin.Context) {
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if endTimestamp == 0 {
+		endTimestamp = time.Now().Unix()
+	}
+	if startTimestamp == 0 {
+		startTimestamp = endTimestamp - maxDashboardChannelStatsRangeSeconds
+	}
+	if endTimestamp < startTimestamp {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "end_timestamp must be greater than or equal to start_timestamp",
+		})
+		return
+	}
+	if endTimestamp-startTimestamp > maxDashboardChannelStatsRangeSeconds {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "time range cannot exceed 31 days",
+		})
+		return
+	}
+	dates, err := model.GetQuotaDataGroupByChannel(startTimestamp, endTimestamp)
 	if err != nil {
 		common.ApiError(c, err)
 		return

@@ -22,6 +22,7 @@ import { formatChartTime, type TimeGranularity } from '@/lib/time'
 import { MAX_CHART_TREND_POINTS } from '@/features/dashboard/constants'
 import type {
   QuotaDataItem,
+  ProcessedChannelChartData,
   ProcessedChartData,
   ProcessedUserChartData,
 } from '@/features/dashboard/types'
@@ -739,6 +740,82 @@ export function processUserChartData(
   limit = 10,
   themeKey?: string
 ): ProcessedUserChartData {
+  const result = processDimensionChartData({
+    data,
+    timeGranularity,
+    t,
+    limit,
+    themeKey,
+    dimensionField: 'User',
+    rankTitle: 'User Consumption Ranking',
+    trendTitle: 'User Consumption Trend',
+    emptyRankDataId: 'userRankData',
+    emptyTrendDataId: 'userTrendData',
+    getDimensionLabel: (item) => item.username || 'unknown',
+  })
+
+  return {
+    spec_user_rank: result.spec_rank,
+    spec_user_trend: result.spec_trend,
+  }
+}
+
+export function processChannelChartData(
+  data: QuotaDataItem[],
+  timeGranularity: TimeGranularity = 'day',
+  t?: TFunction,
+  limit = 10,
+  themeKey?: string
+): ProcessedChannelChartData {
+  const tt: TFunction = t ?? ((x) => x)
+  const result = processDimensionChartData({
+    data,
+    timeGranularity,
+    t,
+    limit,
+    themeKey,
+    dimensionField: 'Channel',
+    rankTitle: 'Channel Consumption Ranking',
+    trendTitle: 'Channel Consumption Trend',
+    emptyRankDataId: 'channelRankData',
+    emptyTrendDataId: 'channelTrendData',
+    getDimensionLabel: (item) =>
+      item.channel_name ||
+      (item.channel_id ? `#${item.channel_id}` : tt('Unknown Channel')),
+  })
+
+  return {
+    spec_channel_rank: result.spec_rank,
+    spec_channel_trend: result.spec_trend,
+  }
+}
+
+function processDimensionChartData(options: {
+  data: QuotaDataItem[]
+  timeGranularity: TimeGranularity
+  t?: TFunction
+  limit: number
+  themeKey?: string
+  dimensionField: string
+  rankTitle: string
+  trendTitle: string
+  emptyRankDataId: string
+  emptyTrendDataId: string
+  getDimensionLabel: (item: QuotaDataItem) => string
+}) {
+  const {
+    data,
+    timeGranularity,
+    t,
+    limit,
+    themeKey,
+    dimensionField,
+    rankTitle,
+    trendTitle,
+    emptyRankDataId,
+    emptyTrendDataId,
+    getDimensionLabel,
+  } = options
   const tt: TFunction = t ?? ((x) => x)
   const { config } = getCurrencyDisplay()
   const quotaPerUnit = config.quotaPerUnit
@@ -753,32 +830,32 @@ export function processUserChartData(
 
   const formatVal = (raw: number) => renderQuotaCompat(raw, 2)
 
-  const emptyResult: ProcessedUserChartData = {
-    spec_user_rank: {
+  const emptyResult = {
+    spec_rank: {
       type: 'bar',
-      data: [{ id: 'userRankData', values: [] }],
+      data: [{ id: emptyRankDataId, values: [] }],
       xField: 'rawQuota',
-      yField: 'User',
-      seriesField: 'User',
+      yField: dimensionField,
+      seriesField: dimensionField,
       direction: 'horizontal',
       title: {
         visible: true,
-        text: tt('User Consumption Ranking'),
+        text: tt(rankTitle),
         subtext: tt('No data available'),
       },
       legends: { visible: false },
       color: { type: 'ordinal', range: userColorRange },
       background: { fill: 'transparent' },
     },
-    spec_user_trend: {
+    spec_trend: {
       type: 'area',
-      data: [{ id: 'userTrendData', values: [] }],
+      data: [{ id: emptyTrendDataId, values: [] }],
       xField: 'Time',
       yField: 'rawQuota',
-      seriesField: 'User',
+      seriesField: dimensionField,
       title: {
         visible: true,
-        text: tt('User Consumption Trend'),
+        text: tt(trendTitle),
         subtext: tt('No data available'),
       },
       legends: { visible: true, selectMode: 'single' },
@@ -790,62 +867,62 @@ export function processUserChartData(
 
   if (!data || data.length === 0) return emptyResult
 
-  const userQuotaTotal = new Map<string, number>()
+  const quotaTotalByDimension = new Map<string, number>()
   data.forEach((item) => {
-    const username = item.username || 'unknown'
-    const prev = userQuotaTotal.get(username) || 0
-    userQuotaTotal.set(username, prev + (Number(item.quota) || 0))
+    const label = getDimensionLabel(item)
+    const prev = quotaTotalByDimension.get(label) || 0
+    quotaTotalByDimension.set(label, prev + (Number(item.quota) || 0))
   })
 
-  const sorted = Array.from(userQuotaTotal.entries()).sort(
+  const sorted = Array.from(quotaTotalByDimension.entries()).sort(
     (a, b) => b[1] - a[1]
   )
-  const topUsers = sorted.slice(0, limit).map(([u]) => u)
-  const topUserSet = new Set(topUsers)
+  const topDimensions = sorted.slice(0, limit).map(([u]) => u)
+  const topDimensionSet = new Set(topDimensions)
   const totalQuota = sorted.slice(0, limit).reduce((s, [, q]) => s + q, 0)
 
-  const rankValues = sorted.slice(0, limit).map(([username, quota]) => ({
-    User: username,
+  const rankValues = sorted.slice(0, limit).map(([label, quota]) => ({
+    [dimensionField]: label,
     rawQuota: quota,
     Usage: Number((quota / quotaPerUnit).toFixed(4)),
   }))
 
-  const userColorMap = topUsers.reduce<Record<string, string>>(
-    (acc, user, i) => {
-      acc[user] = userColorRange[i % userColorRange.length]
+  const dimensionColorMap = topDimensions.reduce<Record<string, string>>(
+    (acc, label, i) => {
+      acc[label] = userColorRange[i % userColorRange.length]
       return acc
     },
     {}
   )
 
-  const timeUserMap = new Map<string, Map<string, number>>()
+  const timeDimensionMap = new Map<string, Map<string, number>>()
   const allTimePoints = new Set<string>()
 
   data.forEach((item) => {
     const ts = Number(item.created_at)
     const timeKey = formatChartTime(ts, timeGranularity)
     allTimePoints.add(timeKey)
-    const user = item.username || 'unknown'
-    if (!topUserSet.has(user)) return
-    if (!timeUserMap.has(timeKey)) timeUserMap.set(timeKey, new Map())
-    const map = timeUserMap.get(timeKey)!
-    map.set(user, (map.get(user) || 0) + (Number(item.quota) || 0))
+    const label = getDimensionLabel(item)
+    if (!topDimensionSet.has(label)) return
+    if (!timeDimensionMap.has(timeKey)) timeDimensionMap.set(timeKey, new Map())
+    const map = timeDimensionMap.get(timeKey)!
+    map.set(label, (map.get(label) || 0) + (Number(item.quota) || 0))
   })
 
   const sortedTimePoints = Array.from(allTimePoints).sort()
   const trendValues: Array<{
     Time: string
-    User: string
+    [key: string]: string | number
     rawQuota: number
     Usage: number
   }> = []
 
   sortedTimePoints.forEach((time) => {
-    topUsers.forEach((user) => {
-      const q = timeUserMap.get(time)?.get(user) || 0
+    topDimensions.forEach((label) => {
+      const q = timeDimensionMap.get(time)?.get(label) || 0
       trendValues.push({
         Time: time,
-        User: user,
+        [dimensionField]: label,
         rawQuota: q,
         Usage: Number((q / quotaPerUnit).toFixed(4)),
       })
@@ -853,16 +930,16 @@ export function processUserChartData(
   })
 
   return {
-    spec_user_rank: {
+    spec_rank: {
       type: 'bar',
-      data: [{ id: 'userRankData', values: rankValues }],
+      data: [{ id: emptyRankDataId, values: rankValues }],
       xField: 'rawQuota',
-      yField: 'User',
-      seriesField: 'User',
+      yField: dimensionField,
+      seriesField: dimensionField,
       direction: 'horizontal',
       title: {
         visible: true,
-        text: tt('User Consumption Ranking'),
+        text: tt(rankTitle),
         subtext: `${tt('Total:')} ${formatVal(totalQuota)}`,
       },
       legends: { visible: false },
@@ -883,7 +960,7 @@ export function processUserChartData(
         mark: {
           content: [
             {
-              key: (datum: Record<string, unknown>) => datum?.User,
+              key: (datum: Record<string, unknown>) => datum?.[dimensionField],
               value: (datum: Record<string, unknown>) =>
                 formatVal(Number(datum?.rawQuota) || 0),
             },
@@ -905,20 +982,20 @@ export function processUserChartData(
           },
         },
       },
-      color: { specified: userColorMap },
+      color: { specified: dimensionColorMap },
       background: { fill: 'transparent' },
       animation: true,
     },
-    spec_user_trend: {
+    spec_trend: {
       type: 'area',
-      data: [{ id: 'userTrendData', values: trendValues }],
+      data: [{ id: emptyTrendDataId, values: trendValues }],
       xField: 'Time',
       yField: 'rawQuota',
-      seriesField: 'User',
+      seriesField: dimensionField,
       stack: false,
       title: {
         visible: true,
-        text: tt('User Consumption Trend'),
+        text: tt(trendTitle),
         subtext: `${tt('Total:')} ${formatVal(totalQuota)}`,
       },
       legends: { visible: true, selectMode: 'single' },
@@ -936,7 +1013,7 @@ export function processUserChartData(
         mark: {
           content: [
             {
-              key: (datum: Record<string, unknown>) => datum?.User,
+              key: (datum: Record<string, unknown>) => datum?.[dimensionField],
               value: (datum: Record<string, unknown>) =>
                 formatVal(Number(datum?.rawQuota) || 0),
             },
@@ -945,7 +1022,7 @@ export function processUserChartData(
         dimension: {
           content: [
             {
-              key: (datum: Record<string, unknown>) => datum?.User,
+              key: (datum: Record<string, unknown>) => datum?.[dimensionField],
               value: (datum: Record<string, unknown>) =>
                 Number(datum?.rawQuota) || 0,
             },
@@ -986,7 +1063,7 @@ export function processUserChartData(
         },
       },
       point: { visible: false },
-      color: { specified: userColorMap },
+      color: { specified: dimensionColorMap },
       background: { fill: 'transparent' },
       animation: true,
     },
