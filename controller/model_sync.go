@@ -9,30 +9,39 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// 上游地址
-const (
-	upstreamModelsURL  = "https://basellm.github.io/llm-metadata/api/newapi/models.json"
-	upstreamVendorsURL = "https://basellm.github.io/llm-metadata/api/newapi/vendors.json"
-)
-
 func normalizeLocale(locale string) (string, bool) {
 	l := strings.ToLower(strings.TrimSpace(locale))
 	switch l {
-	case "en", "zh-CN", "zh-TW", "ja":
+	case "":
+		return "", true
+	case "en", "ja":
 		return l, true
+	case "zh", "zh-cn", "zh-tw":
+		return "zh", true
 	default:
 		return "", false
+	}
+}
+
+func normalizeSyncSource(source string) string {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "config":
+		return "config"
+	default:
+		return "official"
 	}
 }
 
@@ -85,8 +94,11 @@ type overwriteField struct {
 }
 
 type syncRequest struct {
-	Overwrite []overwriteField `json:"overwrite"`
-	Locale    string           `json:"locale"`
+	Overwrite     []overwriteField `json:"overwrite"`
+	Locale        string           `json:"locale"`
+	Source        string           `json:"source"`
+	ConfigContent string           `json:"config_content"`
+	ConfigURL     string           `json:"config_url"`
 }
 
 func newHTTPClient() *http.Client {
@@ -128,6 +140,23 @@ func getHTTPClient() *http.Client {
 		httpClient = newHTTPClient()
 	})
 	return httpClient
+}
+
+func decodeUpstreamBytes[T any](buf []byte, out *upstreamEnvelope[T]) error {
+	if err := common.Unmarshal(buf, out); err != nil {
+		var arr []T
+		if err2 := common.Unmarshal(buf, &arr); err2 != nil {
+			return err
+		}
+		out.Success = true
+		out.Data = arr
+		out.Message = ""
+		return nil
+	}
+	if !out.Success && len(out.Data) == 0 && out.Message == "" {
+		out.Success = true
+	}
+	return nil
 }
 
 func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T]) error {
@@ -179,21 +208,9 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 				bodyCache[url] = buf
 				cacheMutex.Unlock()
 
-				// Try decode as envelope first
-				if err := json.Unmarshal(buf, out); err != nil {
-					// Try decode as pure array
-					var arr []T
-					if err2 := json.Unmarshal(buf, &arr); err2 != nil {
-						lastErr = err
-						return
-					}
-					out.Success = true
-					out.Data = arr
-					out.Message = ""
-				} else {
-					if !out.Success && len(out.Data) == 0 && out.Message == "" {
-						out.Success = true
-					}
+				if err := decodeUpstreamBytes(buf, out); err != nil {
+					lastErr = err
+					return
 				}
 				lastErr = nil
 			case http.StatusNotModified:
@@ -205,19 +222,9 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 					lastErr = errors.New("cache miss for 304 response")
 					return
 				}
-				if err := json.Unmarshal(buf, out); err != nil {
-					var arr []T
-					if err2 := json.Unmarshal(buf, &arr); err2 != nil {
-						lastErr = err
-						return
-					}
-					out.Success = true
-					out.Data = arr
-					out.Message = ""
-				} else {
-					if !out.Success && len(out.Data) == 0 && out.Message == "" {
-						out.Success = true
-					}
+				if err := decodeUpstreamBytes(buf, out); err != nil {
+					lastErr = err
+					return
 				}
 				lastErr = nil
 			default:
@@ -232,6 +239,281 @@ func fetchJSON[T any](ctx context.Context, url string, out *upstreamEnvelope[T])
 		time.Sleep(sleep + jitter)
 	}
 	return lastErr
+}
+
+func fetchRawJSON(ctx context.Context, rawURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	client := *getHTTPClient()
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return validateConfigURL(req.URL.String())
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(resp.Status)
+	}
+	maxMB := common.GetEnvOrDefault("SYNC_HTTP_MAX_MB", 10)
+	maxBytes := int64(maxMB) << 20
+	return io.ReadAll(io.LimitReader(resp.Body, maxBytes))
+}
+
+type upstreamConfigFile struct {
+	Success bool             `json:"success"`
+	Message string           `json:"message"`
+	Models  []upstreamModel  `json:"models"`
+	Vendors []upstreamVendor `json:"vendors"`
+	Data    struct {
+		Models  []upstreamModel  `json:"models"`
+		Vendors []upstreamVendor `json:"vendors"`
+	} `json:"data"`
+}
+
+type upstreamSourceData struct {
+	ModelsEnv  upstreamEnvelope[upstreamModel]
+	VendorsEnv upstreamEnvelope[upstreamVendor]
+	Source     gin.H
+}
+
+func decodeConfigPayload(raw string, modelsEnv *upstreamEnvelope[upstreamModel], vendorsEnv *upstreamEnvelope[upstreamVendor]) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return errors.New("configuration content is required")
+	}
+
+	var config upstreamConfigFile
+	if err := common.Unmarshal([]byte(trimmed), &config); err == nil {
+		models := config.Models
+		vendors := config.Vendors
+		if len(models) == 0 && len(config.Data.Models) > 0 {
+			models = config.Data.Models
+		}
+		if len(vendors) == 0 && len(config.Data.Vendors) > 0 {
+			vendors = config.Data.Vendors
+		}
+		if len(models) > 0 || len(vendors) > 0 {
+			modelsEnv.Success = true
+			modelsEnv.Message = config.Message
+			modelsEnv.Data = models
+			vendorsEnv.Success = true
+			vendorsEnv.Message = config.Message
+			vendorsEnv.Data = vendors
+			return nil
+		}
+	}
+
+	var modelEnv upstreamEnvelope[upstreamModel]
+	if err := common.Unmarshal([]byte(trimmed), &modelEnv); err == nil && len(modelEnv.Data) > 0 {
+		*modelsEnv = modelEnv
+		vendorsEnv.Success = true
+		return nil
+	}
+
+	var models []upstreamModel
+	if err := common.Unmarshal([]byte(trimmed), &models); err != nil {
+		return err
+	}
+	modelsEnv.Success = true
+	modelsEnv.Data = models
+	vendorsEnv.Success = true
+	return nil
+}
+
+func validateConfigURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		return errors.New("invalid configuration URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("configuration URL must use http or https")
+	}
+
+	fetchSetting := system_setting.GetFetchSetting()
+	return common.ValidateURLWithFetchSetting(
+		rawURL,
+		fetchSetting.EnableSSRFProtection,
+		fetchSetting.AllowPrivateIp,
+		fetchSetting.DomainFilterMode,
+		fetchSetting.IpFilterMode,
+		fetchSetting.DomainList,
+		fetchSetting.IpList,
+		fetchSetting.AllowedPorts,
+		fetchSetting.ApplyIPFilterForDomain,
+	)
+}
+
+func loadConfigSource(ctx context.Context, req syncRequest) (*upstreamSourceData, error) {
+	var modelsEnv upstreamEnvelope[upstreamModel]
+	var vendorsEnv upstreamEnvelope[upstreamVendor]
+	configURL := strings.TrimSpace(req.ConfigURL)
+	sourceInfo := gin.H{
+		"type":   "config",
+		"locale": req.Locale,
+	}
+
+	if configURL != "" {
+		if err := validateConfigURL(configURL); err != nil {
+			return nil, err
+		}
+		buf, err := fetchRawJSON(ctx, configURL)
+		if err != nil {
+			return nil, err
+		}
+		if err := decodeConfigPayload(string(buf), &modelsEnv, &vendorsEnv); err != nil {
+			return nil, err
+		}
+		sourceInfo["config_url"] = configURL
+	} else if err := decodeConfigPayload(req.ConfigContent, &modelsEnv, &vendorsEnv); err != nil {
+		return nil, err
+	} else {
+		sourceInfo["config_content"] = "inline"
+	}
+
+	if len(modelsEnv.Data) == 0 {
+		return nil, errors.New("configuration contains no models")
+	}
+	if err := validateUpstreamModels(modelsEnv.Data); err != nil {
+		return nil, err
+	}
+	if err := validateUpstreamVendors(vendorsEnv.Data); err != nil {
+		return nil, err
+	}
+	return &upstreamSourceData{ModelsEnv: modelsEnv, VendorsEnv: vendorsEnv, Source: sourceInfo}, nil
+}
+
+func loadOfficialSource(ctx context.Context, locale string) (*upstreamSourceData, error) {
+	modelsURL, vendorsURL := getUpstreamURLs(locale)
+	var vendorsEnv upstreamEnvelope[upstreamVendor]
+	var modelsEnv upstreamEnvelope[upstreamModel]
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if err := fetchJSON(ctx, vendorsURL, &vendorsEnv); err != nil {
+			errs <- fmt.Errorf("failed to fetch vendors: %w", err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if err := fetchJSON(ctx, modelsURL, &modelsEnv); err != nil {
+			errs <- fmt.Errorf("failed to fetch models: %w", err)
+		}
+	}()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := validateUpstreamModels(modelsEnv.Data); err != nil {
+		return nil, err
+	}
+	if err := validateUpstreamVendors(vendorsEnv.Data); err != nil {
+		return nil, err
+	}
+	return &upstreamSourceData{
+		ModelsEnv:  modelsEnv,
+		VendorsEnv: vendorsEnv,
+		Source: gin.H{
+			"type":        "official",
+			"locale":      locale,
+			"models_url":  modelsURL,
+			"vendors_url": vendorsURL,
+		},
+	}, nil
+}
+
+func loadUpstreamSource(ctx context.Context, req syncRequest) (*upstreamSourceData, error) {
+	if normalizeSyncSource(req.Source) == "config" {
+		return loadConfigSource(ctx, req)
+	}
+	return loadOfficialSource(ctx, req.Locale)
+}
+
+func buildVendorMap(vendors []upstreamVendor) map[string]upstreamVendor {
+	vendorByName := make(map[string]upstreamVendor)
+	for _, v := range vendors {
+		if v.Name != "" {
+			vendorByName[v.Name] = v
+		}
+	}
+	return vendorByName
+}
+
+func buildModelMap(models []upstreamModel) (map[string]upstreamModel, []string) {
+	modelByName := make(map[string]upstreamModel)
+	upstreamNames := make([]string, 0, len(models))
+	for _, m := range models {
+		if m.ModelName != "" {
+			modelByName[m.ModelName] = m
+			upstreamNames = append(upstreamNames, m.ModelName)
+		}
+	}
+	return modelByName, upstreamNames
+}
+
+func validateUpstreamModels(models []upstreamModel) error {
+	if len(models) == 0 {
+		return errors.New("upstream source contains no models")
+	}
+	for _, m := range models {
+		if strings.TrimSpace(m.ModelName) == "" {
+			return errors.New("configuration contains a model without model_name")
+		}
+	}
+	return nil
+}
+
+func validateUpstreamVendors(vendors []upstreamVendor) error {
+	for _, v := range vendors {
+		if strings.TrimSpace(v.Name) == "" {
+			return errors.New("configuration contains a vendor without name")
+		}
+	}
+	return nil
+}
+
+func sourceInfoForNoop(req syncRequest) gin.H {
+	if normalizeSyncSource(req.Source) == "config" {
+		source := gin.H{
+			"type":   "config",
+			"locale": req.Locale,
+		}
+		if strings.TrimSpace(req.ConfigURL) != "" {
+			source["config_url"] = strings.TrimSpace(req.ConfigURL)
+		} else if strings.TrimSpace(req.ConfigContent) != "" {
+			source["config_content"] = "inline"
+		}
+		return source
+	}
+	modelsURL, vendorsURL := getUpstreamURLs(req.Locale)
+	return gin.H{
+		"type":        "official",
+		"locale":      req.Locale,
+		"models_url":  modelsURL,
+		"vendors_url": vendorsURL,
+	}
+}
+
+func writeSourceError(c *gin.Context, err error, req syncRequest) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": false,
+		"message": "Failed to load upstream source: " + err.Error(),
+		"source": gin.H{
+			"type":   normalizeSyncSource(req.Source),
+			"locale": req.Locale,
+		},
+	})
 }
 
 func ensureVendorID(vendorName string, vendorByName map[string]upstreamVendor, vendorIDCache map[string]int, createdVendors *int) int {
@@ -262,24 +544,20 @@ func ensureVendorID(vendorName string, vendorByName map[string]upstreamVendor, v
 	return 0
 }
 
-// SyncUpstreamModels 同步上游模型与供应商：
-// - 默认仅创建「未配置模型」
-// - 可通过 overwrite 选择性覆盖更新本地已有模型的字段（前提：sync_official <> 0）
+// SyncUpstreamModels syncs missing models and selected local field overwrites from an upstream source.
 func SyncUpstreamModels(c *gin.Context) {
 	var req syncRequest
-	// 允许空体
 	_ = c.ShouldBindJSON(&req)
-	// 1) 获取未配置模型列表
+	req.Source = normalizeSyncSource(req.Source)
+
 	missing, err := model.GetMissingModels()
 	if err != nil {
 		common.SysError("failed to get missing models: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取模型列表失败，请稍后重试"})
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Failed to get missing models"})
 		return
 	}
 
-	// 若既无缺失模型需要创建，也未指定覆盖更新字段，则无需请求上游数据，直接返回
 	if len(missing) == 0 && len(req.Overwrite) == 0 {
-		modelsURL, vendorsURL := getUpstreamURLs(req.Locale)
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 			"data": gin.H{
@@ -289,67 +567,31 @@ func SyncUpstreamModels(c *gin.Context) {
 				"skipped_models":  []string{},
 				"created_list":    []string{},
 				"updated_list":    []string{},
-				"source": gin.H{
-					"locale":      req.Locale,
-					"models_url":  modelsURL,
-					"vendors_url": vendorsURL,
-				},
+				"source":          sourceInfoForNoop(req),
 			},
 		})
 		return
 	}
 
-	// 2) 拉取上游 vendors 与 models
 	timeoutSec := common.GetEnvOrDefault("SYNC_HTTP_TIMEOUT_SECONDS", 15)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	modelsURL, vendorsURL := getUpstreamURLs(req.Locale)
-	var vendorsEnv upstreamEnvelope[upstreamVendor]
-	var modelsEnv upstreamEnvelope[upstreamModel]
-	var fetchErr error
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		// vendor 失败不拦截
-		_ = fetchJSON(ctx, vendorsURL, &vendorsEnv)
-	}()
-	go func() {
-		defer wg.Done()
-		if err := fetchJSON(ctx, modelsURL, &modelsEnv); err != nil {
-			fetchErr = err
-		}
-	}()
-	wg.Wait()
-	if fetchErr != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取上游模型失败: " + fetchErr.Error(), "locale": req.Locale, "source_urls": gin.H{"models_url": modelsURL, "vendors_url": vendorsURL}})
+	sourceData, err := loadUpstreamSource(ctx, req)
+	if err != nil {
+		writeSourceError(c, err, req)
 		return
 	}
 
-	// 建立映射
-	vendorByName := make(map[string]upstreamVendor)
-	for _, v := range vendorsEnv.Data {
-		if v.Name != "" {
-			vendorByName[v.Name] = v
-		}
-	}
-	modelByName := make(map[string]upstreamModel)
-	for _, m := range modelsEnv.Data {
-		if m.ModelName != "" {
-			modelByName[m.ModelName] = m
-		}
-	}
+	vendorByName := buildVendorMap(sourceData.VendorsEnv.Data)
+	modelByName, _ := buildModelMap(sourceData.ModelsEnv.Data)
 
-	// 3) 执行同步：仅创建缺失模型；若上游缺失该模型则跳过
 	createdModels := 0
 	createdVendors := 0
 	updatedModels := 0
 	skipped := make([]string, 0)
 	createdList := make([]string, 0)
 	updatedList := make([]string, 0)
-
-	// 本地缓存：vendorName -> id
 	vendorIDCache := make(map[string]int)
 
 	for _, name := range missing {
@@ -359,7 +601,6 @@ func SyncUpstreamModels(c *gin.Context) {
 			continue
 		}
 
-		// 若本地已存在且设置为不同步，则跳过（极端情况：缺失列表与本地状态不同步时）
 		var existing model.Model
 		if err := model.DB.Where("model_name = ?", name).First(&existing).Error; err == nil {
 			if existing.SyncOfficial == 0 {
@@ -368,10 +609,7 @@ func SyncUpstreamModels(c *gin.Context) {
 			}
 		}
 
-		// 确保 vendor 存在
 		vendorID := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
-
-		// 创建模型
 		mi := &model.Model{
 			ModelName:   name,
 			Description: up.Description,
@@ -389,9 +627,7 @@ func SyncUpstreamModels(c *gin.Context) {
 		}
 	}
 
-	// 4) 处理可选覆盖（更新本地已有模型的差异字段）
 	if len(req.Overwrite) > 0 {
-		// vendorIDCache 已用于创建阶段，可复用
 		for _, ow := range req.Overwrite {
 			up, ok := modelByName[ow.ModelName]
 			if !ok {
@@ -401,16 +637,11 @@ func SyncUpstreamModels(c *gin.Context) {
 			if err := model.DB.Where("model_name = ?", ow.ModelName).First(&local).Error; err != nil {
 				continue
 			}
-
-			// 跳过被禁用官方同步的模型
 			if local.SyncOfficial == 0 {
 				continue
 			}
 
-			// 映射 vendor
 			newVendorID := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
-
-			// 应用字段覆盖（事务）
 			_ = model.DB.Transaction(func(tx *gorm.DB) error {
 				needUpdate := false
 				if containsField(ow.Fields, "description") {
@@ -459,15 +690,10 @@ func SyncUpstreamModels(c *gin.Context) {
 			"skipped_models":  skipped,
 			"created_list":    createdList,
 			"updated_list":    updatedList,
-			"source": gin.H{
-				"locale":      req.Locale,
-				"models_url":  modelsURL,
-				"vendors_url": vendorsURL,
-			},
+			"source":          sourceData.Source,
 		},
 	})
 }
-
 func containsField(fields []string, key string) bool {
 	key = strings.ToLower(strings.TrimSpace(key))
 	for _, f := range fields {
@@ -495,59 +721,36 @@ func chooseStatus(primary, fallback int) int {
 	return 1
 }
 
-// SyncUpstreamPreview 预览上游与本地的差异（仅用于弹窗选择）
+// SyncUpstreamPreview previews upstream differences against local model metadata.
 func SyncUpstreamPreview(c *gin.Context) {
-	// 1) 拉取上游数据
+	req := syncRequest{
+		Source:        c.Query("source"),
+		Locale:        c.Query("locale"),
+		ConfigURL:     c.Query("config_url"),
+		ConfigContent: c.Query("config_content"),
+	}
+	if c.Request.Method == http.MethodPost {
+		_ = c.ShouldBindJSON(&req)
+	}
+	req.Source = normalizeSyncSource(req.Source)
+
 	timeoutSec := common.GetEnvOrDefault("SYNC_HTTP_TIMEOUT_SECONDS", 15)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	locale := c.Query("locale")
-	modelsURL, vendorsURL := getUpstreamURLs(locale)
-
-	var vendorsEnv upstreamEnvelope[upstreamVendor]
-	var modelsEnv upstreamEnvelope[upstreamModel]
-	var fetchErr error
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		_ = fetchJSON(ctx, vendorsURL, &vendorsEnv)
-	}()
-	go func() {
-		defer wg.Done()
-		if err := fetchJSON(ctx, modelsURL, &modelsEnv); err != nil {
-			fetchErr = err
-		}
-	}()
-	wg.Wait()
-	if fetchErr != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取上游模型失败: " + fetchErr.Error(), "locale": locale, "source_urls": gin.H{"models_url": modelsURL, "vendors_url": vendorsURL}})
+	sourceData, err := loadUpstreamSource(ctx, req)
+	if err != nil {
+		writeSourceError(c, err, req)
 		return
 	}
 
-	vendorByName := make(map[string]upstreamVendor)
-	for _, v := range vendorsEnv.Data {
-		if v.Name != "" {
-			vendorByName[v.Name] = v
-		}
-	}
-	modelByName := make(map[string]upstreamModel)
-	upstreamNames := make([]string, 0, len(modelsEnv.Data))
-	for _, m := range modelsEnv.Data {
-		if m.ModelName != "" {
-			modelByName[m.ModelName] = m
-			upstreamNames = append(upstreamNames, m.ModelName)
-		}
-	}
+	modelByName, upstreamNames := buildModelMap(sourceData.ModelsEnv.Data)
 
-	// 2) 本地已有模型
 	var locals []model.Model
 	if len(upstreamNames) > 0 {
 		_ = model.DB.Where("model_name IN ? AND sync_official <> 0", upstreamNames).Find(&locals).Error
 	}
 
-	// 本地 vendor 名称映射
 	vendorIdSet := make(map[int]struct{})
 	for _, m := range locals {
 		if m.VendorID != 0 {
@@ -567,7 +770,6 @@ func SyncUpstreamPreview(c *gin.Context) {
 		}
 	}
 
-	// 3) 缺失且上游存在的模型
 	missingList, _ := model.GetMissingModels()
 	var missing []string
 	for _, name := range missingList {
@@ -576,7 +778,6 @@ func SyncUpstreamPreview(c *gin.Context) {
 		}
 	}
 
-	// 4) 计算冲突字段
 	type conflictField struct {
 		Field    string      `json:"field"`
 		Local    interface{} `json:"local"`
@@ -603,7 +804,6 @@ func SyncUpstreamPreview(c *gin.Context) {
 		if strings.TrimSpace(local.Tags) != strings.TrimSpace(up.Tags) {
 			fields = append(fields, conflictField{Field: "tags", Local: local.Tags, Upstream: up.Tags})
 		}
-		// vendor 对比使用名称
 		localVendor := idToVendorName[local.VendorID]
 		if strings.TrimSpace(localVendor) != strings.TrimSpace(up.VendorName) {
 			fields = append(fields, conflictField{Field: "vendor", Local: localVendor, Upstream: up.VendorName})
@@ -624,11 +824,47 @@ func SyncUpstreamPreview(c *gin.Context) {
 		"data": gin.H{
 			"missing":   missing,
 			"conflicts": conflicts,
-			"source": gin.H{
-				"locale":      locale,
-				"models_url":  modelsURL,
-				"vendors_url": vendorsURL,
-			},
+			"source":    sourceData.Source,
 		},
 	})
+}
+
+func UpstreamConfigExample(c *gin.Context) {
+	example := upstreamConfigFile{
+		Success: true,
+		Message: "Example configuration for model metadata sync",
+		Models: []upstreamModel{
+			{
+				ModelName:   "example-chat-model",
+				Description: "Example chat model for custom metadata sync.",
+				Icon:        "OpenAI.Color",
+				Tags:        "chat,example",
+				VendorName:  "Example Vendor",
+				NameRule:    0,
+				Status:      1,
+				Endpoints:   json.RawMessage(`["/v1/chat/completions"]`),
+			},
+			{
+				ModelName:   "example-embedding-model",
+				Description: "Example embedding model for endpoint metadata sync.",
+				Icon:        "OpenAI",
+				Tags:        "embedding,example",
+				VendorName:  "Example Vendor",
+				NameRule:    0,
+				Status:      1,
+				Endpoints:   json.RawMessage(`["/v1/embeddings"]`),
+			},
+		},
+		Vendors: []upstreamVendor{
+			{
+				Name:        "Example Vendor",
+				Description: "Example vendor. Replace it with your upstream provider name.",
+				Icon:        "OpenAI.Color",
+				Status:      1,
+			},
+		},
+	}
+
+	c.Header("Content-Disposition", `attachment; filename="model-sync-config-example.json"`)
+	c.JSON(http.StatusOK, example)
 }

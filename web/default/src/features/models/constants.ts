@@ -192,7 +192,7 @@ export function getSyncSourceOptions(t: TFunction) {
       label: t('Configuration File'),
       value: 'config' as SyncSource,
       description: t('Upload or reference a local configuration file.'),
-      disabled: true,
+      disabled: false,
     },
   ] as const
 }

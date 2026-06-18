@@ -30,9 +30,8 @@ import type {
   PreviewUpstreamDiffResponse,
   MissingModelsResponse,
   PrefillGroupsResponse,
-  SyncLocale,
-  SyncSource,
   SyncOverwritePayload,
+  SyncUpstreamOptions,
   DeploymentSettingsResponse,
   ListDeploymentsResponse,
 } from './types'
@@ -185,8 +184,10 @@ export async function deleteVendor(
  * Sync upstream models (missing only or with overwrite)
  */
 export async function syncUpstream(params?: {
-  locale?: SyncLocale
-  source?: SyncSource
+  locale?: SyncUpstreamOptions['locale']
+  source?: SyncUpstreamOptions['source']
+  config_content?: string
+  config_url?: string
   overwrite?: SyncOverwritePayload[]
 }): Promise<SyncUpstreamResponse> {
   const res = await api.post('/api/models/sync_upstream', params)
@@ -197,21 +198,17 @@ export async function syncUpstream(params?: {
  * Preview upstream diff
  */
 export async function previewUpstreamDiff(params?: {
-  locale?: SyncLocale
-  source?: SyncSource
+  locale?: SyncUpstreamOptions['locale']
+  source?: SyncUpstreamOptions['source']
+  config_content?: string
+  config_url?: string
 }): Promise<PreviewUpstreamDiffResponse> {
-  const searchParams = new URLSearchParams()
-  if (params?.locale) {
-    searchParams.set('locale', params.locale)
-  }
-  if (params?.source) {
-    searchParams.set('source', params.source)
-  }
-  const queryString = searchParams.toString()
-  const url = queryString
-    ? `/api/models/sync_upstream/preview?${queryString}`
-    : '/api/models/sync_upstream/preview'
-  const res = await api.get(url)
+  const hasConfigPayload =
+    params?.source === 'config' && (params.config_content || params.config_url)
+
+  const res = hasConfigPayload
+    ? await api.post('/api/models/sync_upstream/preview', params)
+    : await api.get('/api/models/sync_upstream/preview', { params })
   return res.data
 }
 
@@ -220,10 +217,22 @@ export async function previewUpstreamDiff(params?: {
  */
 export async function applyUpstreamOverwrite(params: {
   overwrite: SyncOverwritePayload[]
-  locale?: SyncLocale
-  source?: SyncSource
+  locale?: SyncUpstreamOptions['locale']
+  source?: SyncUpstreamOptions['source']
+  config_content?: string
+  config_url?: string
 }): Promise<SyncUpstreamResponse> {
   return syncUpstream(params)
+}
+
+/**
+ * Download sample upstream configuration
+ */
+export async function downloadUpstreamConfigExample(): Promise<Blob> {
+  const res = await api.get('/api/models/sync_upstream/example', {
+    responseType: 'blob',
+  })
+  return res.data
 }
 
 // ============================================================================

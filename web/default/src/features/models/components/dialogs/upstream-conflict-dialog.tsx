@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef, type RowSelectionState } from '@tanstack/react-table'
 import {
@@ -65,11 +65,14 @@ const FIELD_LABELS: Record<string, string> = {
   enable_groups: 'Enable Groups',
 }
 
+const getFieldLabel = (field: string, t: (key: string) => string) =>
+  t(FIELD_LABELS[field] || field)
+
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50] as const
 
 const formatValue = (value: unknown) => {
-  if (value === null || value === undefined) return '—'
-  if (typeof value === 'string') return value || '—'
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'string') return value || '-'
   if (typeof value === 'number' || typeof value === 'boolean') {
     return String(value)
   }
@@ -120,14 +123,6 @@ export function UpstreamConflictDialog({
   const [pageSize, setPageSize] = useState(10)
   const [pageIndex, setPageIndex] = useState(0)
 
-  useEffect(() => {
-    if (open) {
-      setRowSelection({})
-      setSearch('')
-      setPageIndex(0)
-    }
-  }, [open, upstreamConflicts])
-
   const conflictRows = useMemo<ConflictFieldRow[]>(() => {
     return upstreamConflicts.flatMap((conflict) => {
       if (!conflict.fields?.length) {
@@ -138,12 +133,12 @@ export function UpstreamConflictDialog({
         id: `${conflict.model_name}-${field.field}`,
         modelName: conflict.model_name,
         fieldKey: field.field,
-        fieldLabel: FIELD_LABELS[field.field] || field.field,
+        fieldLabel: getFieldLabel(field.field, t),
         localValue: field.local,
         upstreamValue: field.upstream,
       }))
     })
-  }, [upstreamConflicts])
+  }, [upstreamConflicts, t])
 
   const totalModels = upstreamConflicts.length
   const totalFields = conflictRows.length
@@ -166,7 +161,7 @@ export function UpstreamConflictDialog({
       }
 
       const fieldMatch = conflict.fields?.some((field) => {
-        const label = FIELD_LABELS[field.field] || field.field
+        const label = getFieldLabel(field.field, t)
         return (
           label.toLowerCase().includes(normalizedSearch) ||
           field.field.toLowerCase().includes(normalizedSearch)
@@ -190,19 +185,19 @@ export function UpstreamConflictDialog({
     })
 
     return { matchingModelNames: modelMatches, visibleRowIds: rowIdSet }
-  }, [normalizedSearch, upstreamConflicts, conflictRows])
+  }, [normalizedSearch, upstreamConflicts, conflictRows, t])
 
   const columns = useMemo<ColumnDef<ConflictFieldRow>[]>(() => {
     const modelColumn: ColumnDef<ConflictFieldRow> = {
       accessorKey: 'modelName',
-      header: 'Model',
+      header: t('Model'),
       cell: ({ row }) => (
         <div className='flex items-start gap-3'>
           {isMobile ? (
             <Checkbox
               checked={row.getIsSelected()}
               onCheckedChange={(value) => row.toggleSelected(!!value)}
-              aria-label='Select row'
+              aria-label={t('Select row')}
             />
           ) : null}
           <div className='space-y-1'>
@@ -226,7 +221,7 @@ export function UpstreamConflictDialog({
 
     const diffColumn: ColumnDef<ConflictFieldRow> = {
       id: 'actions',
-      header: 'Diff',
+      header: t('Diff'),
       enableSorting: false,
       enableHiding: false,
       cell: ({ row }) => (
@@ -241,12 +236,12 @@ export function UpstreamConflictDialog({
             }
           >
             <MousePointerClick className='h-3.5 w-3.5' />
-            {!isMobile && 'View diff'}
+            {!isMobile && t('View diff')}
           </PopoverTrigger>
           <PopoverContent className='w-[min(90vw,24rem)] space-y-4 text-sm'>
             <div>
               <StatusBadge
-                label='Local'
+                label={t('Local')}
                 variant='neutral'
                 size='sm'
                 copyable={false}
@@ -258,7 +253,7 @@ export function UpstreamConflictDialog({
             </div>
             <div>
               <StatusBadge
-                label='Upstream'
+                label={t('Upstream')}
                 variant='info'
                 size='sm'
                 copyable={false}
@@ -285,14 +280,14 @@ export function UpstreamConflictDialog({
           checked={table.getIsAllPageRowsSelected()}
           indeterminate={table.getIsSomePageRowsSelected()}
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label='Select all'
+          aria-label={t('Select all')}
         />
       ),
       cell: ({ row }) => (
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label='Select row'
+          aria-label={t('Select row')}
         />
       ),
       enableSorting: false,
@@ -305,7 +300,7 @@ export function UpstreamConflictDialog({
       modelColumn,
       {
         accessorKey: 'fieldLabel',
-        header: 'Field',
+        header: t('Field'),
         cell: ({ row }) => (
           <StatusBadge
             label={row.original.fieldLabel}
@@ -319,16 +314,16 @@ export function UpstreamConflictDialog({
       },
       {
         accessorKey: 'localValue',
-        header: 'Local Value',
+        header: t('Local Value'),
         cell: ({ row }) => <ValuePreview value={row.original.localValue} />,
       },
       {
         accessorKey: 'upstreamValue',
-        header: 'Upstream Value',
+        header: t('Upstream Value'),
         cell: ({ row }) => <ValuePreview value={row.original.upstreamValue} />,
       },
     ]
-  }, [isMobile])
+  }, [isMobile, t])
 
   const { table } = useDataTable({
     data: conflictRows,
@@ -353,19 +348,17 @@ export function UpstreamConflictDialog({
   const totalFilteredFields = filteredRows.length
   const totalPages =
     totalFilteredFields === 0 ? 1 : Math.ceil(totalFilteredFields / pageSize)
+  const visiblePageIndex = Math.min(pageIndex, Math.max(0, totalPages - 1))
 
-  useEffect(() => {
-    setPageIndex((prev) => Math.min(prev, Math.max(0, totalPages - 1)))
-  }, [totalPages])
-
-  const pageStart = pageIndex * pageSize
+  const pageStart = visiblePageIndex * pageSize
   const paginatedRows = filteredRows.slice(pageStart, pageStart + pageSize)
   const displayStart = totalFilteredFields === 0 ? 0 : pageStart + 1
   const displayEnd =
     totalFilteredFields === 0
       ? 0
       : Math.min(pageStart + pageSize, totalFilteredFields)
-  const currentPageDisplay = totalFilteredFields === 0 ? 0 : pageIndex + 1
+  const currentPageDisplay =
+    totalFilteredFields === 0 ? 0 : visiblePageIndex + 1
   const totalPagesDisplay = totalFilteredFields === 0 ? 0 : totalPages
 
   const visibleModelCount = matchingModelNames?.size ?? totalModels
@@ -409,6 +402,8 @@ export function UpstreamConflictDialog({
         overwrite: payload,
         locale: syncWizardOptions.locale,
         source: syncWizardOptions.source,
+        config_content: syncWizardOptions.config_content,
+        config_url: syncWizardOptions.config_url,
       })
 
       if (response.success) {
@@ -580,7 +575,7 @@ export function UpstreamConflictDialog({
                         onClick={() =>
                           setPageIndex((prev) => Math.max(0, prev - 1))
                         }
-                        disabled={pageIndex === 0}
+                        disabled={visiblePageIndex === 0}
                         aria-label={t('Previous page')}
                       >
                         <ChevronLeft className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
@@ -601,7 +596,7 @@ export function UpstreamConflictDialog({
                           )
                         }
                         disabled={
-                          pageIndex >= totalPages - 1 ||
+                          visiblePageIndex >= totalPages - 1 ||
                           totalFilteredFields === 0
                         }
                         aria-label={t('Next page')}

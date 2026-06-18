@@ -58,16 +58,20 @@ export function ModelsDialogs() {
       />
 
       {/* Sync Wizard Dialog */}
-      <SyncWizardDialog
-        open={open === 'sync-wizard'}
-        onOpenChange={(v) => !v && setOpen(null)}
-      />
+      {open === 'sync-wizard' && (
+        <SyncWizardDialog
+          open={open === 'sync-wizard'}
+          onOpenChange={(v) => !v && setOpen(null)}
+        />
+      )}
 
       {/* Upstream Conflict Dialog */}
-      <UpstreamConflictDialog
-        open={open === 'upstream-conflict'}
-        onOpenChange={(v) => !v && setOpen(null)}
-      />
+      {open === 'upstream-conflict' && (
+        <UpstreamConflictDialog
+          open={open === 'upstream-conflict'}
+          onOpenChange={(v) => !v && setOpen(null)}
+        />
+      )}
 
       {/* Prefill Groups Management */}
       <PrefillGroupManagement

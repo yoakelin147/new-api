@@ -16,19 +16,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2, RefreshCw } from 'lucide-react'
+import { Download, Loader2, RefreshCw, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Textarea } from '@/components/ui/textarea'
 import { Dialog } from '@/components/dialog'
 import { StatusBadge } from '@/components/status-badge'
-import { syncUpstream, previewUpstreamDiff } from '../../api'
+import {
+  syncUpstream,
+  previewUpstreamDiff,
+  downloadUpstreamConfigExample,
+} from '../../api'
 import { getSyncLocaleOptions, getSyncSourceOptions } from '../../constants'
 import { modelsQueryKeys, vendorsQueryKeys } from '../../lib'
 import type { SyncLocale, SyncSource } from '../../types'
@@ -52,43 +58,115 @@ export function SyncWizardDialog({
     syncWizardOptions,
   } = useModels()
   const isMobile = useIsMobile()
-  const [locale, setLocale] = useState<SyncLocale>('zh')
-  const [source, setSource] = useState<SyncSource>('official')
+  const SYNC_SOURCE_OPTIONS = useMemo(() => getSyncSourceOptions(t), [t])
+  const SYNC_LOCALE_OPTIONS = useMemo(() => getSyncLocaleOptions(t), [t])
+  const initialSource = useMemo(() => {
+    const preferredSource = SYNC_SOURCE_OPTIONS.find(
+      (option) => option.value === syncWizardOptions.source
+    )
+    return preferredSource && !preferredSource.disabled
+      ? (preferredSource.value as SyncSource)
+      : 'official'
+  }, [SYNC_SOURCE_OPTIONS, syncWizardOptions.source])
+  const [locale, setLocale] = useState<SyncLocale>(
+    syncWizardOptions.locale || 'zh'
+  )
+  const [source, setSource] = useState<SyncSource>(initialSource)
+  const [configMode, setConfigMode] = useState<'content' | 'url'>(
+    syncWizardOptions.config_url ? 'url' : 'content'
+  )
+  const [configContent, setConfigContent] = useState(
+    syncWizardOptions.config_content || ''
+  )
+  const [configUrl, setConfigUrl] = useState(syncWizardOptions.config_url || '')
   const [isSyncing, setIsSyncing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Get translated options
-  const SYNC_SOURCE_OPTIONS = getSyncSourceOptions(t)
-  const SYNC_LOCALE_OPTIONS = getSyncLocaleOptions(t)
+  const buildSyncOptions = () => ({
+    locale,
+    source,
+    config_content:
+      source === 'config' && configMode === 'content'
+        ? configContent.trim()
+        : undefined,
+    config_url:
+      source === 'config' && configMode === 'url'
+        ? configUrl.trim()
+        : undefined,
+  })
 
-  useEffect(() => {
-    if (open) {
-      setLocale(syncWizardOptions.locale || 'zh')
-      const preferredSource = SYNC_SOURCE_OPTIONS.find(
-        (option) => option.value === syncWizardOptions.source
-      )
-      setSource(
-        preferredSource && !preferredSource.disabled
-          ? (preferredSource.value as SyncSource)
-          : 'official'
-      )
+  const validateConfigInput = () => {
+    if (source !== 'config') return true
+    if (configMode === 'url') {
+      if (!configUrl.trim()) {
+        toast.error(t('Configuration URL is required.'))
+        return false
+      }
+      return true
     }
-  }, [open, syncWizardOptions, SYNC_SOURCE_OPTIONS])
+    if (!configContent.trim()) {
+      toast.error(t('Configuration JSON content is required.'))
+      return false
+    }
+    return true
+  }
+
+  const handleConfigFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error(t('Configuration file must be 2 MB or smaller.'))
+      return
+    }
+    try {
+      setConfigContent(await file.text())
+      setConfigMode('content')
+    } catch {
+      toast.error(t('Failed to read configuration file.'))
+    }
+  }
+
+  const handleDownloadExample = async () => {
+    try {
+      const blob = await downloadUpstreamConfigExample()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'model-sync-config-example.json'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error(t('Failed to download configuration example.'))
+    }
+  }
 
   const handleSync = async () => {
     setIsSyncing(true)
     try {
-      setSyncWizardOptions({ locale, source })
-      const previewRes = await previewUpstreamDiff({ locale, source })
+      if (!validateConfigInput()) return
+
+      const syncOptions = buildSyncOptions()
+      setSyncWizardOptions(syncOptions)
+      const previewRes = await previewUpstreamDiff(syncOptions)
 
       if (!previewRes.success) {
-        throw new Error(previewRes.message || 'Failed to preview upstream diff')
+        throw new Error(
+          previewRes.message || t('Failed to preview upstream diff')
+        )
       }
 
       const conflicts = previewRes.data?.conflicts || []
 
       if (conflicts.length > 0) {
         toast.warning(
-          `Found ${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''}. Please resolve them first.`
+          t('Found {{count}} conflicts. Please resolve them first.', {
+            count: conflicts.length,
+          })
         )
         setUpstreamConflicts(conflicts)
         setOpen('upstream-conflict')
@@ -96,22 +174,29 @@ export function SyncWizardDialog({
       }
 
       // No conflicts, proceed with sync
-      const response = await syncUpstream({ locale, source })
+      const response = await syncUpstream(syncOptions)
 
       if (response.success) {
         const { created_models, created_vendors, updated_models } =
           response.data || {}
         toast.success(
-          `Sync completed! Created ${created_models || 0} models, updated ${updated_models || 0}, and added ${created_vendors || 0} vendors.`
+          t(
+            'Sync completed! Created {{models}} models, updated {{updated}}, and added {{vendors}} vendors.',
+            {
+              models: created_models || 0,
+              updated: updated_models || 0,
+              vendors: created_vendors || 0,
+            }
+          )
         )
         queryClient.invalidateQueries({ queryKey: modelsQueryKeys.lists() })
         queryClient.invalidateQueries({ queryKey: vendorsQueryKeys.lists() })
         onOpenChange(false)
       } else {
-        toast.error(response.message || 'Sync failed')
+        toast.error(response.message || t('Sync failed'))
       }
     } catch (error: unknown) {
-      toast.error((error as Error)?.message || 'Sync failed')
+      toast.error((error as Error)?.message || t('Sync failed'))
     } finally {
       setIsSyncing(false)
     }
@@ -187,7 +272,7 @@ export function SyncWizardDialog({
                       <span className='font-medium'>{option.label}</span>
                       {option.value === 'official' && (
                         <StatusBadge
-                          label='Default'
+                          label={t('Default')}
                           variant='neutral'
                           copyable={false}
                         />
@@ -203,6 +288,106 @@ export function SyncWizardDialog({
           })}
         </RadioGroup>
       </div>
+
+      {source === 'config' && (
+        <div className='flex flex-col gap-3'>
+          <div className='flex flex-wrap items-start justify-between gap-2'>
+            <div>
+              <Label className='text-base'>{t('Configuration Source')}</Label>
+              <p className='text-muted-foreground text-sm'>
+                {t(
+                  'Paste JSON, upload a JSON file, or reference an HTTPS URL.'
+                )}
+              </p>
+            </div>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={handleDownloadExample}
+            >
+              <Download data-icon='inline-start' />
+              {t('Download example')}
+            </Button>
+          </div>
+
+          <RadioGroup
+            value={configMode}
+            onValueChange={(value) => setConfigMode(value as 'content' | 'url')}
+            className='grid gap-3 sm:grid-cols-2'
+          >
+            <Label
+              htmlFor='sync-config-content'
+              className={cn(
+                'cursor-pointer rounded-lg border p-3 font-normal',
+                configMode === 'content' && 'border-primary ring-primary ring-1'
+              )}
+            >
+              <div className='flex items-center gap-2'>
+                <RadioGroupItem value='content' id='sync-config-content' />
+                <span>{t('Upload or paste JSON')}</span>
+              </div>
+            </Label>
+            <Label
+              htmlFor='sync-config-url'
+              className={cn(
+                'cursor-pointer rounded-lg border p-3 font-normal',
+                configMode === 'url' && 'border-primary ring-primary ring-1'
+              )}
+            >
+              <div className='flex items-center gap-2'>
+                <RadioGroupItem value='url' id='sync-config-url' />
+                <span>{t('Reference URL')}</span>
+              </div>
+            </Label>
+          </RadioGroup>
+
+          {configMode === 'content' ? (
+            <div className='flex flex-col gap-2'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <input
+                  ref={fileInputRef}
+                  type='file'
+                  accept='application/json,.json'
+                  className='hidden'
+                  onChange={handleConfigFileChange}
+                />
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload data-icon='inline-start' />
+                  {t('Upload JSON')}
+                </Button>
+                <span className='text-muted-foreground text-xs'>
+                  {t('The JSON content is used only for this sync request.')}
+                </span>
+              </div>
+              <Textarea
+                value={configContent}
+                onChange={(event) => setConfigContent(event.target.value)}
+                placeholder={t('Paste model sync configuration JSON here...')}
+                className='min-h-36 font-mono text-xs'
+              />
+            </div>
+          ) : (
+            <div className='flex flex-col gap-2'>
+              <Input
+                value={configUrl}
+                onChange={(event) => setConfigUrl(event.target.value)}
+                placeholder='https://example.com/model-sync-config.json'
+              />
+              <p className='text-muted-foreground text-xs'>
+                {t(
+                  'Remote configuration URLs are validated with the system fetch security settings.'
+                )}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className='space-y-2'>
         <Label className='text-base'>{t('Select Language')}</Label>

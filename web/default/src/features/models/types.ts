@@ -179,6 +179,13 @@ export interface SyncOverwritePayload {
   fields: string[]
 }
 
+export interface SyncUpstreamOptions {
+  locale?: SyncLocale
+  source?: SyncSource
+  config_content?: string
+  config_url?: string
+}
+
 /**
  * Sync upstream response
  */
