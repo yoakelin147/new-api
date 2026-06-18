@@ -87,6 +87,8 @@ type ModelPricingSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   editData?: ModelRatioData | null
+  title?: string
+  lockModelName?: boolean
   onSave?: () => void | Promise<void>
   isSaving?: boolean
 }
@@ -106,11 +108,20 @@ export const ModelPricingSheet = forwardRef<
   ModelPricingEditorPanelHandle,
   ModelPricingSheetProps
 >(function ModelPricingSheet(
-  { open, onOpenChange, editData, onSave, isSaving },
+  {
+    open,
+    onOpenChange,
+    editData,
+    title: titleProp,
+    lockModelName,
+    onSave,
+    isSaving,
+  },
   ref
 ) {
   const { t } = useTranslation()
-  const title = editData ? t('Edit model pricing') : t('Add model pricing')
+  const title =
+    titleProp ?? (editData ? t('Edit model pricing') : t('Add model pricing'))
   const description = editData?.name || t('New model')
 
   return (
@@ -126,6 +137,8 @@ export const ModelPricingSheet = forwardRef<
         <ModelPricingEditorPanel
           ref={ref}
           editData={editData}
+          title={titleProp}
+          lockModelName={lockModelName}
           onSave={onSave}
           isSaving={isSaving}
           className='h-full rounded-none border-0'
@@ -139,7 +152,7 @@ export const ModelPricingEditorPanel = forwardRef<
   ModelPricingEditorPanelHandle,
   ModelPricingEditorPanelProps
 >(function ModelPricingEditorPanel(
-  { editData, className, onSave, isSaving },
+  { editData, title, lockModelName, className, onSave, isSaving },
   ref
 ) {
   const { t } = useTranslation()
@@ -154,6 +167,7 @@ export const ModelPricingEditorPanel = forwardRef<
   const [billingExpr, setBillingExpr] = useState('')
   const [requestRuleExpr, setRequestRuleExpr] = useState('')
   const isEditMode = !!editData
+  const shouldLockModelName = lockModelName ?? isEditMode
 
   const form = useForm<ModelPricingFormValues>({
     resolver: zodResolver(createModelPricingSchema(t)),
@@ -484,7 +498,8 @@ export const ModelPricingEditorPanel = forwardRef<
         <div className='flex flex-wrap items-start justify-between gap-3'>
           <div className='min-w-0'>
             <h3 className='truncate text-base font-medium'>
-              {isEditMode ? t('Edit model pricing') : t('Add model pricing')}
+              {title ??
+                (isEditMode ? t('Edit model pricing') : t('Add model pricing'))}
             </h3>
           </div>
         </div>
@@ -522,7 +537,7 @@ export const ModelPricingEditorPanel = forwardRef<
                         <Input
                           placeholder={t('gpt-4')}
                           {...field}
-                          disabled={isEditMode}
+                          disabled={shouldLockModelName}
                         />
                       </FormControl>
                       <FormDescription>

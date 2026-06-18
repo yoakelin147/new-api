@@ -35,7 +35,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
-import { Copy, Plus } from 'lucide-react'
+import { Copy, Plus, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -49,6 +49,7 @@ import {
 } from '@/components/data-table'
 import { combineBillingExpr } from '@/features/pricing/lib/billing-expr'
 import { safeJsonParse } from '../utils/json-parser'
+import { MissingModelPricingDialog } from './missing-model-pricing-dialog'
 import {
   ModelPricingEditorPanel,
   type ModelPricingEditorPanelHandle,
@@ -128,8 +129,12 @@ const ModelRatioVisualEditorComponent = forwardRef<
   const { t } = useTranslation()
   const isMobile = useMediaQuery('(max-width: 767px)')
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [missingPricingOpen, setMissingPricingOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editData, setEditData] = useState<ModelRatioData | null>(null)
+  const [editorIntent, setEditorIntent] = useState<'default' | 'missing'>(
+    'default'
+  )
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -270,6 +275,16 @@ const ModelRatioVisualEditorComponent = forwardRef<
     [models]
   )
 
+  const configuredModelNames = useMemo(
+    () =>
+      new Set(
+        models
+          .filter((model) => !model.isDraftDeleted)
+          .map((model) => model.name)
+      ),
+    [models]
+  )
+
   const handleEdit = useCallback(
     (model: ModelRow) => {
       const editableModel = model.draft ?? model.saved ?? model
@@ -292,6 +307,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         billingExpr: editableModel.billingExpr,
         requestRuleExpr: editableModel.requestRuleExpr,
       })
+      setEditorIntent('default')
       setEditorOpen(true)
       if (isMobile) setSheetOpen(true)
     },
@@ -300,9 +316,23 @@ const ModelRatioVisualEditorComponent = forwardRef<
 
   const handleAdd = useCallback(() => {
     setEditData(null)
+    setEditorIntent('default')
     setEditorOpen(true)
     if (isMobile) setSheetOpen(true)
   }, [isMobile])
+
+  const handleConfigureMissingPricing = useCallback(
+    (modelName: string) => {
+      setEditData({
+        name: modelName,
+        billingMode: 'per-token',
+      })
+      setEditorIntent('missing')
+      setEditorOpen(true)
+      if (isMobile) setSheetOpen(true)
+    },
+    [isMobile]
+  )
 
   const handleGlobalFilterChange = useCallback<OnChangeFn<string>>(
     (updater) => {
@@ -310,6 +340,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         const next = typeof updater === 'function' ? updater(previous) : updater
         if (next !== previous) {
           setEditData(null)
+          setEditorIntent('default')
           setEditorOpen(false)
           setSheetOpen(false)
         }
@@ -648,10 +679,19 @@ const ModelRatioVisualEditorComponent = forwardRef<
               },
             ]}
             preActions={
-              <Button onClick={handleAdd}>
-                <Plus data-icon='inline-start' />
-                {t('Add model')}
-              </Button>
+              <>
+                <Button
+                  variant='outline'
+                  onClick={() => setMissingPricingOpen(true)}
+                >
+                  <Search data-icon='inline-start' />
+                  {t('Missing pricing')}
+                </Button>
+                <Button onClick={handleAdd}>
+                  <Plus data-icon='inline-start' />
+                  {t('Add model')}
+                </Button>
+              </>
             }
           />
 
@@ -720,6 +760,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
             <ModelPricingEditorPanel
               ref={editorPanelRef}
               editData={editData}
+              title={
+                editorIntent === 'missing' ? t('Add model pricing') : undefined
+              }
+              lockModelName={editorIntent === 'missing' ? true : undefined}
               onSave={onSave}
               isSaving={isSaving}
               className='h-full min-h-0'
@@ -758,8 +802,21 @@ const ModelRatioVisualEditorComponent = forwardRef<
           open={sheetOpen}
           onOpenChange={setSheetOpen}
           editData={editData}
+          title={
+            editorIntent === 'missing' ? t('Add model pricing') : undefined
+          }
+          lockModelName={editorIntent === 'missing' ? true : undefined}
           onSave={onSave}
           isSaving={isSaving}
+        />
+      )}
+
+      {missingPricingOpen && (
+        <MissingModelPricingDialog
+          open={missingPricingOpen}
+          configuredModelNames={configuredModelNames}
+          onOpenChange={setMissingPricingOpen}
+          onConfigure={handleConfigureMissingPricing}
         />
       )}
     </div>
