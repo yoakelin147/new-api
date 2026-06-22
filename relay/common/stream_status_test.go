@@ -45,6 +45,7 @@ func TestStreamStatus_SetEndReason_Concurrent(t *testing.T) {
 		StreamEndReasonDone,
 		StreamEndReasonTimeout,
 		StreamEndReasonClientGone,
+		StreamEndReasonClientGoneAfterDone,
 		StreamEndReasonScannerErr,
 		StreamEndReasonHandlerStop,
 		StreamEndReasonEOF,
@@ -63,6 +64,41 @@ func TestStreamStatus_SetEndReason_Concurrent(t *testing.T) {
 	wg.Wait()
 
 	assert.NotEqual(t, StreamEndReasonNone, s.EndReason)
+}
+
+func TestStreamStatus_SetEndReason_ClientGoneAfterCompleted(t *testing.T) {
+	t.Parallel()
+	s := NewStreamStatus()
+
+	s.MarkCompletedBeforeClose()
+	s.SetEndReason(StreamEndReasonClientGone, fmt.Errorf("context canceled"))
+
+	assert.Equal(t, StreamEndReasonClientGoneAfterDone, s.EndReason)
+	assert.Nil(t, s.EndError)
+	assert.True(t, s.IsNormalEnd())
+}
+
+func TestStreamStatus_SetEndReason_ClientGoneBeforeCompletedRemainsError(t *testing.T) {
+	t.Parallel()
+	s := NewStreamStatus()
+
+	s.SetEndReason(StreamEndReasonClientGone, fmt.Errorf("context canceled"))
+
+	assert.Equal(t, StreamEndReasonClientGone, s.EndReason)
+	assert.NotNil(t, s.EndError)
+	assert.False(t, s.IsNormalEnd())
+}
+
+func TestStreamStatus_MarkCompletedBeforeClose_CorrectsClientGoneRace(t *testing.T) {
+	t.Parallel()
+	s := NewStreamStatus()
+
+	s.SetEndReason(StreamEndReasonClientGone, fmt.Errorf("context canceled"))
+	s.MarkCompletedBeforeClose()
+
+	assert.Equal(t, StreamEndReasonClientGoneAfterDone, s.EndReason)
+	assert.Nil(t, s.EndError)
+	assert.True(t, s.IsNormalEnd())
 }
 
 func TestStreamStatus_RecordError_Basic(t *testing.T) {
@@ -135,6 +171,7 @@ func TestStreamStatus_IsNormalEnd(t *testing.T) {
 		normal bool
 	}{
 		{StreamEndReasonDone, true},
+		{StreamEndReasonClientGoneAfterDone, true},
 		{StreamEndReasonEOF, true},
 		{StreamEndReasonHandlerStop, true},
 		{StreamEndReasonTimeout, false},

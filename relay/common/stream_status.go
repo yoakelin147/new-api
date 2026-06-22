@@ -10,15 +10,16 @@ import (
 type StreamEndReason string
 
 const (
-	StreamEndReasonNone        StreamEndReason = ""
-	StreamEndReasonDone        StreamEndReason = "done"
-	StreamEndReasonTimeout     StreamEndReason = "timeout"
-	StreamEndReasonClientGone  StreamEndReason = "client_gone"
-	StreamEndReasonScannerErr  StreamEndReason = "scanner_error"
-	StreamEndReasonHandlerStop StreamEndReason = "handler_stop"
-	StreamEndReasonEOF         StreamEndReason = "eof"
-	StreamEndReasonPanic       StreamEndReason = "panic"
-	StreamEndReasonPingFail    StreamEndReason = "ping_fail"
+	StreamEndReasonNone                StreamEndReason = ""
+	StreamEndReasonDone                StreamEndReason = "done"
+	StreamEndReasonTimeout             StreamEndReason = "timeout"
+	StreamEndReasonClientGone          StreamEndReason = "client_gone"
+	StreamEndReasonClientGoneAfterDone StreamEndReason = "client_gone_after_done"
+	StreamEndReasonScannerErr          StreamEndReason = "scanner_error"
+	StreamEndReasonHandlerStop         StreamEndReason = "handler_stop"
+	StreamEndReasonEOF                 StreamEndReason = "eof"
+	StreamEndReasonPanic               StreamEndReason = "panic"
+	StreamEndReasonPingFail            StreamEndReason = "ping_fail"
 )
 
 const maxStreamErrorEntries = 20
@@ -29,13 +30,14 @@ type StreamErrorEntry struct {
 }
 
 type StreamStatus struct {
-	EndReason  StreamEndReason
-	EndError   error
-	endOnce    sync.Once
+	EndReason StreamEndReason
+	EndError  error
+	endOnce   sync.Once
 
-	mu         sync.Mutex
-	Errors     []StreamErrorEntry
-	ErrorCount int
+	mu                   sync.Mutex
+	Errors               []StreamErrorEntry
+	ErrorCount           int
+	completedBeforeClose bool
 }
 
 func NewStreamStatus() *StreamStatus {
@@ -47,9 +49,37 @@ func (s *StreamStatus) SetEndReason(reason StreamEndReason, err error) {
 		return
 	}
 	s.endOnce.Do(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if reason == StreamEndReasonClientGone && s.completedBeforeClose {
+			reason = StreamEndReasonClientGoneAfterDone
+			err = nil
+		}
 		s.EndReason = reason
 		s.EndError = err
 	})
+}
+
+func (s *StreamStatus) MarkCompletedBeforeClose() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.completedBeforeClose = true
+	if s.EndReason == StreamEndReasonClientGone {
+		s.EndReason = StreamEndReasonClientGoneAfterDone
+		s.EndError = nil
+	}
+	s.mu.Unlock()
+}
+
+func (s *StreamStatus) CompletedBeforeClose() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.completedBeforeClose
 }
 
 func (s *StreamStatus) RecordError(msg string) {
@@ -90,6 +120,7 @@ func (s *StreamStatus) IsNormalEnd() bool {
 		return true
 	}
 	return s.EndReason == StreamEndReasonDone ||
+		s.EndReason == StreamEndReasonClientGoneAfterDone ||
 		s.EndReason == StreamEndReasonEOF ||
 		s.EndReason == StreamEndReasonHandlerStop
 }

@@ -88,9 +88,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			sr.Error(err)
 			return
 		}
-		sendResponsesStreamData(c, streamResponse, data)
 		switch streamResponse.Type {
 		case "response.completed":
+			if info != nil && info.StreamStatus != nil {
+				info.StreamStatus.MarkCompletedBeforeClose()
+			}
 			if streamResponse.Response != nil {
 				if streamResponse.Response.Usage != nil {
 					if streamResponse.Response.Usage.InputTokens != 0 {
@@ -128,6 +130,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				}
 			}
 		}
+		sendResponsesStreamData(c, streamResponse, data)
 	})
 	if err := helper.UpstreamCircuitBreakerStreamError(c, info); err != nil {
 		return nil, err
