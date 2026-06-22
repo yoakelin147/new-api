@@ -149,6 +149,8 @@ export function buildModelRatioColumns({
             variant='ghost'
             size='sm'
             onClick={() => onEdit(row.original)}
+            aria-label={t('Edit')}
+            title={t('Edit')}
           >
             <Pencil />
           </Button>
@@ -156,6 +158,8 @@ export function buildModelRatioColumns({
             variant='ghost'
             size='sm'
             onClick={() => onDelete(row.original.name)}
+            aria-label={t('Delete')}
+            title={t('Delete')}
           >
             <Trash2 />
           </Button>

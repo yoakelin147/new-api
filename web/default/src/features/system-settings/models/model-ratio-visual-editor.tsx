@@ -214,21 +214,25 @@ const ModelRatioVisualEditorComponent = forwardRef<
     const modelNames = new Set([...savedByName.keys(), ...draftByName.keys()])
 
     return Array.from(modelNames)
-      .map((name) => {
+      .flatMap((name) => {
         const saved = savedByName.get(name)
         const draft = draftByName.get(name)
-        const displayed = saved ?? draft
+        if (saved && !draft) return []
+
+        const displayed = draft ?? saved
         const savedSignature = getSnapshotSignature(saved)
         const draftSignature = getSnapshotSignature(draft)
 
-        return {
-          ...displayed!,
-          saved,
-          draft,
-          isDraftChanged: savedSignature !== draftSignature,
-          isDraftDeleted: Boolean(saved && !draft),
-          isDraftNew: Boolean(!saved && draft),
-        }
+        return [
+          {
+            ...displayed!,
+            saved,
+            draft,
+            isDraftChanged: savedSignature !== draftSignature,
+            isDraftDeleted: Boolean(saved && !draft),
+            isDraftNew: Boolean(!saved && draft),
+          },
+        ]
       })
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [
@@ -423,8 +427,16 @@ const ModelRatioVisualEditorComponent = forwardRef<
         'billing_setting.billing_expr',
         JSON.stringify(billingExprMap, null, 2)
       )
+
+      if (editData?.name === name) {
+        setEditData(null)
+        setEditorIntent('default')
+        setEditorOpen(false)
+        setSheetOpen(false)
+      }
     },
     [
+      editData?.name,
       modelPrice,
       modelRatio,
       cacheRatio,
@@ -706,7 +718,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
               table={table}
               containerClassName='min-h-0 flex-1 rounded-md'
               tableContainerClassName='h-full'
-              tableClassName='min-w-[852px] table-fixed'
+              tableClassName='min-w-[784px] table-fixed'
               tableHeaderClassName='[&_tr]:border-b-0'
               splitHeaderScrollClassName='h-full'
               bodyContainerClassName='[scrollbar-gutter:stable]'
@@ -721,9 +733,9 @@ const ModelRatioVisualEditorComponent = forwardRef<
               colgroup={
                 <colgroup>
                   <col className='w-9' />
-                  <col className='w-[300px]' />
-                  <col className='w-[120px]' />
-                  <col className='w-[300px]' />
+                  <col className='w-[280px]' />
+                  <col className='w-[112px]' />
+                  <col className='w-[256px]' />
                   <col className='w-24' />
                 </colgroup>
               }

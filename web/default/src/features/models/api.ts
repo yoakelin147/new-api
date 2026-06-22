@@ -34,6 +34,7 @@ import type {
   SyncUpstreamOptions,
   DeploymentSettingsResponse,
   ListDeploymentsResponse,
+  AIConfigureMissingModelsResponse,
 } from './types'
 
 // ============================================================================
@@ -235,6 +236,16 @@ export async function downloadUpstreamConfigExample(): Promise<Blob> {
   return res.data
 }
 
+/**
+ * Export current model metadata configuration
+ */
+export async function downloadModelMetadataConfig(): Promise<Blob> {
+  const res = await api.get('/api/models/config/export', {
+    responseType: 'blob',
+  })
+  return res.data
+}
+
 // ============================================================================
 // Utility Operations
 // ============================================================================
@@ -244,6 +255,21 @@ export async function downloadUpstreamConfigExample(): Promise<Blob> {
  */
 export async function getMissingModels(): Promise<MissingModelsResponse> {
   const res = await api.get('/api/models/missing')
+  return res.data
+}
+
+/**
+ * Generate metadata for selected missing models with an internal API key.
+ */
+export async function aiConfigureMissingModels(params: {
+  model_names: string[]
+  token_id: number
+  group?: string
+  ai_model: string
+  language?: 'zh' | 'en' | 'ja'
+  apply?: boolean
+}): Promise<AIConfigureMissingModelsResponse> {
+  const res = await api.post('/api/models/missing/ai_configure', params)
   return res.data
 }
 

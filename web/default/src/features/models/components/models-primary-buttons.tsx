@@ -23,8 +23,10 @@ import {
   List,
   Building2,
   AlertCircle,
+  Download,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -34,6 +36,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { downloadModelMetadataConfig } from '../api'
 import { useModels } from './models-provider'
 
 export function ModelsPrimaryButtons() {
@@ -55,6 +58,22 @@ export function ModelsPrimaryButtons() {
 
   const handlePrefillGroups = () => {
     setOpen('prefill-groups')
+  }
+
+  const handleExportConfig = async () => {
+    try {
+      const blob = await downloadModelMetadataConfig()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'model-metadata-config.json'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error(t('Failed to export model metadata configuration.'))
+    }
   }
 
   const handleManageVendors = () => {
@@ -90,6 +109,13 @@ export function ModelsPrimaryButtons() {
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
+
+          <DropdownMenuItem onClick={handleExportConfig}>
+            {t('Export Metadata Config')}
+            <DropdownMenuShortcut>
+              <Download className='h-4 w-4' />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
 
           <DropdownMenuItem onClick={handlePrefillGroups}>
             {t('Prefill Groups')}

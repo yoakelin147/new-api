@@ -842,7 +842,7 @@ func UpstreamConfigExample(c *gin.Context) {
 				VendorName:  "Example Vendor",
 				NameRule:    0,
 				Status:      1,
-				Endpoints:   json.RawMessage(`["/v1/chat/completions"]`),
+				Endpoints:   json.RawMessage(`{"openai":{"path":"/v1/chat/completions","method":"POST"}}`),
 			},
 			{
 				ModelName:   "example-embedding-model",
@@ -852,7 +852,7 @@ func UpstreamConfigExample(c *gin.Context) {
 				VendorName:  "Example Vendor",
 				NameRule:    0,
 				Status:      1,
-				Endpoints:   json.RawMessage(`["/v1/embeddings"]`),
+				Endpoints:   json.RawMessage(`{"embeddings":{"path":"/v1/embeddings","method":"POST"}}`),
 			},
 		},
 		Vendors: []upstreamVendor{

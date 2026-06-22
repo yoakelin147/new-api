@@ -209,6 +209,40 @@ export interface PreviewUpstreamDiffResponse {
   data?: SyncDiffData
 }
 
+export interface ModelMetadataConfig {
+  success: boolean
+  message?: string
+  models: Array<{
+    model_name: string
+    description?: string
+    icon?: string
+    tags?: string
+    vendor_name?: string
+    name_rule?: number
+    status?: number
+    endpoints?: string[]
+  }>
+  vendors?: Array<{
+    name: string
+    description?: string
+    icon?: string
+    status?: number
+  }>
+}
+
+export interface AIConfigureMissingModelsResponse {
+  success: boolean
+  message?: string
+  data?: {
+    config?: ModelMetadataConfig
+    apply_result?: {
+      created_models?: number
+      created_vendors?: number
+      skipped_models?: string[]
+    }
+  }
+}
+
 /**
  * Missing models response
  */
