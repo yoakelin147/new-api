@@ -80,6 +80,42 @@ func GetQuotaDatesByChannel(c *gin.Context) {
 	})
 }
 
+func GetQuotaDatesByToken(c *gin.Context) {
+	userId := c.GetInt("id")
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if endTimestamp == 0 {
+		endTimestamp = time.Now().Unix()
+	}
+	if startTimestamp == 0 {
+		startTimestamp = endTimestamp - maxDashboardChannelStatsRangeSeconds
+	}
+	if endTimestamp < startTimestamp {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "end_timestamp must be greater than or equal to start_timestamp",
+		})
+		return
+	}
+	if endTimestamp-startTimestamp > maxDashboardChannelStatsRangeSeconds {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "time range cannot exceed 31 days",
+		})
+		return
+	}
+	dates, err := model.GetQuotaDataGroupByToken(userId, startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    dates,
+	})
+}
+
 func GetUserQuotaDates(c *gin.Context) {
 	userId := c.GetInt("id")
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)

@@ -30,6 +30,15 @@ type ChannelQuotaData struct {
 	Quota       int    `json:"quota"`
 }
 
+type TokenQuotaData struct {
+	TokenId   int    `json:"token_id"`
+	TokenName string `json:"token_name"`
+	CreatedAt int64  `json:"created_at"`
+	TokenUsed int    `json:"token_used"`
+	Count     int    `json:"count"`
+	Quota     int    `json:"quota"`
+}
+
 func UpdateQuotaData() {
 	for {
 		if common.DataExportEnabled {
@@ -136,7 +145,7 @@ func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*Quota
 
 func GetQuotaDataGroupByChannel(startTime int64, endTime int64) ([]*ChannelQuotaData, error) {
 	var quotaDatas []*ChannelQuotaData
-	bucketExpr := channelQuotaBucketExpr()
+	bucketExpr := quotaDataBucketExpr()
 	query := LOG_DB.Table("logs").
 		Select(fmt.Sprintf("channel_id, %s as created_at, count(*) as count, sum(quota) as quota, sum(prompt_tokens) + sum(completion_tokens) as token_used", bucketExpr)).
 		Where("type = ? and channel_id <> 0", LogTypeConsume).
@@ -200,7 +209,27 @@ func GetQuotaDataGroupByChannel(startTime int64, endTime int64) ([]*ChannelQuota
 	return quotaDatas, nil
 }
 
-func channelQuotaBucketExpr() string {
+func GetQuotaDataGroupByToken(userId int, startTime int64, endTime int64) ([]*TokenQuotaData, error) {
+	var quotaDatas []*TokenQuotaData
+	bucketExpr := quotaDataBucketExpr()
+	query := LOG_DB.Table("logs").
+		Select(fmt.Sprintf("token_id, token_name, %s as created_at, count(*) as count, sum(quota) as quota, sum(prompt_tokens) + sum(completion_tokens) as token_used", bucketExpr)).
+		Where("type = ? and user_id = ? and token_id <> 0", LogTypeConsume, userId).
+		Group(fmt.Sprintf("token_id, token_name, %s", bucketExpr)).
+		Order("created_at asc")
+	if startTime > 0 {
+		query = query.Where("created_at >= ?", startTime)
+	}
+	if endTime > 0 {
+		query = query.Where("created_at <= ?", endTime)
+	}
+	if err := query.Find(&quotaDatas).Error; err != nil {
+		return nil, err
+	}
+	return quotaDatas, nil
+}
+
+func quotaDataBucketExpr() string {
 	if common.UsingMySQL {
 		return "FLOOR(created_at / 3600) * 3600"
 	}

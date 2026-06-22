@@ -83,6 +83,12 @@ const LazyChannelCharts = lazy(() =>
   }))
 )
 
+const LazyKeyCharts = lazy(() =>
+  import('./components/keys/key-charts').then((m) => ({
+    default: m.KeyCharts,
+  }))
+)
+
 function LogStatCardsFallback() {
   return (
     <div className='overflow-hidden rounded-lg border'>
@@ -142,6 +148,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   },
   models: {
     titleKey: 'Model Call Analytics',
+  },
+  tokens: {
+    titleKey: 'API Key Analytics',
   },
   users: {
     titleKey: 'User Analytics',
@@ -306,6 +315,13 @@ export function Dashboard() {
             <FadeIn>
               <Suspense fallback={<ModelChartsFallback />}>
                 <LazyUserCharts />
+              </Suspense>
+            </FadeIn>
+          )}
+          {activeSection === 'tokens' && (
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyKeyCharts />
               </Suspense>
             </FadeIn>
           )}

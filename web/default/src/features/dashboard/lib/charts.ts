@@ -24,6 +24,7 @@ import type {
   QuotaDataItem,
   ProcessedChannelChartData,
   ProcessedChartData,
+  ProcessedTokenChartData,
   ProcessedUserChartData,
 } from '@/features/dashboard/types'
 
@@ -787,6 +788,36 @@ export function processChannelChartData(
   return {
     spec_channel_rank: result.spec_rank,
     spec_channel_trend: result.spec_trend,
+  }
+}
+
+export function processTokenChartData(
+  data: QuotaDataItem[],
+  timeGranularity: TimeGranularity = 'day',
+  t?: TFunction,
+  limit = 10,
+  themeKey?: string
+): ProcessedTokenChartData {
+  const tt: TFunction = t ?? ((x) => x)
+  const result = processDimensionChartData({
+    data,
+    timeGranularity,
+    t,
+    limit,
+    themeKey,
+    dimensionField: 'API Key',
+    rankTitle: 'API Key Consumption Ranking',
+    trendTitle: 'API Key Consumption Trend',
+    emptyRankDataId: 'tokenRankData',
+    emptyTrendDataId: 'tokenTrendData',
+    getDimensionLabel: (item) =>
+      item.token_name ||
+      (item.token_id ? `#${item.token_id}` : tt('Unknown API Key')),
+  })
+
+  return {
+    spec_token_rank: result.spec_rank,
+    spec_token_trend: result.spec_trend,
   }
 }
 

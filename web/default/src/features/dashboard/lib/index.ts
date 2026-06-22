@@ -36,6 +36,7 @@ export {
   processChartData,
   processUserChartData,
   processChannelChartData,
+  processTokenChartData,
 } from './charts'
 export { safeDivide, calculateDashboardStats } from './stats'
 export { getPreviewText } from './text'

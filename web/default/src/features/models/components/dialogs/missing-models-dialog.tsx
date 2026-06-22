@@ -58,6 +58,8 @@ import { modelsQueryKeys, vendorsQueryKeys } from '../../lib'
 import type { Model } from '../../types'
 import { useModels } from '../models-provider'
 
+const MAX_AI_CONFIGURE_MODELS = 50
+
 type MissingModelsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -172,6 +174,13 @@ export function MissingModelsDialog({
     totalItems === 0 ? 0 : Math.min(currentPage * pageSize, totalItems)
   const showPagination = totalItems > pageSize
   const selectedSet = useMemo(() => new Set(selectedModels), [selectedModels])
+  const selectedCount = selectedModels.length
+  const selectedCountExceedsLimit = selectedCount > MAX_AI_CONFIGURE_MODELS
+  const pageSelectedCount = paginatedModels.filter((modelName) =>
+    selectedSet.has(modelName)
+  ).length
+  const allCurrentPageSelected =
+    paginatedModels.length > 0 && pageSelectedCount === paginatedModels.length
   const allFilteredSelected =
     filteredModels.length > 0 &&
     filteredModels.every((modelName) => selectedSet.has(modelName))
@@ -183,6 +192,20 @@ export function MissingModelsDialog({
         return prev.includes(modelName) ? prev : [...prev, modelName]
       }
       return prev.filter((item) => item !== modelName)
+    })
+  }
+
+  const toggleCurrentPage = (checked: boolean) => {
+    setSelectedModels((prev) => {
+      const next = new Set(prev)
+      for (const modelName of paginatedModels) {
+        if (checked) {
+          next.add(modelName)
+        } else {
+          next.delete(modelName)
+        }
+      }
+      return [...next]
     })
   }
 
@@ -205,6 +228,14 @@ export function MissingModelsDialog({
     }
     if (!aiModel.trim()) {
       toast.warning(t('Enter an AI model for configuration.'))
+      return
+    }
+    if (selectedCountExceedsLimit) {
+      toast.warning(
+        t('AI configuration supports at most {{count}} models per request.', {
+          count: MAX_AI_CONFIGURE_MODELS,
+        })
+      )
       return
     }
 
@@ -355,7 +386,11 @@ export function MissingModelsDialog({
               />
               <Button
                 onClick={handleAIConfigure}
-                disabled={isAIConfiguring || !hasSelectedModels}
+                disabled={
+                  isAIConfiguring ||
+                  !hasSelectedModels ||
+                  selectedCountExceedsLimit
+                }
               >
                 {isAIConfiguring ? (
                   <Loader2 className='h-4 w-4 animate-spin' />
@@ -367,22 +402,53 @@ export function MissingModelsDialog({
             </div>
             <div className='text-muted-foreground text-xs'>
               {t('{{count}} models selected', {
-                count: selectedModels.length,
+                count: selectedCount,
               })}
+              {selectedCountExceedsLimit
+                ? ` ${t(
+                    'AI configuration supports at most {{count}} models per request.',
+                    { count: MAX_AI_CONFIGURE_MODELS }
+                  )}`
+                : ''}
             </div>
           </div>
 
-          <div className='flex flex-shrink-0 items-center justify-between gap-3'>
-            <div className='flex items-center gap-3'>
+          <div className='flex flex-shrink-0 flex-col gap-2 md:flex-row md:items-center md:justify-between'>
+            <div className='flex flex-wrap items-center gap-2'>
               <Checkbox
-                checked={allFilteredSelected}
-                onCheckedChange={(value) => toggleAllFiltered(!!value)}
-                aria-label={t('Select all filtered models')}
+                checked={allCurrentPageSelected}
+                indeterminate={!allCurrentPageSelected && pageSelectedCount > 0}
+                onCheckedChange={(value) => toggleCurrentPage(!!value)}
+                aria-label={t('Select current page models')}
               />
               <div className='text-muted-foreground text-sm whitespace-nowrap'>
                 {t('Showing')} {displayStart}-{displayEnd} {t('of')}{' '}
                 {totalItems}
               </div>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='h-8'
+                onClick={() => toggleCurrentPage(!allCurrentPageSelected)}
+                disabled={paginatedModels.length === 0}
+              >
+                {allCurrentPageSelected
+                  ? t('Clear current page')
+                  : t('Select current page')}
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='h-8'
+                onClick={() => toggleAllFiltered(!allFilteredSelected)}
+                disabled={filteredModels.length === 0}
+              >
+                {allFilteredSelected
+                  ? t('Clear all filtered')
+                  : t('Select all filtered')}
+              </Button>
             </div>
             <div className='relative w-48'>
               <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />

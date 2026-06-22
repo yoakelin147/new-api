@@ -34,6 +34,11 @@ const DASHBOARD_SECTIONS = [
     build: () => null,
   },
   {
+    id: 'tokens',
+    titleKey: 'API Key Analytics',
+    build: () => null,
+  },
+  {
     id: 'users',
     titleKey: 'User Analytics',
     adminOnly: true,
