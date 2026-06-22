@@ -780,7 +780,7 @@ export function processChannelChartData(
     trendTitle: 'Channel Consumption Trend',
     emptyRankDataId: 'channelRankData',
     emptyTrendDataId: 'channelTrendData',
-    getDimensionLabel: (item) =>
+    getDimensionLabel: (item: QuotaDataItem) =>
       item.channel_name ||
       (item.channel_id ? `#${item.channel_id}` : tt('Unknown Channel')),
   })
@@ -799,25 +799,52 @@ export function processTokenChartData(
   themeKey?: string
 ): ProcessedTokenChartData {
   const tt: TFunction = t ?? ((x) => x)
-  const result = processDimensionChartData({
+  const baseOptions = {
     data,
     timeGranularity,
     t,
     limit,
     themeKey,
     dimensionField: 'API Key',
+    getDimensionLabel: (item: QuotaDataItem) =>
+      item.token_name ||
+      (item.token_id ? `#${item.token_id}` : tt('Unknown API Key')),
+  }
+  const quotaResult = processDimensionChartData({
+    ...baseOptions,
     rankTitle: 'API Key Consumption Ranking',
     trendTitle: 'API Key Consumption Trend',
     emptyRankDataId: 'tokenRankData',
     emptyTrendDataId: 'tokenTrendData',
-    getDimensionLabel: (item) =>
-      item.token_name ||
-      (item.token_id ? `#${item.token_id}` : tt('Unknown API Key')),
+    getMetricValue: (item) => Number(item.quota) || 0,
+    formatValue: (value) => renderQuotaCompat(value, 2),
+  })
+  const requestResult = processDimensionChartData({
+    ...baseOptions,
+    rankTitle: 'API Key Request Ranking',
+    trendTitle: 'API Key Request Trend',
+    emptyRankDataId: 'tokenRequestRankData',
+    emptyTrendDataId: 'tokenRequestTrendData',
+    getMetricValue: (item) => Number(item.count) || 0,
+    formatValue: (value) =>
+      Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value),
+  })
+  const usageResult = processDimensionChartData({
+    ...baseOptions,
+    rankTitle: 'API Key Token Usage Ranking',
+    trendTitle: 'API Key Token Usage Trend',
+    emptyRankDataId: 'tokenUsageRankData',
+    emptyTrendDataId: 'tokenUsageTrendData',
+    getMetricValue: (item) => Number(item.token_used) || 0,
+    formatValue: (value) =>
+      Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value),
   })
 
   return {
-    spec_token_rank: result.spec_rank,
-    spec_token_trend: result.spec_trend,
+    spec_token_rank: quotaResult.spec_rank,
+    spec_token_trend: quotaResult.spec_trend,
+    spec_token_request_rank: requestResult.spec_rank,
+    spec_token_usage_rank: usageResult.spec_rank,
   }
 }
 
@@ -833,6 +860,8 @@ function processDimensionChartData(options: {
   emptyRankDataId: string
   emptyTrendDataId: string
   getDimensionLabel: (item: QuotaDataItem) => string
+  getMetricValue?: (item: QuotaDataItem) => number
+  formatValue?: (value: number) => string
 }) {
   const {
     data,
@@ -846,6 +875,8 @@ function processDimensionChartData(options: {
     emptyRankDataId,
     emptyTrendDataId,
     getDimensionLabel,
+    getMetricValue = (item) => Number(item.quota) || 0,
+    formatValue,
   } = options
   const tt: TFunction = t ?? ((x) => x)
   const { config } = getCurrencyDisplay()
@@ -859,13 +890,13 @@ function processDimensionChartData(options: {
         )
       : USER_COLOR_FALLBACKS
 
-  const formatVal = (raw: number) => renderQuotaCompat(raw, 2)
+  const formatVal = formatValue ?? ((raw: number) => renderQuotaCompat(raw, 2))
 
   const emptyResult = {
     spec_rank: {
       type: 'bar',
       data: [{ id: emptyRankDataId, values: [] }],
-      xField: 'rawQuota',
+      xField: 'rawValue',
       yField: dimensionField,
       seriesField: dimensionField,
       direction: 'horizontal',
@@ -882,7 +913,7 @@ function processDimensionChartData(options: {
       type: 'area',
       data: [{ id: emptyTrendDataId, values: [] }],
       xField: 'Time',
-      yField: 'rawQuota',
+      yField: 'rawValue',
       seriesField: dimensionField,
       title: {
         visible: true,
@@ -898,24 +929,25 @@ function processDimensionChartData(options: {
 
   if (!data || data.length === 0) return emptyResult
 
-  const quotaTotalByDimension = new Map<string, number>()
+  const metricTotalByDimension = new Map<string, number>()
   data.forEach((item) => {
     const label = getDimensionLabel(item)
-    const prev = quotaTotalByDimension.get(label) || 0
-    quotaTotalByDimension.set(label, prev + (Number(item.quota) || 0))
+    const prev = metricTotalByDimension.get(label) || 0
+    metricTotalByDimension.set(label, prev + getMetricValue(item))
   })
 
-  const sorted = Array.from(quotaTotalByDimension.entries()).sort(
+  const sorted = Array.from(metricTotalByDimension.entries()).sort(
     (a, b) => b[1] - a[1]
   )
   const topDimensions = sorted.slice(0, limit).map(([u]) => u)
   const topDimensionSet = new Set(topDimensions)
-  const totalQuota = sorted.slice(0, limit).reduce((s, [, q]) => s + q, 0)
+  const totalValue = sorted.slice(0, limit).reduce((s, [, q]) => s + q, 0)
 
-  const rankValues = sorted.slice(0, limit).map(([label, quota]) => ({
+  const rankValues = sorted.slice(0, limit).map(([label, value]) => ({
     [dimensionField]: label,
-    rawQuota: quota,
-    Usage: Number((quota / quotaPerUnit).toFixed(4)),
+    rawValue: value,
+    rawQuota: value,
+    Usage: Number((value / quotaPerUnit).toFixed(4)),
   }))
 
   const dimensionColorMap = topDimensions.reduce<Record<string, string>>(
@@ -937,13 +969,14 @@ function processDimensionChartData(options: {
     if (!topDimensionSet.has(label)) return
     if (!timeDimensionMap.has(timeKey)) timeDimensionMap.set(timeKey, new Map())
     const map = timeDimensionMap.get(timeKey)!
-    map.set(label, (map.get(label) || 0) + (Number(item.quota) || 0))
+    map.set(label, (map.get(label) || 0) + getMetricValue(item))
   })
 
   const sortedTimePoints = Array.from(allTimePoints).sort()
   const trendValues: Array<{
     Time: string
     [key: string]: string | number
+    rawValue: number
     rawQuota: number
     Usage: number
   }> = []
@@ -954,6 +987,7 @@ function processDimensionChartData(options: {
       trendValues.push({
         Time: time,
         [dimensionField]: label,
+        rawValue: q,
         rawQuota: q,
         Usage: Number((q / quotaPerUnit).toFixed(4)),
       })
@@ -964,14 +998,14 @@ function processDimensionChartData(options: {
     spec_rank: {
       type: 'bar',
       data: [{ id: emptyRankDataId, values: rankValues }],
-      xField: 'rawQuota',
+      xField: 'rawValue',
       yField: dimensionField,
       seriesField: dimensionField,
       direction: 'horizontal',
       title: {
         visible: true,
         text: tt(rankTitle),
-        subtext: `${tt('Total:')} ${formatVal(totalQuota)}`,
+        subtext: `${tt('Total:')} ${formatVal(totalValue)}`,
       },
       legends: { visible: false },
       bar: {
@@ -993,7 +1027,7 @@ function processDimensionChartData(options: {
             {
               key: (datum: Record<string, unknown>) => datum?.[dimensionField],
               value: (datum: Record<string, unknown>) =>
-                formatVal(Number(datum?.rawQuota) || 0),
+                formatVal(Number(datum?.rawValue) || 0),
             },
           ],
           updateContent: (
@@ -1004,7 +1038,7 @@ function processDimensionChartData(options: {
             }>
           ) => {
             for (let i = 0; i < array.length; i++) {
-              const rawQuota = array[i].datum?.rawQuota
+              const rawQuota = array[i].datum?.rawValue
               const value =
                 rawQuota === undefined ? array[i].value : Number(rawQuota)
               array[i].value = formatVal(Number(value) || 0)
@@ -1021,13 +1055,13 @@ function processDimensionChartData(options: {
       type: 'area',
       data: [{ id: emptyTrendDataId, values: trendValues }],
       xField: 'Time',
-      yField: 'rawQuota',
+      yField: 'rawValue',
       seriesField: dimensionField,
       stack: false,
       title: {
         visible: true,
         text: tt(trendTitle),
-        subtext: `${tt('Total:')} ${formatVal(totalQuota)}`,
+        subtext: `${tt('Total:')} ${formatVal(totalValue)}`,
       },
       legends: { visible: true, selectMode: 'single' },
       axes: [
@@ -1036,7 +1070,7 @@ function processDimensionChartData(options: {
           orient: 'left',
           type: 'linear',
           label: {
-            formatMethod: (value: number) => formatVal(value),
+              formatMethod: (value: number) => formatVal(value),
           },
         },
       ],
@@ -1046,7 +1080,7 @@ function processDimensionChartData(options: {
             {
               key: (datum: Record<string, unknown>) => datum?.[dimensionField],
               value: (datum: Record<string, unknown>) =>
-                formatVal(Number(datum?.rawQuota) || 0),
+                formatVal(Number(datum?.rawValue) || 0),
             },
           ],
         },
@@ -1055,7 +1089,7 @@ function processDimensionChartData(options: {
             {
               key: (datum: Record<string, unknown>) => datum?.[dimensionField],
               value: (datum: Record<string, unknown>) =>
-                Number(datum?.rawQuota) || 0,
+                Number(datum?.rawValue) || 0,
             },
           ],
           updateContent: (

@@ -39,6 +39,17 @@ type TokenQuotaData struct {
 	Quota     int    `json:"quota"`
 }
 
+type UserTokenQuotaData struct {
+	UserID    int    `json:"user_id"`
+	Username  string `json:"username"`
+	TokenId   int    `json:"token_id"`
+	TokenName string `json:"token_name"`
+	CreatedAt int64  `json:"created_at"`
+	TokenUsed int    `json:"token_used"`
+	Count     int    `json:"count"`
+	Quota     int    `json:"quota"`
+}
+
 func UpdateQuotaData() {
 	for {
 		if common.DataExportEnabled {
@@ -214,9 +225,34 @@ func GetQuotaDataGroupByToken(userId int, startTime int64, endTime int64) ([]*To
 	bucketExpr := quotaDataBucketExpr()
 	query := LOG_DB.Table("logs").
 		Select(fmt.Sprintf("token_id, token_name, %s as created_at, count(*) as count, sum(quota) as quota, sum(prompt_tokens) + sum(completion_tokens) as token_used", bucketExpr)).
-		Where("type = ? and user_id = ? and token_id <> 0", LogTypeConsume, userId).
+		Where("type = ? and user_id = ? and (token_id <> 0 or token_name <> '')", LogTypeConsume, userId).
 		Group(fmt.Sprintf("token_id, token_name, %s", bucketExpr)).
-		Order("created_at asc")
+		Order("created_at asc, token_id asc, token_name asc")
+	if startTime > 0 {
+		query = query.Where("created_at >= ?", startTime)
+	}
+	if endTime > 0 {
+		query = query.Where("created_at <= ?", endTime)
+	}
+	if err := query.Find(&quotaDatas).Error; err != nil {
+		return nil, err
+	}
+	return quotaDatas, nil
+}
+
+func GetQuotaDataGroupByUserToken(userId int, startTime int64, endTime int64) ([]*UserTokenQuotaData, error) {
+	var quotaDatas []*UserTokenQuotaData
+	bucketExpr := quotaDataBucketExpr()
+	query := LOG_DB.Table("logs").
+		Select(fmt.Sprintf("user_id, username, token_id, token_name, %s as created_at, count(*) as count, sum(quota) as quota, sum(prompt_tokens) + sum(completion_tokens) as token_used", bucketExpr)).
+		Where("type = ? and (token_id <> 0 or token_name <> '')", LogTypeConsume).
+		Group(fmt.Sprintf("user_id, username, token_id, token_name, %s", bucketExpr)).
+		Order("created_at asc, user_id asc, token_id asc, token_name asc")
+	if userId > 0 {
+		query = query.Where("user_id = ?", userId)
+	} else {
+		query = query.Where("user_id <> 0")
+	}
 	if startTime > 0 {
 		query = query.Where("created_at >= ?", startTime)
 	}

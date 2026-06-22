@@ -124,6 +124,8 @@ export interface ProcessedChannelChartData {
 export interface ProcessedTokenChartData {
   spec_token_rank: VChartSpec
   spec_token_trend: VChartSpec
+  spec_token_request_rank: VChartSpec
+  spec_token_usage_rank: VChartSpec
 }
 
 // ============================================================================

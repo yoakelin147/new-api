@@ -132,6 +132,24 @@ func TestGetQuotaDataGroupByTokenFiltersCurrentUser(t *testing.T) {
 			Type:      LogTypeConsume,
 			Quota:     999,
 		},
+		{
+			UserId:           7,
+			CreatedAt:        7200 + 20,
+			Type:             LogTypeConsume,
+			TokenName:        "playground-default",
+			Quota:            50,
+			PromptTokens:     11,
+			CompletionTokens: 9,
+		},
+		{
+			UserId:           8,
+			CreatedAt:        7200 + 30,
+			Type:             LogTypeConsume,
+			TokenName:        "playground-default",
+			Quota:            777,
+			PromptTokens:     70,
+			CompletionTokens: 7,
+		},
 	}
 	require.NoError(t, DB.Create(&logs).Error)
 
@@ -148,6 +166,13 @@ func TestGetQuotaDataGroupByTokenFiltersCurrentUser(t *testing.T) {
 			Quota:     300,
 		},
 		{
+			TokenName: "playground-default",
+			CreatedAt: 7200,
+			TokenUsed: 20,
+			Count:     1,
+			Quota:     50,
+		},
+		{
 			TokenId:   202,
 			TokenName: "backup-key",
 			CreatedAt: 7200,
@@ -157,4 +182,130 @@ func TestGetQuotaDataGroupByTokenFiltersCurrentUser(t *testing.T) {
 		},
 	}
 	assert.Equal(t, expected, rows)
+}
+
+func TestGetQuotaDataGroupByUserToken(t *testing.T) {
+	truncateTables(t)
+
+	logs := []*Log{
+		{
+			UserId:           7,
+			Username:         "alice",
+			CreatedAt:        3600 + 10,
+			Type:             LogTypeConsume,
+			TokenId:          101,
+			TokenName:        "primary-key",
+			Quota:            100,
+			PromptTokens:     7,
+			CompletionTokens: 3,
+		},
+		{
+			UserId:           7,
+			Username:         "alice",
+			CreatedAt:        3600 + 20,
+			Type:             LogTypeConsume,
+			TokenId:          101,
+			TokenName:        "primary-key",
+			Quota:            200,
+			PromptTokens:     5,
+			CompletionTokens: 5,
+		},
+		{
+			UserId:           8,
+			Username:         "bob",
+			CreatedAt:        7200 + 10,
+			Type:             LogTypeConsume,
+			TokenId:          202,
+			TokenName:        "backup-key",
+			Quota:            400,
+			PromptTokens:     20,
+			CompletionTokens: 30,
+		},
+		{
+			UserId:    7,
+			Username:  "alice",
+			CreatedAt: 3600 + 30,
+			Type:      LogTypeError,
+			TokenId:   101,
+			TokenName: "primary-key",
+			Quota:     999,
+		},
+		{
+			UserId:    7,
+			Username:  "alice",
+			CreatedAt: 3600 + 40,
+			Type:      LogTypeConsume,
+			Quota:     999,
+		},
+		{
+			UserId:           7,
+			Username:         "alice",
+			CreatedAt:        7200 + 20,
+			Type:             LogTypeConsume,
+			TokenName:        "playground-default",
+			Quota:            50,
+			PromptTokens:     11,
+			CompletionTokens: 9,
+		},
+		{
+			UserId:           8,
+			Username:         "bob",
+			CreatedAt:        7200 + 30,
+			Type:             LogTypeConsume,
+			TokenName:        "playground-default",
+			Quota:            777,
+			PromptTokens:     70,
+			CompletionTokens: 7,
+		},
+	}
+	require.NoError(t, DB.Create(&logs).Error)
+
+	rows, err := GetQuotaDataGroupByUserToken(0, 3600, 7200+3599)
+	require.NoError(t, err)
+
+	expected := []*UserTokenQuotaData{
+		{
+			UserID:    7,
+			Username:  "alice",
+			TokenId:   101,
+			TokenName: "primary-key",
+			CreatedAt: 3600,
+			TokenUsed: 20,
+			Count:     2,
+			Quota:     300,
+		},
+		{
+			UserID:    7,
+			Username:  "alice",
+			TokenName: "playground-default",
+			CreatedAt: 7200,
+			TokenUsed: 20,
+			Count:     1,
+			Quota:     50,
+		},
+		{
+			UserID:    8,
+			Username:  "bob",
+			TokenName: "playground-default",
+			CreatedAt: 7200,
+			TokenUsed: 77,
+			Count:     1,
+			Quota:     777,
+		},
+		{
+			UserID:    8,
+			Username:  "bob",
+			TokenId:   202,
+			TokenName: "backup-key",
+			CreatedAt: 7200,
+			TokenUsed: 50,
+			Count:     1,
+			Quota:     400,
+		},
+	}
+	assert.Equal(t, expected, rows)
+
+	filteredRows, err := GetQuotaDataGroupByUserToken(7, 3600, 7200+3599)
+	require.NoError(t, err)
+	assert.Equal(t, expected[:2], filteredRows)
 }
