@@ -30,12 +30,15 @@ import {
   Coins,
   Check,
   ChevronsUpDown,
+  Filter,
   KeyRound,
   Loader2,
   MousePointerClick,
+  RotateCcw,
   Users,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { formatNumber, formatQuota } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
@@ -60,6 +63,8 @@ import {
 } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DateTimePicker } from '@/components/datetime-picker'
+import { Dialog } from '@/components/dialog'
 import {
   getUserQuotaDataByTokens,
   getUserQuotaDataByUserTokens,
@@ -115,6 +120,25 @@ const TOKEN_CHARTS: {
 ]
 
 const TOP_TOKEN_LIMIT_OPTIONS = [5, 10, 20, 50]
+const MAX_ADMIN_CUSTOM_RANGE_SECONDS = 183 * 24 * 60 * 60
+const CUSTOM_RANGE_TAB_VALUE = 'custom'
+
+function getDefaultTokenTimeRange(granularity: TimeGranularity) {
+  const days = getDefaultDays(granularity)
+  const { start, end } = getRollingDateRange(days)
+  return {
+    start_timestamp: Math.floor(start.getTime() / 1000),
+    end_timestamp: Math.floor(end.getTime() / 1000),
+  }
+}
+
+function dateToTimestamp(date?: Date) {
+  return date ? Math.floor(date.getTime() / 1000) : undefined
+}
+
+function timestampToDate(timestamp?: number) {
+  return timestamp ? new Date(timestamp * 1000) : undefined
+}
 
 export function KeyCharts() {
   const { t } = useTranslation()
@@ -127,6 +151,7 @@ export function KeyCharts() {
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
   const [userSelectorOpen, setUserSelectorOpen] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState('')
   const [userKeyword, setUserKeyword] = useState('')
   const deferredUserKeyword = useDeferredValue(userKeyword)
@@ -134,18 +159,14 @@ export function KeyCharts() {
   const [timeGranularity, setTimeGranularity] = useState<TimeGranularity>(() =>
     getSavedGranularity()
   )
-  const [selectedRange, setSelectedRange] = useState<number>(() =>
+  const [selectedRange, setSelectedRange] = useState<number | null>(() =>
     getDefaultDays(timeGranularity)
   )
   const [topTokenLimit, setTopTokenLimit] = useState(10)
-  const [timeRange, setTimeRange] = useState(() => {
-    const days = getDefaultDays(timeGranularity)
-    const { start, end } = getRollingDateRange(days)
-    return {
-      start_timestamp: Math.floor(start.getTime() / 1000),
-      end_timestamp: Math.floor(end.getTime() / 1000),
-    }
-  })
+  const [timeRange, setTimeRange] = useState(() =>
+    getDefaultTokenTimeRange(timeGranularity)
+  )
+  const [draftRange, setDraftRange] = useState(() => timeRange)
 
   const handleRangeChange = useCallback((days: number) => {
     setSelectedRange(days)
@@ -156,10 +177,48 @@ export function KeyCharts() {
     })
   }, [])
 
+  const handleFilterOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) {
+        setDraftRange(timeRange)
+      }
+      setFilterOpen(nextOpen)
+    },
+    [timeRange]
+  )
+
+  const handleApplyFilter = useCallback(() => {
+    if (draftRange.end_timestamp < draftRange.start_timestamp) {
+      toast.error(t('End time must be later than start time'))
+      return
+    }
+    if (
+      draftRange.end_timestamp - draftRange.start_timestamp >
+      MAX_ADMIN_CUSTOM_RANGE_SECONDS
+    ) {
+      toast.error(t('Time range cannot exceed 183 days'))
+      return
+    }
+    setTimeRange(draftRange)
+    setSelectedRange(null)
+    setFilterOpen(false)
+  }, [draftRange, t])
+
+  const handleResetFilter = useCallback(() => {
+    const nextRange = getDefaultTokenTimeRange(timeGranularity)
+    setDraftRange(nextRange)
+    setTimeRange(nextRange)
+    setSelectedRange(getDefaultDays(timeGranularity))
+    setFilterOpen(false)
+  }, [timeGranularity])
+
   const handleGranularityChange = useCallback(
     (g: TimeGranularity) => {
       setTimeGranularity(g)
       saveGranularity(g)
+      if (selectedRange === null) {
+        return
+      }
       const days = getDefaultDays(g)
       if (days !== selectedRange) {
         handleRangeChange(days)
@@ -314,11 +373,27 @@ export function KeyCharts() {
     <div className='space-y-3'>
       <div className='flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2'>
         <Tabs
-          value={String(selectedRange)}
-          onValueChange={(value) => handleRangeChange(Number(value))}
+          value={
+            selectedRange === null
+              ? CUSTOM_RANGE_TAB_VALUE
+              : String(selectedRange)
+          }
+          onValueChange={(value) => {
+            if (value !== CUSTOM_RANGE_TAB_VALUE) {
+              handleRangeChange(Number(value))
+            }
+          }}
           className='shrink-0'
         >
           <TabsList>
+            <TabsTrigger
+              value={CUSTOM_RANGE_TAB_VALUE}
+              className='hidden'
+              tabIndex={-1}
+              aria-hidden='true'
+            >
+              {t('Custom')}
+            </TabsTrigger>
             {TIME_RANGE_PRESETS.map((preset) => (
               <TabsTrigger
                 key={preset.days}
@@ -371,6 +446,76 @@ export function KeyCharts() {
             ))}
           </TabsList>
         </Tabs>
+
+        {isAdmin && (
+          <Dialog
+            open={filterOpen}
+            onOpenChange={handleFilterOpenChange}
+            trigger={
+              <Button variant='outline' size='sm' className='shrink-0'>
+                <Filter data-icon='inline-start' />
+                {t('Filter')}
+              </Button>
+            }
+            title={t('API Key Statistics Filters')}
+            description={t('Filter API key statistics by custom time range.')}
+            contentClassName='sm:max-w-lg'
+            contentHeight='auto'
+            footerClassName='grid grid-cols-2 gap-2 sm:flex'
+            footer={
+              <>
+                <Button
+                  onClick={handleResetFilter}
+                  variant='outline'
+                  type='button'
+                >
+                  <RotateCcw data-icon='inline-start' />
+                  {t('Reset')}
+                </Button>
+                <Button onClick={handleApplyFilter} type='button'>
+                  <Filter data-icon='inline-start' />
+                  {t('Apply Filters')}
+                </Button>
+              </>
+            }
+          >
+            <div className='flex flex-col gap-3 py-1'>
+              <div className='grid gap-2'>
+                <div className='text-sm font-medium'>{t('Start Time')}</div>
+                <DateTimePicker
+                  value={timestampToDate(draftRange.start_timestamp)}
+                  onChange={(date) => {
+                    const timestamp = dateToTimestamp(date)
+                    if (timestamp !== undefined) {
+                      setDraftRange((prev) => ({
+                        ...prev,
+                        start_timestamp: timestamp,
+                      }))
+                    }
+                  }}
+                  placeholder={t('Select start time')}
+                />
+              </div>
+
+              <div className='grid gap-2'>
+                <div className='text-sm font-medium'>{t('End Time')}</div>
+                <DateTimePicker
+                  value={timestampToDate(draftRange.end_timestamp)}
+                  onChange={(date) => {
+                    const timestamp = dateToTimestamp(date)
+                    if (timestamp !== undefined) {
+                      setDraftRange((prev) => ({
+                        ...prev,
+                        end_timestamp: timestamp,
+                      }))
+                    }
+                  }}
+                  placeholder={t('Select end time')}
+                />
+              </div>
+            </div>
+          </Dialog>
+        )}
 
         {isAdmin && (
           <Popover open={userSelectorOpen} onOpenChange={setUserSelectorOpen}>

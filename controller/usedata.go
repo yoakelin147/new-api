@@ -12,6 +12,7 @@ import (
 )
 
 const maxDashboardChannelStatsRangeSeconds = 31 * 24 * 60 * 60
+const maxDashboardAdminTokenStatsRangeSeconds = 183 * 24 * 60 * 60
 
 func GetAllQuotaDates(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
@@ -136,10 +137,10 @@ func GetQuotaDatesByUserToken(c *gin.Context) {
 		})
 		return
 	}
-	if endTimestamp-startTimestamp > maxDashboardChannelStatsRangeSeconds {
+	if endTimestamp-startTimestamp > maxDashboardAdminTokenStatsRangeSeconds {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "time range cannot exceed 31 days",
+			"message": "time range cannot exceed 183 days",
 		})
 		return
 	}
