@@ -4675,6 +4675,22 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Enable official sync": "开启官方同步",
+    "Disable official sync": "关闭官方同步",
+    "Failed to update official sync": "更新官方同步状态失败",
+    "Official sync enabled for {{count}} model(s)": "已为 {{count}} 个模型开启官方同步",
+    "Official sync disabled for {{count}} model(s)": "已为 {{count}} 个模型关闭官方同步",
+    "Manage model vendors used by metadata, filtering, and model display.": "管理用于模型元信息、筛选和展示的供应商。",
+    "New Vendor": "新增供应商",
+    "{{count}} vendor(s)": "{{count}} 个供应商",
+    "Unable to load vendors": "无法加载供应商",
+    "Please retry or refresh.": "请重试或刷新页面。",
+    "Fetching vendors...": "正在获取供应商...",
+    "No vendors yet": "暂无供应商",
+    "Create a vendor to organize model metadata.": "创建供应商，用于整理模型元信息。",
+    "No description provided": "暂无描述",
+    "This vendor is still referenced by {{count}} model(s). Those models may display without vendor metadata after deletion.": "该供应商仍被 {{count}} 个模型引用。删除后，这些模型可能无法显示供应商元信息。",
+    "Delete Vendor": "删除供应商"
   }
 }

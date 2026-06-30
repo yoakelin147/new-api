@@ -13,6 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type batchModelSyncOfficialRequest struct {
+	Ids          []int `json:"ids"`
+	SyncOfficial int   `json:"sync_official"`
+}
+
 // GetAllModelsMeta 获取模型列表（分页）
 func GetAllModelsMeta(c *gin.Context) {
 
@@ -158,6 +163,56 @@ func DeleteModelMeta(c *gin.Context) {
 	}
 	model.RefreshPricing()
 	common.ApiSuccess(c, nil)
+}
+
+func BatchUpdateModelSyncOfficial(c *gin.Context) {
+	var req batchModelSyncOfficialRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(req.Ids) == 0 {
+		common.ApiErrorMsg(c, "请选择至少一个模型")
+		return
+	}
+
+	syncOfficial := 0
+	if req.SyncOfficial != 0 {
+		syncOfficial = 1
+	}
+
+	uniqueIds := make([]int, 0, len(req.Ids))
+	seen := make(map[int]struct{}, len(req.Ids))
+	for _, id := range req.Ids {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		uniqueIds = append(uniqueIds, id)
+	}
+	if len(uniqueIds) == 0 {
+		common.ApiErrorMsg(c, "请选择有效的模型")
+		return
+	}
+
+	result := model.DB.Model(&model.Model{}).
+		Where("id IN ?", uniqueIds).
+		Updates(map[string]interface{}{
+			"sync_official": syncOfficial,
+			"updated_time":  common.GetTimestamp(),
+		})
+	if result.Error != nil {
+		common.ApiError(c, result.Error)
+		return
+	}
+
+	common.ApiSuccess(c, gin.H{
+		"updated":       result.RowsAffected,
+		"sync_official": syncOfficial,
+	})
 }
 
 // enrichModels 批量填充附加信息：端点、渠道、分组、计费类型，避免 N+1 查询

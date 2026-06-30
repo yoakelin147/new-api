@@ -19,7 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { type QueryClient } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { toast } from 'sonner'
-import { updateModelStatus, deleteModel as deleteModelAPI } from '../api'
+import {
+  batchUpdateModelSyncOfficial,
+  updateModelStatus,
+  deleteModel as deleteModelAPI,
+} from '../api'
 import { modelsQueryKeys } from './query-keys'
 
 // ============================================================================
@@ -267,5 +271,48 @@ export async function handleBatchDisableModels(
     }
   } catch (error: unknown) {
     toast.error((error as Error)?.message || i18next.t('Batch disable failed'))
+  }
+}
+
+// ============================================================================
+// Batch Official Sync Actions
+// ============================================================================
+
+export async function handleBatchUpdateModelSyncOfficial(
+  ids: number[],
+  syncOfficial: number,
+  queryClient?: QueryClient,
+  onSuccess?: () => void
+): Promise<void> {
+  if (ids.length === 0) {
+    toast.error(i18next.t('Please select at least one model'))
+    return
+  }
+
+  try {
+    const response = await batchUpdateModelSyncOfficial(ids, syncOfficial)
+    if (!response.success) {
+      toast.error(
+        response.message || i18next.t('Failed to update official sync')
+      )
+      return
+    }
+
+    const updated = response.data?.updated || 0
+    toast.success(
+      syncOfficial === 1
+        ? i18next.t('Official sync enabled for {{count}} model(s)', {
+            count: updated,
+          })
+        : i18next.t('Official sync disabled for {{count}} model(s)', {
+            count: updated,
+          })
+    )
+    queryClient?.invalidateQueries({ queryKey: modelsQueryKeys.lists() })
+    onSuccess?.()
+  } catch (error: unknown) {
+    toast.error(
+      (error as Error)?.message || i18next.t('Failed to update official sync')
+    )
   }
 }

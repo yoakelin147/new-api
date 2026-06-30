@@ -4675,6 +4675,22 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Enable official sync": "Enable official sync",
+    "Disable official sync": "Disable official sync",
+    "Failed to update official sync": "Failed to update official sync",
+    "Official sync enabled for {{count}} model(s)": "Official sync enabled for {{count}} model(s)",
+    "Official sync disabled for {{count}} model(s)": "Official sync disabled for {{count}} model(s)",
+    "Manage model vendors used by metadata, filtering, and model display.": "Manage model vendors used by metadata, filtering, and model display.",
+    "New Vendor": "New Vendor",
+    "{{count}} vendor(s)": "{{count}} vendor(s)",
+    "Unable to load vendors": "Unable to load vendors",
+    "Please retry or refresh.": "Please retry or refresh.",
+    "Fetching vendors...": "Fetching vendors...",
+    "No vendors yet": "No vendors yet",
+    "Create a vendor to organize model metadata.": "Create a vendor to organize model metadata.",
+    "No description provided": "No description provided",
+    "This vendor is still referenced by {{count}} model(s). Those models may display without vendor metadata after deletion.": "This vendor is still referenced by {{count}} model(s). Those models may display without vendor metadata after deletion.",
+    "Delete Vendor": "Delete Vendor"
   }
 }

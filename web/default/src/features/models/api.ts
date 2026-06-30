@@ -101,6 +101,24 @@ export async function updateModelStatus(
 }
 
 /**
+ * Batch update official sync status
+ */
+export async function batchUpdateModelSyncOfficial(
+  ids: number[],
+  syncOfficial: number
+): Promise<{
+  success: boolean
+  message?: string
+  data?: { updated?: number; sync_official?: number }
+}> {
+  const res = await api.put('/api/models/sync_official/batch', {
+    ids,
+    sync_official: syncOfficial,
+  })
+  return res.data
+}
+
+/**
  * Delete model
  */
 export async function deleteModel(

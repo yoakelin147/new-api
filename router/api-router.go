@@ -367,6 +367,7 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.GET("/config/export", controller.ExportModelConfig)
 			modelsRoute.POST("/missing/ai_configure", controller.AIConfigureMissingModels)
 			modelsRoute.GET("/missing", controller.GetMissingModels)
+			modelsRoute.PUT("/sync_official/batch", controller.BatchUpdateModelSyncOfficial)
 			modelsRoute.GET("/", controller.GetAllModelsMeta)
 			modelsRoute.GET("/search", controller.SearchModelsMeta)
 			modelsRoute.GET("/:id", controller.GetModelMeta)

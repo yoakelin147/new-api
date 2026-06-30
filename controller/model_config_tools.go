@@ -496,14 +496,15 @@ func applyGeneratedModelConfig(config *upstreamConfigFile) (aiConfigureApplyResu
 				return err
 			}
 			mi := &model.Model{
-				ModelName:   up.ModelName,
-				Description: up.Description,
-				Icon:        up.Icon,
-				Tags:        up.Tags,
-				VendorID:    vendorID,
-				Endpoints:   common.JsonRawMessageToString(up.Endpoints),
-				Status:      chooseStatus(up.Status, 1),
-				NameRule:    up.NameRule,
+				ModelName:    up.ModelName,
+				Description:  up.Description,
+				Icon:         up.Icon,
+				Tags:         up.Tags,
+				VendorID:     vendorID,
+				Endpoints:    common.JsonRawMessageToString(up.Endpoints),
+				Status:       chooseStatus(up.Status, 1),
+				SyncOfficial: 1,
+				NameRule:     up.NameRule,
 			}
 			if err := mi.Insert(); err != nil {
 				return err

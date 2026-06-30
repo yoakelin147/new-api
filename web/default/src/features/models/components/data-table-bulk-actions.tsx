@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { type Table } from '@tanstack/react-table'
-import { Power, PowerOff, Trash2, Copy } from 'lucide-react'
+import { Copy, Power, PowerOff, RefreshCw, Trash2, Unlink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
@@ -35,6 +35,7 @@ import {
   handleBatchEnableModels,
   handleBatchDisableModels,
   handleBatchDeleteModels,
+  handleBatchUpdateModelSyncOfficial,
 } from '../lib'
 import type { Model } from '../types'
 
@@ -79,6 +80,24 @@ export function DataTableBulkActions<TData>({
       setShowDeleteConfirm(false)
       handleClearSelection()
     })
+  }
+
+  const handleEnableOfficialSync = () => {
+    handleBatchUpdateModelSyncOfficial(
+      selectedIds,
+      1,
+      queryClient,
+      handleClearSelection
+    )
+  }
+
+  const handleDisableOfficialSync = () => {
+    handleBatchUpdateModelSyncOfficial(
+      selectedIds,
+      0,
+      queryClient,
+      handleClearSelection
+    )
   }
 
   const handleCopyNames = async () => {
@@ -154,6 +173,48 @@ export function DataTableBulkActions<TData>({
           </TooltipTrigger>
           <TooltipContent>
             <p>{t('Copy model names')}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant='outline'
+                size='icon'
+                onClick={handleEnableOfficialSync}
+                className='size-8'
+                aria-label={t('Enable official sync')}
+                title={t('Enable official sync')}
+              />
+            }
+          >
+            <RefreshCw />
+            <span className='sr-only'>{t('Enable official sync')}</span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{t('Enable official sync')}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant='outline'
+                size='icon'
+                onClick={handleDisableOfficialSync}
+                className='size-8'
+                aria-label={t('Disable official sync')}
+                title={t('Disable official sync')}
+              />
+            }
+          >
+            <Unlink />
+            <span className='sr-only'>{t('Disable official sync')}</span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{t('Disable official sync')}</p>
           </TooltipContent>
         </Tooltip>
 
