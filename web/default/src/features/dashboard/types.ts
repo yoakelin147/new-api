@@ -37,6 +37,31 @@ export interface QuotaDataItem {
   quota?: number
 }
 
+export interface TokenCacheHitStatItem {
+  model_name: string
+  channel_id: number
+  channel_name?: string
+  request_count: number
+  hit_request_count: number
+  prompt_tokens: number
+  completion_tokens: number
+  cache_tokens: number
+  hit_rate: number
+}
+
+export interface TokenCacheHitTrendItem {
+  model_name?: string
+  channel_id: number
+  channel_name?: string
+  created_at: number
+  request_count: number
+  hit_request_count: number
+  prompt_tokens: number
+  completion_tokens: number
+  cache_tokens: number
+  hit_rate: number
+}
+
 // ============================================================================
 // Uptime Monitoring Types
 // ============================================================================

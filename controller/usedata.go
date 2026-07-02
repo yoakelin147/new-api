@@ -156,6 +156,69 @@ func GetQuotaDatesByUserToken(c *gin.Context) {
 	})
 }
 
+func GetTokenCacheHitStats(c *gin.Context) {
+	params, ok := parseTokenCacheHitStatsQuery(c)
+	if !ok {
+		return
+	}
+
+	stats, err := model.GetTokenCacheHitStats(params)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, stats)
+}
+
+func GetTokenCacheHitTrendStats(c *gin.Context) {
+	params, ok := parseTokenCacheHitStatsQuery(c)
+	if !ok {
+		return
+	}
+
+	stats, err := model.GetTokenCacheHitTrendStats(params)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, stats)
+}
+
+func parseTokenCacheHitStatsQuery(c *gin.Context) (model.TokenCacheHitStatsQuery, bool) {
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if endTimestamp == 0 {
+		endTimestamp = time.Now().Unix()
+	}
+	if startTimestamp == 0 {
+		startTimestamp = endTimestamp - maxDashboardAdminTokenStatsRangeSeconds
+	}
+	if endTimestamp < startTimestamp {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "end_timestamp must be greater than or equal to start_timestamp",
+		})
+		return model.TokenCacheHitStatsQuery{}, false
+	}
+	if endTimestamp-startTimestamp > maxDashboardAdminTokenStatsRangeSeconds {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "time range cannot exceed 183 days",
+		})
+		return model.TokenCacheHitStatsQuery{}, false
+	}
+
+	channelId, _ := strconv.Atoi(c.Query("channel_id"))
+	return model.TokenCacheHitStatsQuery{
+		StartTimestamp:  startTimestamp,
+		EndTimestamp:    endTimestamp,
+		ModelName:       c.Query("model_name"),
+		ChannelId:       channelId,
+		TimeGranularity: c.Query("time_granularity"),
+		TrendGroup:      c.Query("trend_group"),
+	}, true
+}
+
 func GetUserQuotaDates(c *gin.Context) {
 	userId := c.GetInt("id")
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)

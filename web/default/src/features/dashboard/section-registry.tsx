@@ -50,11 +50,21 @@ const DASHBOARD_SECTIONS = [
     adminOnly: true,
     build: () => null,
   },
+  {
+    id: 'token-cache',
+    titleKey: 'Token Cache Analytics',
+    adminOnly: true,
+    build: () => null,
+  },
 ] as const
 
 export type DashboardSectionId = (typeof DASHBOARD_SECTIONS)[number]['id']
 
-const ADMIN_ONLY_SECTIONS = new Set<string>(['users', 'channels'])
+const ADMIN_ONLY_SECTIONS = new Set<string>([
+  'users',
+  'channels',
+  'token-cache',
+])
 
 const dashboardRegistry = createSectionRegistry<
   DashboardSectionId,

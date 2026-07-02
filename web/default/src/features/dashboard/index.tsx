@@ -28,6 +28,13 @@ import { FadeIn } from '@/components/page-transition'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
+import {
+  TokenCacheFilterDialog,
+} from './components/cache/token-cache-filter-dialog'
+import {
+  buildDefaultTokenCacheFilters,
+  type TokenCacheDashboardFilters,
+} from './components/cache/token-cache-filters'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
@@ -38,6 +45,7 @@ import {
   type DashboardSectionId,
   DASHBOARD_DEFAULT_SECTION,
   DASHBOARD_SECTION_IDS,
+  isDashboardAdminOnlySection,
 } from './section-registry'
 import {
   type DashboardChartPreferences,
@@ -86,6 +94,12 @@ const LazyChannelCharts = lazy(() =>
 const LazyKeyCharts = lazy(() =>
   import('./components/keys/key-charts').then((m) => ({
     default: m.KeyCharts,
+  }))
+)
+
+const LazyTokenCacheHitStats = lazy(() =>
+  import('./components/cache/token-cache-hit-stats').then((m) => ({
+    default: m.TokenCacheHitStats,
   }))
 )
 
@@ -158,6 +172,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   channels: {
     titleKey: 'Channel Analytics',
   },
+  'token-cache': {
+    titleKey: 'Token Cache Analytics',
+  },
 }
 
 export function Dashboard() {
@@ -175,6 +192,8 @@ export function Dashboard() {
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
     buildDefaultDashboardFilters(getSavedChartPreferences())
   )
+  const [tokenCacheFilters, setTokenCacheFilters] =
+    useState<TokenCacheDashboardFilters>(() => buildDefaultTokenCacheFilters())
 
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
     setModelFilters(filters)
@@ -208,7 +227,7 @@ export function Dashboard() {
       DASHBOARD_SECTION_IDS.filter(
         (section) =>
           section !== 'overview' &&
-          ((section !== 'users' && section !== 'channels') || isAdmin)
+          (!isDashboardAdminOnlySection(section) || isAdmin)
       ),
     [isAdmin]
   )
@@ -237,6 +256,14 @@ export function Dashboard() {
         />
       </>
     ) : null
+  const tokenCacheActions =
+    activeSection === 'token-cache' ? (
+      <TokenCacheFilterDialog
+        filters={tokenCacheFilters}
+        onFilterChange={setTokenCacheFilters}
+      />
+    ) : null
+  const sectionActions = modelActions ?? tokenCacheActions
 
   return (
     <SectionPageLayout>
@@ -258,9 +285,9 @@ export function Dashboard() {
               ) : (
                 <div />
               )}
-              {modelActions != null && (
+              {sectionActions != null && (
                 <div className='flex shrink-0 flex-wrap items-center gap-1.5 sm:gap-2'>
-                  {modelActions}
+                  {sectionActions}
                 </div>
               )}
             </div>
@@ -329,6 +356,13 @@ export function Dashboard() {
             <FadeIn>
               <Suspense fallback={<ModelChartsFallback />}>
                 <LazyChannelCharts />
+              </Suspense>
+            </FadeIn>
+          )}
+          {activeSection === 'token-cache' && isAdmin && (
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyTokenCacheHitStats filters={tokenCacheFilters} />
               </Suspense>
             </FadeIn>
           )}
