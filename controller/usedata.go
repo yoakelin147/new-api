@@ -170,6 +170,20 @@ func GetTokenCacheHitStats(c *gin.Context) {
 	common.ApiSuccess(c, stats)
 }
 
+func GetTokenCacheHitGroupStats(c *gin.Context) {
+	params, ok := parseTokenCacheHitStatsQuery(c)
+	if !ok {
+		return
+	}
+
+	stats, err := model.GetTokenCacheHitGroupStats(params)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, stats)
+}
+
 func GetTokenCacheHitTrendStats(c *gin.Context) {
 	params, ok := parseTokenCacheHitStatsQuery(c)
 	if !ok {

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import type {
   QuotaDataItem,
+  TokenCacheHitGroupStatItem,
   TokenCacheHitStatItem,
   TokenCacheHitTrendItem,
   UptimeGroupResult,
@@ -89,6 +90,21 @@ export async function getTokenCacheHitStats(params: {
     data: TokenCacheHitStatItem[]
     message?: string
   }>('/api/data/token_cache_hits', { params })
+  return res.data
+}
+
+export async function getTokenCacheHitGroupStats(params: {
+  start_timestamp: number
+  end_timestamp: number
+  model_name?: string
+  channel_id?: number
+  time_granularity?: string
+}) {
+  const res = await api.get<{
+    success: boolean
+    data: TokenCacheHitGroupStatItem[]
+    message?: string
+  }>('/api/data/token_cache_hits/groups', { params })
   return res.data
 }
 

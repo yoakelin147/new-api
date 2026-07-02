@@ -49,6 +49,17 @@ export interface TokenCacheHitStatItem {
   hit_rate: number
 }
 
+export interface TokenCacheHitGroupStatItem {
+  model_name: string
+  group: string
+  request_count: number
+  hit_request_count: number
+  prompt_tokens: number
+  completion_tokens: number
+  cache_tokens: number
+  hit_rate: number
+}
+
 export interface TokenCacheHitTrendItem {
   model_name?: string
   channel_id: number

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,6 +31,17 @@ type TokenCacheHitStat struct {
 	HitRate          float64 `json:"hit_rate"`
 }
 
+type TokenCacheHitGroupStat struct {
+	ModelName        string  `json:"model_name"`
+	Group            string  `json:"group"`
+	RequestCount     int64   `json:"request_count"`
+	HitRequestCount  int64   `json:"hit_request_count"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	CacheTokens      int64   `json:"cache_tokens"`
+	HitRate          float64 `json:"hit_rate"`
+}
+
 type TokenCacheHitTrendStat struct {
 	ModelName        string  `json:"model_name"`
 	ChannelId        int     `json:"channel_id"`
@@ -45,6 +57,7 @@ type TokenCacheHitTrendStat struct {
 
 type tokenCacheLogRow struct {
 	ModelName        string `gorm:"column:model_name"`
+	Group            string `gorm:"column:group"`
 	ChannelId        int    `gorm:"column:channel_id"`
 	CreatedAt        int64  `gorm:"column:created_at"`
 	PromptTokens     int64  `gorm:"column:prompt_tokens"`
@@ -110,6 +123,59 @@ func GetTokenCacheHitStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHitStat
 		}
 		if stats[i].ChannelId != stats[j].ChannelId {
 			return stats[i].ChannelId < stats[j].ChannelId
+		}
+		return stats[i].ModelName < stats[j].ModelName
+	})
+
+	return stats, nil
+}
+
+func GetTokenCacheHitGroupStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHitGroupStat, error) {
+	rows, err := queryTokenCacheLogRows(params)
+	if err != nil {
+		return nil, err
+	}
+
+	statsByKey := make(map[string]*TokenCacheHitGroupStat)
+
+	for _, row := range rows {
+		key := row.ModelName + "\x00" + row.Group
+		stat, ok := statsByKey[key]
+		if !ok {
+			stat = &TokenCacheHitGroupStat{
+				ModelName: row.ModelName,
+				Group:     row.Group,
+			}
+			statsByKey[key] = stat
+		}
+
+		cacheTokens := extractTokenCacheHitTokens(row.Other)
+		stat.RequestCount++
+		if cacheTokens > 0 {
+			stat.HitRequestCount++
+		}
+		stat.PromptTokens += row.PromptTokens
+		stat.CompletionTokens += row.CompletionTokens
+		stat.CacheTokens += cacheTokens
+	}
+
+	stats := make([]*TokenCacheHitGroupStat, 0, len(statsByKey))
+	for _, stat := range statsByKey {
+		if stat.PromptTokens > 0 {
+			stat.HitRate = float64(stat.CacheTokens) / float64(stat.PromptTokens)
+		}
+		stats = append(stats, stat)
+	}
+
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].HitRate != stats[j].HitRate {
+			return stats[i].HitRate > stats[j].HitRate
+		}
+		if stats[i].CacheTokens != stats[j].CacheTokens {
+			return stats[i].CacheTokens > stats[j].CacheTokens
+		}
+		if stats[i].Group != stats[j].Group {
+			return stats[i].Group < stats[j].Group
 		}
 		return stats[i].ModelName < stats[j].ModelName
 	})
@@ -184,7 +250,7 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 
 func queryTokenCacheLogRows(params TokenCacheHitStatsQuery) ([]tokenCacheLogRow, error) {
 	query := LOG_DB.Table("logs").
-		Select("model_name, channel_id, created_at, prompt_tokens, completion_tokens, other").
+		Select(fmt.Sprintf("model_name, %s, channel_id, created_at, prompt_tokens, completion_tokens, other", logGroupCol)).
 		Where("type = ? and channel_id <> 0", LogTypeConsume)
 
 	if params.ModelName != "" {

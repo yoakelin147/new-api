@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
-import { AreaChart, Database } from 'lucide-react'
+import { BarChart3, Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import dayjs from '@/lib/dayjs'
 import { formatNumber } from '@/lib/format'
@@ -38,11 +38,14 @@ import {
   type StaticDataTableColumn,
   StaticDataTable,
 } from '@/components/data-table/static/static-data-table'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  getTokenCacheHitGroupStats,
   getTokenCacheHitStats,
   getTokenCacheHitTrendStats,
 } from '@/features/dashboard/api'
 import type {
+  TokenCacheHitGroupStatItem,
   TokenCacheHitStatItem,
   TokenCacheHitTrendItem,
 } from '@/features/dashboard/types'
@@ -51,6 +54,9 @@ import type { TokenCacheDashboardFilters } from './token-cache-filters'
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
 > | null = null
+
+type TokenCacheChartType = 'bar' | 'area'
+type TokenCacheDetailsTab = 'channel' | 'group'
 
 function formatRate(rate: number) {
   return Intl.NumberFormat(undefined, {
@@ -62,6 +68,10 @@ function formatRate(rate: number) {
 function getChannelLabel(row: TokenCacheHitStatItem) {
   const name = row.channel_name?.trim()
   return name ? `#${row.channel_id} ${name}` : `#${row.channel_id}`
+}
+
+function getGroupLabel(row: TokenCacheHitGroupStatItem) {
+  return row.group?.trim()
 }
 
 function getTrendChannelLabel(item: TokenCacheHitTrendItem) {
@@ -107,6 +117,11 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
   const { resolvedTheme } = useTheme()
   const { customization } = useThemeCustomization()
   const [themeReady, setThemeReady] = useState(false)
+  const [modelChartType, setModelChartType] =
+    useState<TokenCacheChartType>('bar')
+  const [channelChartType, setChannelChartType] =
+    useState<TokenCacheChartType>('bar')
+  const [detailsTab, setDetailsTab] = useState<TokenCacheDetailsTab>('channel')
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
@@ -117,6 +132,14 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
     queryFn: () => getTokenCacheHitStats(apiParams),
     select: (res) => (res.success ? res.data : []),
     staleTime: 60_000,
+  })
+
+  const { data: groupStats = [], isLoading: groupStatsLoading } = useQuery({
+    queryKey: ['dashboard', 'token-cache-hit-group-stats', apiParams],
+    queryFn: () => getTokenCacheHitGroupStats(apiParams),
+    select: (res) => (res.success ? res.data : []),
+    staleTime: 60_000,
+    enabled: detailsTab === 'group',
   })
 
   const { data: modelTrendStats = [], isLoading: modelTrendLoading } =
@@ -133,8 +156,8 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
       queryKey: ['dashboard', 'token-cache-hit-trend', 'channel', apiParams],
       queryFn: () =>
         getTokenCacheHitTrendStats({ ...apiParams, trend_group: 'channel' }),
-    select: (res) => (res.success ? res.data : []),
-    staleTime: 60_000,
+      select: (res) => (res.success ? res.data : []),
+      staleTime: 60_000,
     })
 
   useEffect(() => {
@@ -188,9 +211,10 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         granularity: filters.time_granularity,
         getSeriesLabel: getTrendModelLabel,
         rateLabel: t('Model Hit Rate'),
+        chartType: modelChartType,
         t,
       }),
-    [filters.time_granularity, modelTrendStats, t]
+    [filters.time_granularity, modelChartType, modelTrendStats, t]
   )
 
   const channelTrendSpec = useMemo(
@@ -201,12 +225,15 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         granularity: filters.time_granularity,
         getSeriesLabel: getTrendChannelLabel,
         rateLabel: t('Channel Hit Rate'),
+        chartType: channelChartType,
         t,
       }),
-    [channelTrendStats, filters.time_granularity, t]
+    [channelChartType, channelTrendStats, filters.time_granularity, t]
   )
 
-  const columns = useMemo<StaticDataTableColumn<TokenCacheHitStatItem>[]>(
+  const channelColumns = useMemo<
+    StaticDataTableColumn<TokenCacheHitStatItem>[]
+  >(
     () => [
       {
         id: 'model_channel',
@@ -279,6 +306,86 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
     [t]
   )
 
+  const groupColumns = useMemo<
+    StaticDataTableColumn<TokenCacheHitGroupStatItem>[]
+  >(
+    () => [
+      {
+        id: 'model_group',
+        header: t('Model & Group'),
+        className: 'min-w-[220px]',
+        cell: (row) => (
+          <div className='flex min-w-0 flex-col gap-1'>
+            <span className='truncate font-medium'>{row.model_name}</span>
+            <span className='text-muted-foreground truncate text-xs'>
+              {getGroupLabel(row) || t('Unknown')}
+            </span>
+          </div>
+        ),
+      },
+      {
+        id: 'hit_rate',
+        header: t('Group Hit Rate'),
+        className: 'min-w-[180px]',
+        cell: (row) => {
+          const percent = Math.max(0, Math.min(row.hit_rate * 100, 100))
+          return (
+            <div className='flex min-w-0 flex-col gap-1.5'>
+              <span className='font-medium'>{formatRate(row.hit_rate)}</span>
+              <div className='bg-muted h-1.5 overflow-hidden rounded-full'>
+                <div
+                  className='bg-primary h-full rounded-full'
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+            </div>
+          )
+        },
+      },
+      {
+        id: 'request_count',
+        header: t('Requests'),
+        cellClassName: 'text-right tabular-nums',
+        className: 'text-right',
+        cell: (row) => formatNumber(row.request_count),
+      },
+      {
+        id: 'hit_request_count',
+        header: t('Cache Hit Requests'),
+        cellClassName: 'text-right tabular-nums',
+        className: 'text-right',
+        cell: (row) => formatNumber(row.hit_request_count),
+      },
+      {
+        id: 'prompt_tokens',
+        header: t('Input Tokens'),
+        cellClassName: 'text-right tabular-nums',
+        className: 'text-right',
+        cell: (row) => formatNumber(row.prompt_tokens),
+      },
+      {
+        id: 'cache_tokens',
+        header: t('Cache Read Tokens'),
+        cellClassName: 'text-right tabular-nums',
+        className: 'text-right',
+        cell: (row) => formatNumber(row.cache_tokens),
+      },
+      {
+        id: 'completion_tokens',
+        header: t('Output Tokens'),
+        cellClassName: 'text-right tabular-nums',
+        className: 'text-right',
+        cell: (row) => formatNumber(row.completion_tokens),
+      },
+    ],
+    [t]
+  )
+
+  const detailsTitle =
+    detailsTab === 'channel'
+      ? t('Token Cache Hit Rate by Model and Channel')
+      : t('Token Cache Hit Rate by Model and Group')
+
   const summaryCards = [
     {
       label: t('Requests'),
@@ -332,6 +439,8 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         themeReady={themeReady}
         resolvedTheme={resolvedTheme}
         themeKey={customization.preset}
+        chartType={modelChartType}
+        onChartTypeChange={setModelChartType}
       />
 
       <TrendChartPanel
@@ -342,24 +451,53 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         themeReady={themeReady}
         resolvedTheme={resolvedTheme}
         themeKey={customization.preset}
+        chartType={channelChartType}
+        onChartTypeChange={setChannelChartType}
       />
 
       <div className='overflow-hidden rounded-lg border'>
-        <div className='flex w-full items-center gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
-          <Database className='text-muted-foreground/60 size-4' />
-          <div className='text-sm font-semibold'>
-            {t('Token Cache Hit Rate by Model and Channel')}
+        <div className='flex w-full flex-wrap items-center justify-between gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
+          <div className='flex items-center gap-2'>
+            <Database className='text-muted-foreground/60 size-4' />
+            <div className='text-sm font-semibold'>{detailsTitle}</div>
           </div>
+          <Tabs
+            value={detailsTab}
+            onValueChange={(value) =>
+              setDetailsTab(value as TokenCacheDetailsTab)
+            }
+            className='shrink-0'
+          >
+            <TabsList>
+              <TabsTrigger value='channel' className='px-2.5 text-xs'>
+                {t('Model & Channel')}
+              </TabsTrigger>
+              <TabsTrigger value='group' className='px-2.5 text-xs'>
+                {t('Model & Group')}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
-        {isLoading ? (
+        {detailsTab === 'channel' && isLoading ? (
+          <div className='p-3'>
+            <Skeleton className='h-64 w-full' />
+          </div>
+        ) : detailsTab === 'channel' ? (
+          <StaticDataTable
+            columns={channelColumns}
+            data={stats}
+            getRowKey={(row) => `${row.model_name}-${row.channel_id}`}
+            emptyContent={t('No token cache statistics found')}
+          />
+        ) : groupStatsLoading ? (
           <div className='p-3'>
             <Skeleton className='h-64 w-full' />
           </div>
         ) : (
           <StaticDataTable
-            columns={columns}
-            data={stats}
-            getRowKey={(row) => `${row.model_name}-${row.channel_id}`}
+            columns={groupColumns}
+            data={groupStats}
+            getRowKey={(row) => `${row.model_name}-${row.group}`}
             emptyContent={t('No token cache statistics found')}
           />
         )}
@@ -374,6 +512,7 @@ function buildTrendSpec(options: {
   granularity: string
   getSeriesLabel: (item: TokenCacheHitTrendItem) => string
   rateLabel: string
+  chartType: TokenCacheChartType
   t: ReturnType<typeof useTranslation>['t']
 }) {
   const values = options.data.map((item) => {
@@ -389,7 +528,7 @@ function buildTrendSpec(options: {
   })
 
   return {
-    type: 'area',
+    type: options.chartType,
     data: [{ id: options.dataId, values }],
     xField: 'Time',
     yField: 'HitRate',
@@ -449,9 +588,12 @@ function buildTrendSpec(options: {
         ],
       },
     },
-    point: { visible: true },
-    line: { style: { lineWidth: 2 } },
-    area: { style: { fillOpacity: 0.18 } },
+    ...(options.chartType === 'area'
+      ? {
+          point: { visible: true },
+          area: { style: { fillOpacity: 0.35 } },
+        }
+      : {}),
     background: { fill: 'transparent' },
   }
 }
@@ -464,6 +606,8 @@ function TrendChartPanel({
   themeReady,
   resolvedTheme,
   themeKey,
+  chartType,
+  onChartTypeChange,
 }: {
   title: string
   loading: boolean
@@ -472,14 +616,34 @@ function TrendChartPanel({
   themeReady: boolean
   resolvedTheme: string
   themeKey?: string
+  chartType: TokenCacheChartType
+  onChartTypeChange: (value: TokenCacheChartType) => void
 }) {
   const { t } = useTranslation()
 
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='flex w-full items-center gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
-        <AreaChart className='text-muted-foreground/60 size-4' />
-        <div className='text-sm font-semibold'>{title}</div>
+      <div className='flex w-full flex-wrap items-center justify-between gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
+        <div className='flex items-center gap-2'>
+          <BarChart3 className='text-muted-foreground/60 size-4' />
+          <div className='text-sm font-semibold'>{title}</div>
+        </div>
+        <Tabs
+          value={chartType}
+          onValueChange={(value) =>
+            onChartTypeChange(value as TokenCacheChartType)
+          }
+          className='shrink-0'
+        >
+          <TabsList>
+            <TabsTrigger value='bar' className='px-2.5 text-xs'>
+              {t('Bar Chart')}
+            </TabsTrigger>
+            <TabsTrigger value='area' className='px-2.5 text-xs'>
+              {t('Area Chart')}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
       {loading ? (
         <div className='p-3'>
@@ -493,7 +657,7 @@ function TrendChartPanel({
         <div className='h-80 p-2'>
           {themeReady && (
             <VChart
-              key={`${title}-${resolvedTheme}-${themeKey}`}
+              key={`${title}-${chartType}-${resolvedTheme}-${themeKey}`}
               spec={{
                 ...spec,
                 theme: resolvedTheme === 'dark' ? 'dark' : 'light',

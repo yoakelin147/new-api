@@ -314,6 +314,7 @@ func SetApiRouter(router *gin.Engine) {
 		dataRoute.GET("/users", middleware.AdminAuth(), controller.GetQuotaDatesByUser)
 		dataRoute.GET("/channels", middleware.AdminAuth(), controller.GetQuotaDatesByChannel)
 		dataRoute.GET("/token_cache_hits", middleware.AdminAuth(), controller.GetTokenCacheHitStats)
+		dataRoute.GET("/token_cache_hits/groups", middleware.AdminAuth(), controller.GetTokenCacheHitGroupStats)
 		dataRoute.GET("/token_cache_hits/trend", middleware.AdminAuth(), controller.GetTokenCacheHitTrendStats)
 		dataRoute.GET("/tokens/users", middleware.AdminAuth(), controller.GetQuotaDatesByUserToken)
 		dataRoute.GET("/tokens/self", middleware.UserAuth(), controller.GetQuotaDatesByToken)
