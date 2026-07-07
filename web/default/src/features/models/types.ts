@@ -220,7 +220,7 @@ export interface ModelMetadataConfig {
     vendor_name?: string
     name_rule?: number
     status?: number
-    endpoints?: string[]
+    endpoints?: unknown
   }>
   vendors?: Array<{
     name: string

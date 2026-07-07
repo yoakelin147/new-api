@@ -101,6 +101,18 @@ type syncRequest struct {
 	ConfigURL     string           `json:"config_url"`
 }
 
+func normalizeUpstreamEndpoints(endpoints json.RawMessage) string {
+	normalized := normalizeAIEndpointMetadata(endpoints)
+	if len(normalized) == 0 {
+		return ""
+	}
+	return common.JsonRawMessageToString(normalized)
+}
+
+func normalizeModelEndpoints(endpoints string) string {
+	return normalizeUpstreamEndpoints(normalizeEndpointRawMessage(endpoints))
+}
+
 func newHTTPClient() *http.Client {
 	timeoutSec := common.GetEnvOrDefault("SYNC_HTTP_TIMEOUT_SECONDS", 10)
 	dialer := &net.Dialer{Timeout: time.Duration(timeoutSec) * time.Second}
@@ -613,6 +625,7 @@ func SyncUpstreamModels(c *gin.Context) {
 		mi := &model.Model{
 			ModelName:   name,
 			Description: up.Description,
+			Endpoints:   normalizeUpstreamEndpoints(up.Endpoints),
 			Icon:        up.Icon,
 			Tags:        up.Tags,
 			VendorID:    vendorID,
@@ -647,6 +660,13 @@ func SyncUpstreamModels(c *gin.Context) {
 				if containsField(ow.Fields, "description") {
 					local.Description = up.Description
 					needUpdate = true
+				}
+				if containsField(ow.Fields, "endpoints") {
+					upstreamEndpoints := normalizeUpstreamEndpoints(up.Endpoints)
+					if upstreamEndpoints != "" {
+						local.Endpoints = upstreamEndpoints
+						needUpdate = true
+					}
 				}
 				if containsField(ow.Fields, "icon") {
 					local.Icon = up.Icon
@@ -794,9 +814,18 @@ func SyncUpstreamPreview(c *gin.Context) {
 		if !ok {
 			continue
 		}
-		fields := make([]conflictField, 0, 6)
+		fields := make([]conflictField, 0, 7)
 		if strings.TrimSpace(local.Description) != strings.TrimSpace(up.Description) {
 			fields = append(fields, conflictField{Field: "description", Local: local.Description, Upstream: up.Description})
+		}
+		localEndpoints := normalizeModelEndpoints(local.Endpoints)
+		upstreamEndpoints := normalizeUpstreamEndpoints(up.Endpoints)
+		if upstreamEndpoints != "" && localEndpoints != upstreamEndpoints {
+			fields = append(fields, conflictField{
+				Field:    "endpoints",
+				Local:    normalizeEndpointRawMessage(localEndpoints),
+				Upstream: normalizeEndpointRawMessage(upstreamEndpoints),
+			})
 		}
 		if strings.TrimSpace(local.Icon) != strings.TrimSpace(up.Icon) {
 			fields = append(fields, conflictField{Field: "icon", Local: local.Icon, Upstream: up.Icon})

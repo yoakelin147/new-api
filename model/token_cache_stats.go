@@ -29,6 +29,7 @@ type TokenCacheHitStat struct {
 	CompletionTokens int64   `json:"completion_tokens"`
 	CacheTokens      int64   `json:"cache_tokens"`
 	HitRate          float64 `json:"hit_rate"`
+	cacheInputTokens int64
 }
 
 type TokenCacheHitGroupStat struct {
@@ -40,6 +41,7 @@ type TokenCacheHitGroupStat struct {
 	CompletionTokens int64   `json:"completion_tokens"`
 	CacheTokens      int64   `json:"cache_tokens"`
 	HitRate          float64 `json:"hit_rate"`
+	cacheInputTokens int64
 }
 
 type TokenCacheHitTrendStat struct {
@@ -53,6 +55,7 @@ type TokenCacheHitTrendStat struct {
 	CompletionTokens int64   `json:"completion_tokens"`
 	CacheTokens      int64   `json:"cache_tokens"`
 	HitRate          float64 `json:"hit_rate"`
+	cacheInputTokens int64
 }
 
 type tokenCacheLogRow struct {
@@ -66,7 +69,18 @@ type tokenCacheLogRow struct {
 }
 
 type tokenCacheLogOther struct {
-	CacheTokens int64 `json:"cache_tokens"`
+	CacheTokens           int64  `json:"cache_tokens"`
+	CacheCreationTokens   int64  `json:"cache_creation_tokens"`
+	CacheCreationTokens5m int64  `json:"cache_creation_tokens_5m"`
+	CacheCreationTokens1h int64  `json:"cache_creation_tokens_1h"`
+	CacheWriteTokens      int64  `json:"cache_write_tokens"`
+	UsageSemantic         string `json:"usage_semantic"`
+	Claude                bool   `json:"claude"`
+}
+
+type tokenCacheUsage struct {
+	CacheTokens      int64
+	CacheInputTokens int64
 }
 
 func GetTokenCacheHitStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHitStat, error) {
@@ -90,14 +104,15 @@ func GetTokenCacheHitStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHitStat
 			channelIds.Add(row.ChannelId)
 		}
 
-		cacheTokens := extractTokenCacheHitTokens(row.Other)
+		usage := extractTokenCacheUsage(row.Other, row.PromptTokens)
 		stat.RequestCount++
-		if cacheTokens > 0 {
+		if usage.CacheTokens > 0 {
 			stat.HitRequestCount++
 		}
 		stat.PromptTokens += row.PromptTokens
 		stat.CompletionTokens += row.CompletionTokens
-		stat.CacheTokens += cacheTokens
+		stat.CacheTokens += usage.CacheTokens
+		stat.cacheInputTokens += usage.CacheInputTokens
 	}
 
 	channelNames, err := getChannelNamesByIds(channelIds.Items())
@@ -108,8 +123,8 @@ func GetTokenCacheHitStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHitStat
 	stats := make([]*TokenCacheHitStat, 0, len(statsByKey))
 	for _, stat := range statsByKey {
 		stat.ChannelName = channelNames[stat.ChannelId]
-		if stat.PromptTokens > 0 {
-			stat.HitRate = float64(stat.CacheTokens) / float64(stat.PromptTokens)
+		if stat.cacheInputTokens > 0 {
+			stat.HitRate = float64(stat.CacheTokens) / float64(stat.cacheInputTokens)
 		}
 		stats = append(stats, stat)
 	}
@@ -149,20 +164,21 @@ func GetTokenCacheHitGroupStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 			statsByKey[key] = stat
 		}
 
-		cacheTokens := extractTokenCacheHitTokens(row.Other)
+		usage := extractTokenCacheUsage(row.Other, row.PromptTokens)
 		stat.RequestCount++
-		if cacheTokens > 0 {
+		if usage.CacheTokens > 0 {
 			stat.HitRequestCount++
 		}
 		stat.PromptTokens += row.PromptTokens
 		stat.CompletionTokens += row.CompletionTokens
-		stat.CacheTokens += cacheTokens
+		stat.CacheTokens += usage.CacheTokens
+		stat.cacheInputTokens += usage.CacheInputTokens
 	}
 
 	stats := make([]*TokenCacheHitGroupStat, 0, len(statsByKey))
 	for _, stat := range statsByKey {
-		if stat.PromptTokens > 0 {
-			stat.HitRate = float64(stat.CacheTokens) / float64(stat.PromptTokens)
+		if stat.cacheInputTokens > 0 {
+			stat.HitRate = float64(stat.CacheTokens) / float64(stat.cacheInputTokens)
 		}
 		stats = append(stats, stat)
 	}
@@ -211,14 +227,15 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 			statsByKey[key] = stat
 		}
 
-		cacheTokens := extractTokenCacheHitTokens(row.Other)
+		usage := extractTokenCacheUsage(row.Other, row.PromptTokens)
 		stat.RequestCount++
-		if cacheTokens > 0 {
+		if usage.CacheTokens > 0 {
 			stat.HitRequestCount++
 		}
 		stat.PromptTokens += row.PromptTokens
 		stat.CompletionTokens += row.CompletionTokens
-		stat.CacheTokens += cacheTokens
+		stat.CacheTokens += usage.CacheTokens
+		stat.cacheInputTokens += usage.CacheInputTokens
 	}
 
 	channelNames, err := getChannelNamesByIds(channelIds.Items())
@@ -229,8 +246,8 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 	stats := make([]*TokenCacheHitTrendStat, 0, len(statsByKey))
 	for _, stat := range statsByKey {
 		stat.ChannelName = channelNames[stat.ChannelId]
-		if stat.PromptTokens > 0 {
-			stat.HitRate = float64(stat.CacheTokens) / float64(stat.PromptTokens)
+		if stat.cacheInputTokens > 0 {
+			stat.HitRate = float64(stat.CacheTokens) / float64(stat.cacheInputTokens)
 		}
 		stats = append(stats, stat)
 	}
@@ -314,15 +331,33 @@ func fuzzyTokenCacheModelPattern(input string) string {
 	return "%" + input + "%"
 }
 
-func extractTokenCacheHitTokens(other string) int64 {
+func extractTokenCacheUsage(other string, promptTokens int64) tokenCacheUsage {
+	usage := tokenCacheUsage{
+		CacheInputTokens: promptTokens,
+	}
 	if other == "" {
-		return 0
+		return usage
 	}
 	var parsed tokenCacheLogOther
 	if err := common.Unmarshal([]byte(other), &parsed); err != nil {
-		return 0
+		return usage
 	}
-	return parsed.CacheTokens
+	usage.CacheTokens = parsed.CacheTokens
+	if parsed.UsageSemantic == "anthropic" || parsed.Claude {
+		usage.CacheInputTokens = promptTokens + parsed.CacheTokens + parsed.cacheWriteTokens()
+	}
+	return usage
+}
+
+func (o tokenCacheLogOther) cacheWriteTokens() int64 {
+	if o.CacheWriteTokens > 0 {
+		return o.CacheWriteTokens
+	}
+	splitCacheCreationTokens := o.CacheCreationTokens5m + o.CacheCreationTokens1h
+	if o.CacheCreationTokens > splitCacheCreationTokens {
+		return o.CacheCreationTokens
+	}
+	return splitCacheCreationTokens
 }
 
 func getChannelNamesByIds(channelIds []int) (map[int]string, error) {

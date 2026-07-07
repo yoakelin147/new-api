@@ -43,3 +43,25 @@ func TestNormalizeAIEndpointMetadataConvertsPathObjectKeys(t *testing.T) {
 		},
 	}, endpoints)
 }
+
+func TestNormalizeUpstreamEndpointsConvertsAnthropicArray(t *testing.T) {
+	got := normalizeUpstreamEndpoints([]byte(`["anthropic"]`))
+
+	var endpoints map[string]common.EndpointInfo
+	require.NoError(t, common.Unmarshal([]byte(got), &endpoints))
+	require.Equal(t, map[string]common.EndpointInfo{
+		"anthropic": {
+			Path:   "/v1/messages",
+			Method: "POST",
+		},
+	}, endpoints)
+}
+
+func TestNormalizeModelEndpointsDetectsOpenAIAnthropicDifference(t *testing.T) {
+	local := normalizeModelEndpoints(`["openai"]`)
+	upstream := normalizeUpstreamEndpoints([]byte(`{"anthropic":{"path":"/v1/messages","method":"POST"}}`))
+
+	require.NotEmpty(t, local)
+	require.NotEmpty(t, upstream)
+	require.NotEqual(t, local, upstream)
+}
