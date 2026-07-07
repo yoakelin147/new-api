@@ -46,6 +46,7 @@ export interface TokenCacheHitStatItem {
   prompt_tokens: number
   completion_tokens: number
   cache_tokens: number
+  cache_input_tokens: number
   hit_rate: number
 }
 
@@ -57,6 +58,7 @@ export interface TokenCacheHitGroupStatItem {
   prompt_tokens: number
   completion_tokens: number
   cache_tokens: number
+  cache_input_tokens: number
   hit_rate: number
 }
 
@@ -70,6 +72,7 @@ export interface TokenCacheHitTrendItem {
   prompt_tokens: number
   completion_tokens: number
   cache_tokens: number
+  cache_input_tokens: number
   hit_rate: number
 }
 

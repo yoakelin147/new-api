@@ -184,6 +184,7 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         acc.promptTokens += item.prompt_tokens
         acc.completionTokens += item.completion_tokens
         acc.cacheTokens += item.cache_tokens
+        acc.cacheInputTokens += item.cache_input_tokens || item.prompt_tokens
         return acc
       },
       {
@@ -192,13 +193,14 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         promptTokens: 0,
         completionTokens: 0,
         cacheTokens: 0,
+        cacheInputTokens: 0,
       }
     )
     return {
       ...totals,
       hitRate:
-        totals.promptTokens > 0
-          ? totals.cacheTokens / totals.promptTokens
+        totals.cacheInputTokens > 0
+          ? totals.cacheTokens / totals.cacheInputTokens
           : 0,
     }
   }, [stats])

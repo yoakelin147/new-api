@@ -28,8 +28,8 @@ type TokenCacheHitStat struct {
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	CacheTokens      int64   `json:"cache_tokens"`
+	CacheInputTokens int64   `json:"cache_input_tokens"`
 	HitRate          float64 `json:"hit_rate"`
-	cacheInputTokens int64
 }
 
 type TokenCacheHitGroupStat struct {
@@ -40,8 +40,8 @@ type TokenCacheHitGroupStat struct {
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	CacheTokens      int64   `json:"cache_tokens"`
+	CacheInputTokens int64   `json:"cache_input_tokens"`
 	HitRate          float64 `json:"hit_rate"`
-	cacheInputTokens int64
 }
 
 type TokenCacheHitTrendStat struct {
@@ -54,8 +54,8 @@ type TokenCacheHitTrendStat struct {
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	CacheTokens      int64   `json:"cache_tokens"`
+	CacheInputTokens int64   `json:"cache_input_tokens"`
 	HitRate          float64 `json:"hit_rate"`
-	cacheInputTokens int64
 }
 
 type tokenCacheLogRow struct {
@@ -112,7 +112,7 @@ func GetTokenCacheHitStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHitStat
 		stat.PromptTokens += row.PromptTokens
 		stat.CompletionTokens += row.CompletionTokens
 		stat.CacheTokens += usage.CacheTokens
-		stat.cacheInputTokens += usage.CacheInputTokens
+		stat.CacheInputTokens += usage.CacheInputTokens
 	}
 
 	channelNames, err := getChannelNamesByIds(channelIds.Items())
@@ -123,8 +123,8 @@ func GetTokenCacheHitStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHitStat
 	stats := make([]*TokenCacheHitStat, 0, len(statsByKey))
 	for _, stat := range statsByKey {
 		stat.ChannelName = channelNames[stat.ChannelId]
-		if stat.cacheInputTokens > 0 {
-			stat.HitRate = float64(stat.CacheTokens) / float64(stat.cacheInputTokens)
+		if stat.CacheInputTokens > 0 {
+			stat.HitRate = float64(stat.CacheTokens) / float64(stat.CacheInputTokens)
 		}
 		stats = append(stats, stat)
 	}
@@ -172,13 +172,13 @@ func GetTokenCacheHitGroupStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 		stat.PromptTokens += row.PromptTokens
 		stat.CompletionTokens += row.CompletionTokens
 		stat.CacheTokens += usage.CacheTokens
-		stat.cacheInputTokens += usage.CacheInputTokens
+		stat.CacheInputTokens += usage.CacheInputTokens
 	}
 
 	stats := make([]*TokenCacheHitGroupStat, 0, len(statsByKey))
 	for _, stat := range statsByKey {
-		if stat.cacheInputTokens > 0 {
-			stat.HitRate = float64(stat.CacheTokens) / float64(stat.cacheInputTokens)
+		if stat.CacheInputTokens > 0 {
+			stat.HitRate = float64(stat.CacheTokens) / float64(stat.CacheInputTokens)
 		}
 		stats = append(stats, stat)
 	}
@@ -235,7 +235,7 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 		stat.PromptTokens += row.PromptTokens
 		stat.CompletionTokens += row.CompletionTokens
 		stat.CacheTokens += usage.CacheTokens
-		stat.cacheInputTokens += usage.CacheInputTokens
+		stat.CacheInputTokens += usage.CacheInputTokens
 	}
 
 	channelNames, err := getChannelNamesByIds(channelIds.Items())
@@ -246,8 +246,8 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 	stats := make([]*TokenCacheHitTrendStat, 0, len(statsByKey))
 	for _, stat := range statsByKey {
 		stat.ChannelName = channelNames[stat.ChannelId]
-		if stat.cacheInputTokens > 0 {
-			stat.HitRate = float64(stat.CacheTokens) / float64(stat.cacheInputTokens)
+		if stat.CacheInputTokens > 0 {
+			stat.HitRate = float64(stat.CacheTokens) / float64(stat.CacheInputTokens)
 		}
 		stats = append(stats, stat)
 	}
