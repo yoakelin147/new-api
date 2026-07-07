@@ -24,15 +24,23 @@ func TestLockForUpdateEmitsRowLock(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+		common.UsingMySQL = false
+		common.UsingPostgreSQL = false
+		common.UsingSQLite = true
 	})
 
-	common.SetDatabaseTypes(common.DatabaseTypeMySQL, common.DatabaseTypeSQLite)
+	common.UsingMySQL = true
+	common.UsingPostgreSQL = false
+	common.UsingSQLite = false
 	assert.Contains(t, buildSQL(), "FOR UPDATE")
 
-	common.SetDatabaseTypes(common.DatabaseTypePostgreSQL, common.DatabaseTypeSQLite)
+	common.UsingMySQL = false
+	common.UsingPostgreSQL = true
+	common.UsingSQLite = false
 	assert.Contains(t, buildSQL(), "FOR UPDATE")
 
-	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	common.UsingMySQL = false
+	common.UsingPostgreSQL = false
+	common.UsingSQLite = true
 	assert.NotContains(t, buildSQL(), "FOR UPDATE")
 }

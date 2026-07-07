@@ -30,7 +30,6 @@ func TestSearchRedemptionsFiltersAndPaginates(t *testing.T) {
 	tests := []struct {
 		name      string
 		keyword   string
-		status    string
 		startIdx  int
 		num       int
 		wantTotal int64
@@ -50,34 +49,6 @@ func TestSearchRedemptionsFiltersAndPaginates(t *testing.T) {
 			wantIds:   []int{3, 2, 1},
 		},
 		{
-			name:      "enabled status excludes expired rows",
-			status:    "1",
-			num:       10,
-			wantTotal: 2,
-			wantIds:   []int{2, 1},
-		},
-		{
-			name:      "expired status returns enabled expired rows",
-			status:    "expired",
-			num:       10,
-			wantTotal: 1,
-			wantIds:   []int{3},
-		},
-		{
-			name:      "disabled status",
-			status:    "2",
-			num:       10,
-			wantTotal: 1,
-			wantIds:   []int{4},
-		},
-		{
-			name:      "used status",
-			status:    "3",
-			num:       10,
-			wantTotal: 1,
-			wantIds:   []int{5},
-		},
-		{
 			name:      "pagination keeps unpaged total",
 			startIdx:  1,
 			num:       2,
@@ -88,7 +59,7 @@ func TestSearchRedemptionsFiltersAndPaginates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rows, total, err := SearchRedemptions(tt.keyword, tt.status, tt.startIdx, tt.num)
+			rows, total, err := SearchRedemptions(tt.keyword, tt.startIdx, tt.num)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantTotal, total)
 			gotIds := make([]int, 0, len(rows))
