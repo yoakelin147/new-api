@@ -19,6 +19,7 @@ func TestExtractTokenCacheUsageUsesProviderSpecificDenominator(t *testing.T) {
 			promptTokens: 100,
 			expected: tokenCacheUsage{
 				CacheTokens:      40,
+				CacheWriteTokens: 0,
 				CacheInputTokens: 100,
 			},
 		},
@@ -28,6 +29,7 @@ func TestExtractTokenCacheUsageUsesProviderSpecificDenominator(t *testing.T) {
 			promptTokens: 10,
 			expected: tokenCacheUsage{
 				CacheTokens:      80,
+				CacheWriteTokens: 10,
 				CacheInputTokens: 100,
 			},
 		},
@@ -37,6 +39,7 @@ func TestExtractTokenCacheUsageUsesProviderSpecificDenominator(t *testing.T) {
 			promptTokens: 10,
 			expected: tokenCacheUsage{
 				CacheTokens:      80,
+				CacheWriteTokens: 10,
 				CacheInputTokens: 100,
 			},
 		},

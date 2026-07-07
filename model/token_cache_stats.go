@@ -28,6 +28,7 @@ type TokenCacheHitStat struct {
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	CacheTokens      int64   `json:"cache_tokens"`
+	CacheWriteTokens int64   `json:"cache_write_tokens"`
 	CacheInputTokens int64   `json:"cache_input_tokens"`
 	HitRate          float64 `json:"hit_rate"`
 }
@@ -40,6 +41,7 @@ type TokenCacheHitGroupStat struct {
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	CacheTokens      int64   `json:"cache_tokens"`
+	CacheWriteTokens int64   `json:"cache_write_tokens"`
 	CacheInputTokens int64   `json:"cache_input_tokens"`
 	HitRate          float64 `json:"hit_rate"`
 }
@@ -54,6 +56,7 @@ type TokenCacheHitTrendStat struct {
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	CacheTokens      int64   `json:"cache_tokens"`
+	CacheWriteTokens int64   `json:"cache_write_tokens"`
 	CacheInputTokens int64   `json:"cache_input_tokens"`
 	HitRate          float64 `json:"hit_rate"`
 }
@@ -80,6 +83,7 @@ type tokenCacheLogOther struct {
 
 type tokenCacheUsage struct {
 	CacheTokens      int64
+	CacheWriteTokens int64
 	CacheInputTokens int64
 }
 
@@ -112,6 +116,7 @@ func GetTokenCacheHitStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHitStat
 		stat.PromptTokens += row.PromptTokens
 		stat.CompletionTokens += row.CompletionTokens
 		stat.CacheTokens += usage.CacheTokens
+		stat.CacheWriteTokens += usage.CacheWriteTokens
 		stat.CacheInputTokens += usage.CacheInputTokens
 	}
 
@@ -172,6 +177,7 @@ func GetTokenCacheHitGroupStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 		stat.PromptTokens += row.PromptTokens
 		stat.CompletionTokens += row.CompletionTokens
 		stat.CacheTokens += usage.CacheTokens
+		stat.CacheWriteTokens += usage.CacheWriteTokens
 		stat.CacheInputTokens += usage.CacheInputTokens
 	}
 
@@ -235,6 +241,7 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 		stat.PromptTokens += row.PromptTokens
 		stat.CompletionTokens += row.CompletionTokens
 		stat.CacheTokens += usage.CacheTokens
+		stat.CacheWriteTokens += usage.CacheWriteTokens
 		stat.CacheInputTokens += usage.CacheInputTokens
 	}
 
@@ -343,8 +350,9 @@ func extractTokenCacheUsage(other string, promptTokens int64) tokenCacheUsage {
 		return usage
 	}
 	usage.CacheTokens = parsed.CacheTokens
+	usage.CacheWriteTokens = parsed.cacheWriteTokens()
 	if parsed.UsageSemantic == "anthropic" || parsed.Claude {
-		usage.CacheInputTokens = promptTokens + parsed.CacheTokens + parsed.cacheWriteTokens()
+		usage.CacheInputTokens = promptTokens + parsed.CacheTokens + usage.CacheWriteTokens
 	}
 	return usage
 }

@@ -184,6 +184,7 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         acc.promptTokens += item.prompt_tokens
         acc.completionTokens += item.completion_tokens
         acc.cacheTokens += item.cache_tokens
+        acc.cacheWriteTokens += item.cache_write_tokens || 0
         acc.cacheInputTokens += item.cache_input_tokens || item.prompt_tokens
         return acc
       },
@@ -193,6 +194,7 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         promptTokens: 0,
         completionTokens: 0,
         cacheTokens: 0,
+        cacheWriteTokens: 0,
         cacheInputTokens: 0,
       }
     )
@@ -285,10 +287,17 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
       },
       {
         id: 'prompt_tokens',
-        header: t('Input Tokens'),
+        header: t('Non-Cache Input Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
         cell: (row) => formatNumber(row.prompt_tokens),
+      },
+      {
+        id: 'cache_write_tokens',
+        header: t('Cache Write Tokens'),
+        cellClassName: 'text-right tabular-nums',
+        className: 'text-right',
+        cell: (row) => formatNumber(row.cache_write_tokens || 0),
       },
       {
         id: 'cache_tokens',
@@ -296,6 +305,14 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
         cell: (row) => formatNumber(row.cache_tokens),
+      },
+      {
+        id: 'cache_input_tokens',
+        header: t('Cache Input Tokens'),
+        cellClassName: 'text-right tabular-nums',
+        className: 'text-right',
+        cell: (row) =>
+          formatNumber(row.cache_input_tokens || row.prompt_tokens),
       },
       {
         id: 'completion_tokens',
@@ -360,10 +377,17 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
       },
       {
         id: 'prompt_tokens',
-        header: t('Input Tokens'),
+        header: t('Non-Cache Input Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
         cell: (row) => formatNumber(row.prompt_tokens),
+      },
+      {
+        id: 'cache_write_tokens',
+        header: t('Cache Write Tokens'),
+        cellClassName: 'text-right tabular-nums',
+        className: 'text-right',
+        cell: (row) => formatNumber(row.cache_write_tokens || 0),
       },
       {
         id: 'cache_tokens',
@@ -371,6 +395,14 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
         cell: (row) => formatNumber(row.cache_tokens),
+      },
+      {
+        id: 'cache_input_tokens',
+        header: t('Cache Input Tokens'),
+        cellClassName: 'text-right tabular-nums',
+        className: 'text-right',
+        cell: (row) =>
+          formatNumber(row.cache_input_tokens || row.prompt_tokens),
       },
       {
         id: 'completion_tokens',
@@ -405,15 +437,20 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
       description: t('Total cache read tokens'),
     },
     {
+      label: t('Cache Write Tokens'),
+      value: formatNumber(summary.cacheWriteTokens),
+      description: t('Total cache write tokens'),
+    },
+    {
       label: t('Overall Cache Hit Rate'),
       value: formatRate(summary.hitRate),
-      description: t('Cache read tokens / input tokens'),
+      description: t('Cache read tokens / cache input tokens'),
     },
   ]
 
   return (
     <div className='flex flex-col gap-3'>
-      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-5'>
         {summaryCards.map((card) => (
           <Card key={card.label} size='sm'>
             <CardHeader>
@@ -525,6 +562,10 @@ function buildTrendSpec(options: {
       HitRate: rateValue,
       hitRateText: `${rateValue.toFixed(2)}%`,
       cacheTokensText: formatNumber(item.cache_tokens),
+      cacheWriteTokensText: formatNumber(item.cache_write_tokens || 0),
+      cacheInputTokensText: formatNumber(
+        item.cache_input_tokens || item.prompt_tokens
+      ),
       requestsText: formatNumber(item.request_count),
     }
   })
@@ -564,6 +605,16 @@ function buildTrendSpec(options: {
               datum.cacheTokensText ?? '-',
           },
           {
+            key: options.t('Cache Write Tokens'),
+            value: (datum: { cacheWriteTokensText?: string }) =>
+              datum.cacheWriteTokensText ?? '-',
+          },
+          {
+            key: options.t('Cache Input Tokens'),
+            value: (datum: { cacheInputTokensText?: string }) =>
+              datum.cacheInputTokensText ?? '-',
+          },
+          {
             key: options.t('Requests'),
             value: (datum: { requestsText?: string }) =>
               datum.requestsText ?? '-',
@@ -581,6 +632,16 @@ function buildTrendSpec(options: {
             key: options.t('Cache Read Tokens'),
             value: (datum: { cacheTokensText?: string }) =>
               datum.cacheTokensText ?? '-',
+          },
+          {
+            key: options.t('Cache Write Tokens'),
+            value: (datum: { cacheWriteTokensText?: string }) =>
+              datum.cacheWriteTokensText ?? '-',
+          },
+          {
+            key: options.t('Cache Input Tokens'),
+            value: (datum: { cacheInputTokensText?: string }) =>
+              datum.cacheInputTokensText ?? '-',
           },
           {
             key: options.t('Requests'),
