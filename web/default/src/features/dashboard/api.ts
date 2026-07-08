@@ -114,7 +114,7 @@ export async function getTokenCacheHitTrendStats(params: {
   model_name?: string
   channel_id?: number
   time_granularity?: string
-  trend_group?: 'model' | 'channel'
+  trend_group?: 'model' | 'channel' | 'model_channel' | 'model_group'
 }) {
   const res = await api.get<{
     success: boolean

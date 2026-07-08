@@ -66,6 +66,7 @@ export interface TokenCacheHitGroupStatItem {
 
 export interface TokenCacheHitTrendItem {
   model_name?: string
+  group?: string
   channel_id: number
   channel_name?: string
   created_at: number

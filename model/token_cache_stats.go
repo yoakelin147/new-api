@@ -48,6 +48,7 @@ type TokenCacheHitGroupStat struct {
 
 type TokenCacheHitTrendStat struct {
 	ModelName        string  `json:"model_name"`
+	Group            string  `json:"group"`
 	ChannelId        int     `json:"channel_id"`
 	ChannelName      string  `json:"channel_name"`
 	CreatedAt        int64   `json:"created_at"`
@@ -224,11 +225,19 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 			stat = &TokenCacheHitTrendStat{
 				CreatedAt: bucket,
 			}
-			if trendGroup == "model" {
+			switch trendGroup {
+			case "model":
 				stat.ModelName = row.ModelName
-			} else {
+			case "channel":
 				stat.ChannelId = row.ChannelId
 				channelIds.Add(row.ChannelId)
+			case "model_channel":
+				stat.ModelName = row.ModelName
+				stat.ChannelId = row.ChannelId
+				channelIds.Add(row.ChannelId)
+			case "model_group":
+				stat.ModelName = row.ModelName
+				stat.Group = row.Group
 			}
 			statsByKey[key] = stat
 		}
@@ -265,6 +274,9 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 		}
 		if stats[i].ModelName != stats[j].ModelName {
 			return stats[i].ModelName < stats[j].ModelName
+		}
+		if stats[i].Group != stats[j].Group {
+			return stats[i].Group < stats[j].Group
 		}
 		return stats[i].ChannelId < stats[j].ChannelId
 	})
@@ -307,17 +319,25 @@ func normalizeTokenCacheGranularity(granularity string) string {
 }
 
 func normalizeTokenCacheTrendGroup(group string) string {
-	if group == "model" {
-		return "model"
+	switch group {
+	case "model", "channel", "model_channel", "model_group":
+		return group
+	default:
+		return "channel"
 	}
-	return "channel"
 }
 
 func tokenCacheTrendKey(row tokenCacheLogRow, bucket int64, trendGroup string) string {
-	if trendGroup == "model" {
+	switch trendGroup {
+	case "model":
 		return row.ModelName + "\x00" + strconv.FormatInt(bucket, 10)
+	case "model_channel":
+		return row.ModelName + "\x00" + strconv.Itoa(row.ChannelId) + "\x00" + strconv.FormatInt(bucket, 10)
+	case "model_group":
+		return row.ModelName + "\x00" + row.Group + "\x00" + strconv.FormatInt(bucket, 10)
+	default:
+		return strconv.Itoa(row.ChannelId) + "\x00" + strconv.FormatInt(bucket, 10)
 	}
-	return strconv.Itoa(row.ChannelId) + "\x00" + strconv.FormatInt(bucket, 10)
 }
 
 func tokenCacheBucketTimestamp(timestamp int64, granularity string) int64 {

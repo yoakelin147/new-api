@@ -34,11 +34,11 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   type StaticDataTableColumn,
   StaticDataTable,
 } from '@/components/data-table/static/static-data-table'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   getTokenCacheHitGroupStats,
   getTokenCacheHitStats,
@@ -61,6 +61,7 @@ type TokenCacheDetailsTab = 'channel' | 'group'
 function formatRate(rate: number) {
   return Intl.NumberFormat(undefined, {
     style: 'percent',
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(rate)
 }
@@ -76,12 +77,22 @@ function getGroupLabel(row: TokenCacheHitGroupStatItem) {
 
 function getTrendChannelLabel(item: TokenCacheHitTrendItem) {
   const name = item.channel_name?.trim()
-  return name ? name : `#${item.channel_id}`
+  return name ? `#${item.channel_id} ${name}` : `#${item.channel_id}`
 }
 
-function getTrendModelLabel(item: TokenCacheHitTrendItem) {
-  const name = item.model_name?.trim()
-  return name || 'unknown'
+function getTrendGroupLabel(item: TokenCacheHitTrendItem) {
+  return item.group?.trim()
+}
+
+function getTrendModelChannelLabel(item: TokenCacheHitTrendItem) {
+  return `${getModelLabel(item.model_name)} ${getTrendChannelLabel(item)}`
+}
+
+function getTrendModelGroupLabel(
+  item: TokenCacheHitTrendItem,
+  t: ReturnType<typeof useTranslation>['t']
+) {
+  return `${getModelLabel(item.model_name)} ${getTrendGroupLabel(item) || t('Unknown')}`
 }
 
 function buildApiParams(filters: TokenCacheDashboardFilters) {
@@ -122,6 +133,10 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
   const [channelChartType, setChannelChartType] =
     useState<TokenCacheChartType>('bar')
   const [detailsTab, setDetailsTab] = useState<TokenCacheDetailsTab>('channel')
+  const [channelChartSeries, setChannelChartSeries] = useState<string | null>(
+    null
+  )
+  const [groupChartSeries, setGroupChartSeries] = useState<string | null>(null)
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
@@ -139,26 +154,42 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
     queryFn: () => getTokenCacheHitGroupStats(apiParams),
     select: (res) => (res.success ? res.data : []),
     staleTime: 60_000,
-    enabled: detailsTab === 'group',
   })
-
-  const { data: modelTrendStats = [], isLoading: modelTrendLoading } =
-    useQuery({
-      queryKey: ['dashboard', 'token-cache-hit-trend', 'model', apiParams],
-      queryFn: () =>
-        getTokenCacheHitTrendStats({ ...apiParams, trend_group: 'model' }),
-      select: (res) => (res.success ? res.data : []),
-      staleTime: 60_000,
-    })
 
   const { data: channelTrendStats = [], isLoading: channelTrendLoading } =
     useQuery({
-      queryKey: ['dashboard', 'token-cache-hit-trend', 'channel', apiParams],
+      queryKey: [
+        'dashboard',
+        'token-cache-hit-trend',
+        'model_channel',
+        apiParams,
+      ],
       queryFn: () =>
-        getTokenCacheHitTrendStats({ ...apiParams, trend_group: 'channel' }),
+        getTokenCacheHitTrendStats({
+          ...apiParams,
+          trend_group: 'model_channel',
+        }),
       select: (res) => (res.success ? res.data : []),
       staleTime: 60_000,
     })
+
+  const { data: groupTrendStats = [], isLoading: groupTrendLoading } = useQuery(
+    {
+      queryKey: [
+        'dashboard',
+        'token-cache-hit-trend',
+        'model_group',
+        apiParams,
+      ],
+      queryFn: () =>
+        getTokenCacheHitTrendStats({
+          ...apiParams,
+          trend_group: 'model_group',
+        }),
+      select: (res) => (res.success ? res.data : []),
+      staleTime: 60_000,
+    }
+  )
 
   useEffect(() => {
     const updateTheme = async () => {
@@ -207,32 +238,77 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
     }
   }, [stats])
 
-  const modelTrendSpec = useMemo(
+  const channelChartSeriesLabels = useMemo(
     () =>
-      buildTrendSpec({
-        data: modelTrendStats,
-        dataId: 'tokenCacheModelTrend',
-        granularity: filters.time_granularity,
-        getSeriesLabel: getTrendModelLabel,
-        rateLabel: t('Model Hit Rate'),
-        chartType: modelChartType,
-        t,
-      }),
-    [filters.time_granularity, modelChartType, modelTrendStats, t]
+      getSeriesLabels(
+        channelTrendStats.map((item) => getTrendModelChannelLabel(item))
+      ),
+    [channelTrendStats]
   )
 
-  const channelTrendSpec = useMemo(
+  const groupChartSeriesLabels = useMemo(
+    () =>
+      getSeriesLabels(
+        groupTrendStats.map((item) => getTrendModelGroupLabel(item, t))
+      ),
+    [groupTrendStats, t]
+  )
+
+  const effectiveChannelChartSeries =
+    channelChartSeries && channelChartSeriesLabels.includes(channelChartSeries)
+      ? channelChartSeries
+      : null
+  const effectiveGroupChartSeries =
+    groupChartSeries && groupChartSeriesLabels.includes(groupChartSeries)
+      ? groupChartSeries
+      : null
+
+  const channelChartSpec = useMemo(
     () =>
       buildTrendSpec({
         data: channelTrendStats,
-        dataId: 'tokenCacheChannelTrend',
+        dataId: 'tokenCacheModelChannelTrend',
         granularity: filters.time_granularity,
-        getSeriesLabel: getTrendChannelLabel,
+        getSeriesLabel: getTrendModelChannelLabel,
+        getModelLabel: (item) => getModelLabel(item.model_name),
+        getDimensionLabel: getTrendChannelLabel,
+        dimensionTitle: t('Channel'),
         rateLabel: t('Channel Hit Rate'),
-        chartType: channelChartType,
+        chartType: modelChartType,
+        selectedSeries: effectiveChannelChartSeries,
         t,
       }),
-    [channelChartType, channelTrendStats, filters.time_granularity, t]
+    [
+      channelTrendStats,
+      effectiveChannelChartSeries,
+      filters.time_granularity,
+      modelChartType,
+      t,
+    ]
+  )
+
+  const groupChartSpec = useMemo(
+    () =>
+      buildTrendSpec({
+        data: groupTrendStats,
+        dataId: 'tokenCacheModelGroupTrend',
+        granularity: filters.time_granularity,
+        getSeriesLabel: (item) => getTrendModelGroupLabel(item, t),
+        getModelLabel: (item) => getModelLabel(item.model_name),
+        getDimensionLabel: (item) => getTrendGroupLabel(item) || t('Unknown'),
+        dimensionTitle: t('Group'),
+        rateLabel: t('Group Hit Rate'),
+        chartType: channelChartType,
+        selectedSeries: effectiveGroupChartSeries,
+        t,
+      }),
+    [
+      channelChartType,
+      effectiveGroupChartSeries,
+      filters.time_granularity,
+      groupTrendStats,
+      t,
+    ]
   )
 
   const channelColumns = useMemo<
@@ -471,27 +547,33 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
       </div>
 
       <TrendChartPanel
-        title={t('Model Cache Hit Rate Trend')}
-        loading={modelTrendLoading}
-        empty={modelTrendStats.length === 0}
-        spec={modelTrendSpec}
+        title={t('Token Cache Hit Rate by Model and Channel')}
+        loading={channelTrendLoading}
+        empty={channelTrendStats.length === 0}
+        spec={channelChartSpec}
         themeReady={themeReady}
         resolvedTheme={resolvedTheme}
         themeKey={customization.preset}
         chartType={modelChartType}
         onChartTypeChange={setModelChartType}
+        seriesLabels={channelChartSeriesLabels}
+        selectedSeries={effectiveChannelChartSeries}
+        onSelectedSeriesChange={setChannelChartSeries}
       />
 
       <TrendChartPanel
-        title={t('Channel Cache Hit Rate Trend')}
-        loading={channelTrendLoading}
-        empty={channelTrendStats.length === 0}
-        spec={channelTrendSpec}
+        title={t('Token Cache Hit Rate by Model and Group')}
+        loading={groupTrendLoading}
+        empty={groupTrendStats.length === 0}
+        spec={groupChartSpec}
         themeReady={themeReady}
         resolvedTheme={resolvedTheme}
         themeKey={customization.preset}
         chartType={channelChartType}
         onChartTypeChange={setChannelChartType}
+        seriesLabels={groupChartSeriesLabels}
+        selectedSeries={effectiveGroupChartSeries}
+        onSelectedSeriesChange={setGroupChartSeries}
       />
 
       <div className='overflow-hidden rounded-lg border'>
@@ -545,20 +627,36 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
   )
 }
 
+function getModelLabel(modelName?: string) {
+  const name = modelName?.trim()
+  return name || 'unknown'
+}
+
+function getSeriesLabels(labels: string[]) {
+  return Array.from(new Set(labels))
+}
+
 function buildTrendSpec(options: {
   data: TokenCacheHitTrendItem[]
   dataId: string
   granularity: string
   getSeriesLabel: (item: TokenCacheHitTrendItem) => string
+  getModelLabel: (item: TokenCacheHitTrendItem) => string
+  getDimensionLabel: (item: TokenCacheHitTrendItem) => string
+  dimensionTitle: string
   rateLabel: string
   chartType: TokenCacheChartType
+  selectedSeries: string | null
   t: ReturnType<typeof useTranslation>['t']
 }) {
   const values = options.data.map((item) => {
     const rateValue = Number((item.hit_rate * 100).toFixed(2))
+    const dimensionLabel = options.getDimensionLabel(item)
     return {
       Time: formatTrendTime(item.created_at, options.granularity),
       Series: options.getSeriesLabel(item),
+      Model: options.getModelLabel(item),
+      DimensionName: dimensionLabel,
       HitRate: rateValue,
       hitRateText: `${rateValue.toFixed(2)}%`,
       cacheTokensText: formatNumber(item.cache_tokens),
@@ -569,6 +667,7 @@ function buildTrendSpec(options: {
       requestsText: formatNumber(item.request_count),
     }
   })
+  const seriesLabels = getSeriesLabels(values.map((item) => item.Series))
 
   return {
     type: options.chartType,
@@ -581,6 +680,10 @@ function buildTrendSpec(options: {
       visible: true,
       orient: 'bottom',
       position: 'middle',
+      filter: true,
+      defaultSelected: options.selectedSeries
+        ? [options.selectedSeries]
+        : seriesLabels,
     },
     axes: [
       {
@@ -589,13 +692,24 @@ function buildTrendSpec(options: {
           formatMethod: (value: number) => `${Number(value).toFixed(2)}%`,
         },
       },
-      { orient: 'bottom' },
+      {
+        orient: 'bottom',
+      },
     ],
     tooltip: {
       dimension: {
         content: [
           {
-            key: (datum: { Series?: string }) => datum.Series ?? '',
+            key: options.t('Model'),
+            value: (datum: { Model?: string }) => datum.Model ?? '-',
+          },
+          {
+            key: options.dimensionTitle,
+            value: (datum: { DimensionName?: string }) =>
+              datum.DimensionName ?? '-',
+          },
+          {
+            key: options.rateLabel,
             value: (datum: { hitRateText?: string }) =>
               datum.hitRateText ?? '-',
           },
@@ -623,6 +737,15 @@ function buildTrendSpec(options: {
       },
       mark: {
         content: [
+          {
+            key: options.t('Model'),
+            value: (datum: { Model?: string }) => datum.Model ?? '-',
+          },
+          {
+            key: options.dimensionTitle,
+            value: (datum: { DimensionName?: string }) =>
+              datum.DimensionName ?? '-',
+          },
           {
             key: options.rateLabel,
             value: (datum: { hitRateText?: string }) =>
@@ -661,6 +784,58 @@ function buildTrendSpec(options: {
   }
 }
 
+function readLegendSelectedValues(event: unknown) {
+  const value = (event as { value?: unknown })?.value
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string')
+  }
+  const detail = (
+    event as { event?: { detail?: { currentSelected?: unknown } } }
+  )?.event?.detail
+  if (Array.isArray(detail?.currentSelected)) {
+    return detail.currentSelected.filter(
+      (item): item is string => typeof item === 'string'
+    )
+  }
+  return []
+}
+
+function readLegendClickedSeries(
+  event: unknown,
+  seriesLabels: string[],
+  selectedSeries: string | null
+) {
+  const detail = (event as { event?: { detail?: Record<string, unknown> } })
+    ?.event?.detail
+  const explicitValue =
+    detail?.label ??
+    detail?.value ??
+    (detail?.data as { label?: unknown; key?: unknown; value?: unknown })
+      ?.label ??
+    (detail?.data as { label?: unknown; key?: unknown; value?: unknown })
+      ?.key ??
+    (detail?.data as { label?: unknown; key?: unknown; value?: unknown })?.value
+  if (
+    typeof explicitValue === 'string' &&
+    seriesLabels.includes(explicitValue)
+  ) {
+    return explicitValue
+  }
+
+  const selectedValues = readLegendSelectedValues(event)
+  if (selectedSeries) {
+    const added = selectedValues.find(
+      (label) => label !== selectedSeries && seriesLabels.includes(label)
+    )
+    return added ?? selectedSeries
+  }
+  return (
+    seriesLabels.find((label) => !selectedValues.includes(label)) ??
+    selectedValues.find((label) => seriesLabels.includes(label)) ??
+    null
+  )
+}
+
 function TrendChartPanel({
   title,
   loading,
@@ -671,6 +846,9 @@ function TrendChartPanel({
   themeKey,
   chartType,
   onChartTypeChange,
+  seriesLabels,
+  selectedSeries,
+  onSelectedSeriesChange,
 }: {
   title: string
   loading: boolean
@@ -681,8 +859,22 @@ function TrendChartPanel({
   themeKey?: string
   chartType: TokenCacheChartType
   onChartTypeChange: (value: TokenCacheChartType) => void
+  seriesLabels: string[]
+  selectedSeries: string | null
+  onSelectedSeriesChange: (value: string | null) => void
 }) {
   const { t } = useTranslation()
+  const handleLegendItemClick = (event: unknown) => {
+    const clickedSeries = readLegendClickedSeries(
+      event,
+      seriesLabels,
+      selectedSeries
+    )
+    if (!clickedSeries) return
+    onSelectedSeriesChange(
+      selectedSeries === clickedSeries ? null : clickedSeries
+    )
+  }
 
   return (
     <div className='overflow-hidden rounded-lg border'>
@@ -720,13 +912,14 @@ function TrendChartPanel({
         <div className='h-80 p-2'>
           {themeReady && (
             <VChart
-              key={`${title}-${chartType}-${resolvedTheme}-${themeKey}`}
+              key={`${title}-${chartType}-${selectedSeries ?? 'all'}-${resolvedTheme}-${themeKey}`}
               spec={{
                 ...spec,
                 theme: resolvedTheme === 'dark' ? 'dark' : 'light',
                 background: 'transparent',
               }}
               option={VCHART_OPTION}
+              onLegendItemClick={handleLegendItemClick}
             />
           )}
         </div>
