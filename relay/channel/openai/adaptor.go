@@ -41,6 +41,8 @@ type Adaptor struct {
 	ResponseFormat string
 }
 
+const ginKeyResponsesViaChatCompletions = "responses_via_chat_completions"
+
 func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeminiChatRequest) (any, error) {
 	// 使用 service.GeminiToOpenAIRequest 转换请求格式
 	openaiRequest, err := service.GeminiToOpenAIRequest(request, info)
@@ -124,7 +126,8 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		}
 
 		// 特殊处理 responses API（包含 compact）
-		if info.RelayMode == relayconstant.RelayModeResponses || info.RelayMode == relayconstant.RelayModeResponsesCompact {
+		if (info.RelayMode == relayconstant.RelayModeResponses || info.RelayMode == relayconstant.RelayModeResponsesCompact) &&
+			strings.Split(info.RequestURLPath, "?")[0] != "/v1/chat/completions" {
 			responsesApiVersion := "preview"
 
 			subUrl := "/openai/v1/responses"
@@ -603,6 +606,19 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 	if info != nil && request.Reasoning != nil && request.Reasoning.Effort != "" {
 		info.ReasoningEffort = request.Reasoning.Effort
 	}
+	if info != nil &&
+		info.RelayMode == relayconstant.RelayModeResponses &&
+		service.ShouldResponsesUseChatCompletionsGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		chatRequest, err := service.ResponsesRequestToChatCompletionsRequest(&request)
+		if err != nil {
+			return nil, err
+		}
+		info.RequestURLPath = "/v1/chat/completions"
+		if c != nil {
+			c.Set(ginKeyResponsesViaChatCompletions, true)
+		}
+		return chatRequest, nil
+	}
 	return request, nil
 }
 
@@ -637,7 +653,13 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	case relayconstant.RelayModeRerank:
 		usage, err = common_handler.RerankHandler(c, info, resp)
 	case relayconstant.RelayModeResponses:
-		if info.IsStream {
+		if c != nil && c.GetBool(ginKeyResponsesViaChatCompletions) {
+			if info.IsStream {
+				usage, err = OaiChatToResponsesStreamHandler(c, info, resp)
+			} else {
+				usage, err = OaiChatToResponsesHandler(c, info, resp)
+			}
+		} else if info.IsStream {
 			usage, err = OaiResponsesStreamHandler(c, info, resp)
 		} else {
 			usage, err = OaiResponsesHandler(c, info, resp)

@@ -3507,6 +3507,7 @@
     "Resource Configuration": "Конфигурация ресурсов",
     "Response": "Ответ",
     "Response Time": "Время ответа",
+    "Responses -> ChatCompletions Compatibility": "Совместимость Responses → ChatCompletions",
     "Responses API Version": "Версия API ответов",
     "Restore defaults": "Сбросить к значениям по умолчанию",
     "Restrict user model request frequency (may impact high concurrency performance)": "Ограничить частоту запросов пользовательских моделей (может повлиять на производительность при высокой конкуренции)",

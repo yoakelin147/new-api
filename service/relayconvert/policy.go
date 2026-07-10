@@ -1,4 +1,4 @@
-package openaicompat
+package relayconvert
 
 import "github.com/QuantumNous/new-api/setting/model_setting"
 
@@ -12,6 +12,15 @@ func ShouldChatCompletionsUseResponsesPolicy(policy model_setting.ChatCompletion
 func ShouldChatCompletionsUseResponsesGlobal(channelID int, channelType int, model string) bool {
 	return ShouldChatCompletionsUseResponsesPolicy(
 		model_setting.GetGlobalSettings().ChatCompletionsToResponsesPolicy,
+		channelID,
+		channelType,
+		model,
+	)
+}
+
+func ShouldResponsesUseChatCompletionsGlobal(channelID int, channelType int, model string) bool {
+	return ShouldChatCompletionsUseResponsesPolicy(
+		model_setting.GetGlobalSettings().ResponsesToChatCompletionsPolicy,
 		channelID,
 		channelType,
 		model,

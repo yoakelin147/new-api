@@ -36,6 +36,7 @@ type GlobalSettings struct {
 	PassThroughRequestEnabled        bool                             `json:"pass_through_request_enabled"`
 	ThinkingModelBlacklist           []string                         `json:"thinking_model_blacklist"`
 	ChatCompletionsToResponsesPolicy ChatCompletionsToResponsesPolicy `json:"chat_completions_to_responses_policy"`
+	ResponsesToChatCompletionsPolicy ChatCompletionsToResponsesPolicy `json:"responses_to_chat_completions_policy"`
 }
 
 // 默认配置
@@ -46,6 +47,10 @@ var defaultOpenaiSettings = GlobalSettings{
 		"kimi-k2-thinking",
 	},
 	ChatCompletionsToResponsesPolicy: ChatCompletionsToResponsesPolicy{
+		Enabled:     false,
+		AllChannels: true,
+	},
+	ResponsesToChatCompletionsPolicy: ChatCompletionsToResponsesPolicy{
 		Enabled:     false,
 		AllChannels: true,
 	},
