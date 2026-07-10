@@ -176,11 +176,19 @@ func responsesInputItemToChatMessages(item map[string]any, messages []dto.Messag
 	if role == "" {
 		role = "user"
 	}
+	role = responsesInputRoleToChatRole(role)
 	content, err := responsesInputContentToChatContent(item["content"])
 	if err != nil {
 		return nil, err
 	}
 	return append(messages, dto.Message{Role: role, Content: content}), nil
+}
+
+func responsesInputRoleToChatRole(role string) string {
+	if role == "developer" {
+		return "system"
+	}
+	return role
 }
 
 func responsesInputContentToChatContent(content any) (any, error) {

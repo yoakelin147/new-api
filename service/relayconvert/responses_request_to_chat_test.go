@@ -89,6 +89,29 @@ func TestResponsesRequestToChatCompletionsRequestMultimodalInput(t *testing.T) {
 	assert.Equal(t, "https://example.test/v.mp4", parts[4].GetVideoUrl().Url)
 }
 
+func TestResponsesRequestToChatCompletionsRequestMapsDeveloperRoleToSystem(t *testing.T) {
+	got, err := ResponsesRequestToChatCompletionsRequest(&dto.OpenAIResponsesRequest{
+		Model: "gpt-test",
+		Input: mustRawMessage(t, []map[string]any{
+			{
+				"role":    "developer",
+				"content": "follow these instructions",
+			},
+			{
+				"role":    "user",
+				"content": "hello",
+			},
+		}),
+	})
+	require.NoError(t, err)
+
+	require.Len(t, got.Messages, 2)
+	assert.Equal(t, "system", got.Messages[0].Role)
+	assert.Equal(t, "follow these instructions", got.Messages[0].StringContent())
+	assert.Equal(t, "user", got.Messages[1].Role)
+	assert.Equal(t, "hello", got.Messages[1].StringContent())
+}
+
 func TestResponsesRequestToChatCompletionsRequestAssistantTextAndFunctionCallCoexist(t *testing.T) {
 	got, err := ResponsesRequestToChatCompletionsRequest(&dto.OpenAIResponsesRequest{
 		Model: "gpt-test",
