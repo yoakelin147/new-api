@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,8 @@ import (
 
 type Adaptor struct {
 }
+
+const ginKeyResponsesViaChatCompletions = "responses_via_chat_completions"
 
 func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dto.GeminiChatRequest) (any, error) {
 	//TODO implement me
@@ -159,7 +162,22 @@ func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.Rela
 }
 
 func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
-	// TODO implement me
+	if info != nil &&
+		info.RelayMode == constant.RelayModeResponses &&
+		service.ShouldResponsesUseChatCompletionsGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		chatRequest, err := service.ResponsesRequestToChatCompletionsRequest(&request)
+		if err != nil {
+			return nil, err
+		}
+		if err := applyDeepSeekV4OpenAIThinkingSuffix(info, chatRequest); err != nil {
+			return nil, err
+		}
+		info.RequestURLPath = "/v1/chat/completions"
+		if c != nil {
+			c.Set(ginKeyResponsesViaChatCompletions, true)
+		}
+		return chatRequest, nil
+	}
 	return nil, errors.New("not implemented")
 }
 
