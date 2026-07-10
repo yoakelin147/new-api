@@ -222,6 +222,42 @@ func TestResponsesRequestToChatCompletionsRequestToolsToolChoiceAndTextFormat(t 
 	assert.True(t, gjson.GetBytes(got.ResponseFormat.JsonSchema, "strict").Bool())
 }
 
+func TestResponsesRequestToChatCompletionsRequestFiltersUnsupportedTools(t *testing.T) {
+	got, err := ResponsesRequestToChatCompletionsRequest(&dto.OpenAIResponsesRequest{
+		Model: "gpt-test",
+		Input: mustRawMessage(t, "hello"),
+		Tools: mustRawMessage(t, []map[string]any{
+			{
+				"type": "web_search_preview",
+			},
+			{
+				"type": "function",
+			},
+			{
+				"type": "function",
+				"function": map[string]any{
+					"name":        "lookup",
+					"description": "Lookup data",
+					"parameters": map[string]any{
+						"type": "object",
+					},
+				},
+			},
+		}),
+		ToolChoice: mustRawMessage(t, map[string]any{
+			"type": "web_search_preview",
+		}),
+	})
+	require.NoError(t, err)
+
+	require.Len(t, got.Tools, 1)
+	assert.Equal(t, "function", got.Tools[0].Type)
+	assert.Equal(t, "lookup", got.Tools[0].Function.Name)
+	assert.Equal(t, "Lookup data", got.Tools[0].Function.Description)
+	assert.Equal(t, "object", got.Tools[0].Function.Parameters.(map[string]any)["type"])
+	assert.Nil(t, got.ToolChoice)
+}
+
 func TestResponsesRequestToChatCompletionsRequestCustomToolCallPreservesRawShape(t *testing.T) {
 	got, err := ResponsesRequestToChatCompletionsRequest(&dto.OpenAIResponsesRequest{
 		Model: "gpt-test",

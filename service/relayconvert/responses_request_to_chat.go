@@ -327,28 +327,45 @@ func responsesRequestToolsToChat(raw json.RawMessage) ([]dto.ToolCallRequest, er
 	out := make([]dto.ToolCallRequest, 0, len(tools))
 	for _, tool := range tools {
 		toolType := strings.TrimSpace(common.Interface2String(tool["type"]))
-		if toolType == "function" {
-			out = append(out, dto.ToolCallRequest{
-				Type: "function",
-				Function: dto.FunctionRequest{
-					Name:        strings.TrimSpace(common.Interface2String(tool["name"])),
-					Description: common.Interface2String(tool["description"]),
-					Parameters:  tool["parameters"],
-				},
-			})
+		if toolType != "function" {
 			continue
 		}
 
-		rawTool, err := common.Marshal(tool)
-		if err != nil {
-			return nil, err
+		name, description, parameters := responsesFunctionToolFields(tool)
+		if name == "" {
+			continue
 		}
 		out = append(out, dto.ToolCallRequest{
-			Type:   toolType,
-			Custom: rawTool,
+			Type: "function",
+			Function: dto.FunctionRequest{
+				Name:        name,
+				Description: description,
+				Parameters:  parameters,
+			},
 		})
 	}
 	return out, nil
+}
+
+func responsesFunctionToolFields(tool map[string]any) (name string, description string, parameters any) {
+	name = strings.TrimSpace(common.Interface2String(tool["name"]))
+	description = common.Interface2String(tool["description"])
+	parameters = tool["parameters"]
+
+	function, ok := tool["function"].(map[string]any)
+	if !ok {
+		return name, description, parameters
+	}
+	if name == "" {
+		name = strings.TrimSpace(common.Interface2String(function["name"]))
+	}
+	if description == "" {
+		description = common.Interface2String(function["description"])
+	}
+	if parameters == nil {
+		parameters = function["parameters"]
+	}
+	return name, description, parameters
 }
 
 func responsesRequestToolChoiceToChat(raw json.RawMessage) (any, error) {
@@ -378,7 +395,7 @@ func responsesRequestToolChoiceToChat(raw json.RawMessage) (any, error) {
 			}, nil
 		}
 	}
-	return choice, nil
+	return nil, nil
 }
 
 func responsesRequestTextToChatResponseFormat(raw json.RawMessage) (*dto.ResponseFormat, error) {
