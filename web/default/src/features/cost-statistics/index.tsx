@@ -338,7 +338,34 @@ function buildExcelContent(
         `<tr>${row.map((cell) => `<td>${escapeXmlCell(cell)}</td>`).join('')}</tr>`
     ),
   ].join('')
-  return `<!doctype html><html><head><meta charset="utf-8"></head><body><table>${tableRows}</table></body></html>`
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      table {
+        border-collapse: collapse;
+        border: 1px solid #d9d9d9;
+        font-family: Arial, "Microsoft YaHei", sans-serif;
+        font-size: 12px;
+      }
+      th,
+      td {
+        border: 1px solid #d9d9d9;
+        padding: 6px 10px;
+        mso-number-format: "\\@";
+        white-space: nowrap;
+      }
+      th {
+        background: #f3f4f6;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <table>${tableRows}</table>
+  </body>
+</html>`
 }
 
 function buildExportFilename() {
