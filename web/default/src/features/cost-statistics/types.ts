@@ -17,7 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-export type CostStatisticsPeriod = 'today' | 'week' | 'month'
+export type CostStatisticsPeriod =
+  | 'today'
+  | 'week'
+  | 'month'
+  | 'last_month'
+  | 'custom'
 export type CostStatisticsType = 'all' | 'consume' | 'refund'
 
 export interface CostStatisticsFilters {
@@ -28,6 +33,8 @@ export interface CostStatisticsFilters {
   group?: string
   username?: string
   channel?: string
+  start_timestamp?: number
+  end_timestamp?: number
 }
 
 export interface CostStatisticsRow {

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,9 +14,11 @@ import (
 )
 
 const (
-	costStatisticsPeriodToday = "today"
-	costStatisticsPeriodWeek  = "week"
-	costStatisticsPeriodMonth = "month"
+	costStatisticsPeriodToday     = "today"
+	costStatisticsPeriodWeek      = "week"
+	costStatisticsPeriodMonth     = "month"
+	costStatisticsPeriodLastMonth = "last_month"
+	costStatisticsPeriodCustom    = "custom"
 )
 
 func GetCostStatistics(c *gin.Context) {
@@ -28,7 +31,16 @@ func GetSelfCostStatistics(c *gin.Context) {
 
 func handleCostStatistics(c *gin.Context, isAdmin bool) {
 	pageInfo := common.GetPageQuery(c)
-	startTimestamp, endTimestamp, period := resolveCostStatisticsPeriod(c.Query("period"))
+	startTimestamp, endTimestamp, period, err := resolveCostStatisticsPeriod(
+		c.Query("period"),
+		isAdmin,
+		c.Query("start_timestamp"),
+		c.Query("end_timestamp"),
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	logType := parseCostStatisticsLogType(c.Query("type"))
 	channelId, _ := strconv.Atoi(c.Query("channel"))
 
@@ -85,19 +97,46 @@ func parseCostStatisticsLogType(raw string) int {
 	}
 }
 
-func resolveCostStatisticsPeriod(raw string) (int64, int64, string) {
+func resolveCostStatisticsPeriod(raw string, isAdmin bool, rawStart string, rawEnd string) (int64, int64, string, error) {
 	now := time.Now()
 	period := raw
 	var start time.Time
+	var end time.Time
 	switch period {
 	case costStatisticsPeriodWeek:
 		offset := (int(now.Weekday()) + 6) % 7
 		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -offset)
+		end = now
 	case costStatisticsPeriodMonth:
 		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		end = now
+	case costStatisticsPeriodLastMonth:
+		thisMonthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		start = thisMonthStart.AddDate(0, -1, 0)
+		end = thisMonthStart.Add(-time.Second)
+	case costStatisticsPeriodCustom:
+		if !isAdmin {
+			period = costStatisticsPeriodToday
+			start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			end = now
+			break
+		}
+		startTimestamp, err := strconv.ParseInt(rawStart, 10, 64)
+		if err != nil || startTimestamp <= 0 {
+			return 0, 0, "", errors.New("invalid start time")
+		}
+		endTimestamp, err := strconv.ParseInt(rawEnd, 10, 64)
+		if err != nil || endTimestamp <= 0 {
+			return 0, 0, "", errors.New("invalid end time")
+		}
+		if endTimestamp < startTimestamp {
+			return 0, 0, "", errors.New("end time must be later than start time")
+		}
+		return startTimestamp, endTimestamp, period, nil
 	default:
 		period = costStatisticsPeriodToday
 		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		end = now
 	}
-	return start.Unix(), now.Unix(), period
+	return start.Unix(), end.Unix(), period, nil
 }

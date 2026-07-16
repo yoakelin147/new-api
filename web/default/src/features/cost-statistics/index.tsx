@@ -35,7 +35,9 @@ import { toast } from 'sonner'
 import {
   formatLogQuota,
   formatNumber,
+  formatTimestampForInput,
   formatTimestampToDate,
+  parseTimestampFromInput,
   quotaUnitsToDollars,
 } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -109,6 +111,7 @@ const PERIOD_OPTIONS: Array<{ value: CostStatisticsPeriod; label: string }> = [
   { value: 'today', label: 'Today' },
   { value: 'week', label: 'This Week Range' },
   { value: 'month', label: 'This Month Range' },
+  { value: 'last_month', label: 'Last Month Range' },
 ]
 
 const TYPE_OPTIONS: Array<{ value: CostStatisticsType; label: string }> = [
@@ -174,6 +177,8 @@ function defaultFilters(): CostStatisticsFilters {
     group: '',
     username: '',
     channel: '',
+    start_timestamp: undefined,
+    end_timestamp: undefined,
   }
 }
 
@@ -219,18 +224,38 @@ function getPeriodRange(period: CostStatisticsPeriod) {
   const now = new Date()
   const start = new Date(now)
   start.setHours(0, 0, 0, 0)
+  let end = now
 
   if (period === 'week') {
     const offset = (now.getDay() + 6) % 7
     start.setDate(now.getDate() - offset)
   } else if (period === 'month') {
     start.setDate(1)
+  } else if (period === 'last_month') {
+    start.setDate(1)
+    start.setMonth(now.getMonth() - 1)
+    end = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+    end = new Date(end.getTime() - 1000)
   }
 
   return {
     start: Math.floor(start.getTime() / 1000),
-    end: Math.floor(now.getTime() / 1000),
+    end: Math.floor(end.getTime() / 1000),
   }
+}
+
+function getFilterRange(filters: CostStatisticsFilters) {
+  if (
+    filters.period === 'custom' &&
+    filters.start_timestamp &&
+    filters.end_timestamp
+  ) {
+    return {
+      start: filters.start_timestamp,
+      end: filters.end_timestamp,
+    }
+  }
+  return getPeriodRange(filters.period)
 }
 
 function HeaderLabel(props: { children: React.ReactNode; align?: 'right' }) {
@@ -948,21 +973,46 @@ function DateRangePicker(props: {
   period: CostStatisticsPeriod
   start: number
   end: number
+  allowCustom: boolean
   onPeriodChange: (period: CostStatisticsPeriod) => void
+  onRangeChange: (start: number, end: number) => void
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const [draftStart, setDraftStart] = useState('')
+  const [draftEnd, setDraftEnd] = useState('')
   const activeLabel =
-    PERIOD_OPTIONS.find((option) => option.value === props.period)?.label ||
-    'Today'
+    props.period === 'custom'
+      ? 'Custom Range'
+      : PERIOD_OPTIONS.find((option) => option.value === props.period)?.label ||
+        'Today'
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setDraftStart(formatTimestampForInput(props.start))
+      setDraftEnd(formatTimestampForInput(props.end))
+    }
+    setOpen(nextOpen)
+  }
 
   const handlePeriodChange = (period: CostStatisticsPeriod) => {
     props.onPeriodChange(period)
     setOpen(false)
   }
 
+  const applyCustomRange = () => {
+    const start = parseTimestampFromInput(draftStart)
+    const end = parseTimestampFromInput(draftEnd)
+    if (start <= 0 || end <= 0 || end < start) {
+      toast.error(t('End time must be later than start time'))
+      return
+    }
+    props.onRangeChange(start, end)
+    setOpen(false)
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         render={
           <Button
@@ -985,12 +1035,16 @@ function DateRangePicker(props: {
                 {t('Start Time')}
               </div>
               <Input
-                readOnly
+                readOnly={!props.allowCustom}
+                type={props.allowCustom ? 'datetime-local' : 'text'}
                 value={
-                  props.start
-                    ? formatTimestampToDate(props.start).slice(0, 16)
-                    : ''
+                  props.allowCustom
+                    ? draftStart
+                    : props.start
+                      ? formatTimestampToDate(props.start).slice(0, 16)
+                      : ''
                 }
+                onChange={(event) => setDraftStart(event.target.value)}
                 className='h-8 font-mono text-xs tabular-nums'
               />
             </div>
@@ -1002,15 +1056,21 @@ function DateRangePicker(props: {
                 {t('End Time')}
               </div>
               <Input
-                readOnly
+                readOnly={!props.allowCustom}
+                type={props.allowCustom ? 'datetime-local' : 'text'}
                 value={
-                  props.end ? formatTimestampToDate(props.end).slice(0, 16) : ''
+                  props.allowCustom
+                    ? draftEnd
+                    : props.end
+                      ? formatTimestampToDate(props.end).slice(0, 16)
+                      : ''
                 }
+                onChange={(event) => setDraftEnd(event.target.value)}
                 className='h-8 font-mono text-xs tabular-nums'
               />
             </div>
           </div>
-          <div className='grid grid-cols-3 gap-2'>
+          <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
             {PERIOD_OPTIONS.map((option) => (
               <Button
                 key={option.value}
@@ -1026,6 +1086,17 @@ function DateRangePicker(props: {
               </Button>
             ))}
           </div>
+          {props.allowCustom && (
+            <Button
+              type='button'
+              variant={props.period === 'custom' ? 'default' : 'outline'}
+              size='sm'
+              className='h-8'
+              onClick={applyCustomRange}
+            >
+              {t('Custom Range')}
+            </Button>
+          )}
           <div className='text-muted-foreground text-xs'>{t(activeLabel)}</div>
         </div>
       </PopoverContent>
@@ -1315,7 +1386,7 @@ export function CostStatistics() {
 
   const stats = data || DEFAULT_DATA
   const loadingContent = isLoading || (isFetching && !data)
-  const draftRange = getPeriodRange(draftFilters.period)
+  const draftRange = getFilterRange(draftFilters)
 
   const applyFilters = () => {
     setPage(1)
@@ -1336,6 +1407,25 @@ export function CostStatistics() {
     value: string | CostStatisticsPeriod | CostStatisticsType
   ) => {
     setDraftFilters((current) => ({ ...current, [key]: value }))
+  }
+
+  const handlePeriodChange = (period: CostStatisticsPeriod) => {
+    setDraftFilters((current) => ({
+      ...current,
+      period,
+      start_timestamp: undefined,
+      end_timestamp: undefined,
+    }))
+  }
+
+  const handleCustomRangeChange = (start: number, end: number) => {
+    if (!isAdmin) return
+    setDraftFilters((current) => ({
+      ...current,
+      period: 'custom',
+      start_timestamp: start,
+      end_timestamp: end,
+    }))
   }
 
   const handleExportXlsx = async () => {
@@ -1401,7 +1491,9 @@ export function CostStatistics() {
                 period={draftFilters.period}
                 start={draftRange.start}
                 end={draftRange.end}
-                onPeriodChange={(period) => updateDraft('period', period)}
+                allowCustom={isAdmin}
+                onPeriodChange={handlePeriodChange}
+                onRangeChange={handleCustomRangeChange}
               />
 
               <Select value='day' onValueChange={() => undefined}>
