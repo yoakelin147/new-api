@@ -91,7 +91,7 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 			return nil, 0, summary, err
 		}
 	}
-	if query.ChannelId != 0 {
+	if query.IsAdmin && query.ChannelId != 0 {
 		tx = tx.Where("logs.channel_id = ?", query.ChannelId)
 	}
 	if query.Group != "" {
@@ -104,6 +104,10 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 	err := tx.Order("logs.created_at desc, logs.id desc").FindInBatches(&batch, 1000, func(_tx *gorm.DB, _batch int) error {
 		for _, log := range batch {
 			date := time.Unix(log.CreatedAt, 0).Local().Format("20060102")
+			channelId := 0
+			if query.IsAdmin {
+				channelId = log.ChannelId
+			}
 			key := costStatisticsKey{
 				Date:      date,
 				Type:      log.Type,
@@ -111,7 +115,7 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 				TokenName: log.TokenName,
 				ModelName: log.ModelName,
 				Group:     log.Group,
-				ChannelId: log.ChannelId,
+				ChannelId: channelId,
 			}
 			row := rowsByKey[key]
 			if row == nil {
@@ -122,7 +126,7 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 					TokenName:  log.TokenName,
 					ModelName:  log.ModelName,
 					Group:      log.Group,
-					ChannelId:  log.ChannelId,
+					ChannelId:  channelId,
 					GroupRatio: 0,
 				}
 				rowsByKey[key] = row
@@ -144,7 +148,7 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 			summary.TotalTokens += log.PromptTokens + log.CompletionTokens
 			summary.RequestCount++
 			summary.Quota += log.Quota
-			if log.ChannelId != 0 {
+			if query.IsAdmin && log.ChannelId != 0 {
 				channelIds[log.ChannelId] = struct{}{}
 			}
 		}
@@ -155,14 +159,20 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 		return nil, 0, summary, errors.New("查询费用统计失败")
 	}
 
-	channelNames, err := getChannelNameMap(channelIds)
-	if err != nil {
-		return nil, 0, summary, err
+	channelNames := map[int]string{}
+	if query.IsAdmin {
+		var err error
+		channelNames, err = getChannelNameMap(channelIds)
+		if err != nil {
+			return nil, 0, summary, err
+		}
 	}
 
 	rows := make([]*CostStatisticsRow, 0, len(rowsByKey))
 	for _, row := range rowsByKey {
-		row.ChannelName = channelNames[row.ChannelId]
+		if query.IsAdmin {
+			row.ChannelName = channelNames[row.ChannelId]
+		}
 		if row.RequestCount > 0 {
 			row.UseTimeSeconds = row.UseTimeSeconds / row.RequestCount
 		}

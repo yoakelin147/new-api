@@ -113,8 +113,6 @@ func TestGetCostStatisticsAggregatesConsumeLogs(t *testing.T) {
 		TokenName:        "codex-key",
 		ModelName:        "gpt-5.5",
 		Group:            "default",
-		ChannelId:        11,
-		ChannelName:      "primary-channel",
 		PromptTokens:     40,
 		CompletionTokens: 60,
 		TotalTokens:      100,
@@ -122,8 +120,122 @@ func TestGetCostStatisticsAggregatesConsumeLogs(t *testing.T) {
 		Quota:            300,
 		GroupRatio:       0.5,
 	}, byToken["codex-key"])
-	assert.Equal(t, "backup-channel", byToken["backup-key"].ChannelName)
+	assert.Zero(t, byToken["backup-key"].ChannelId)
+	assert.Empty(t, byToken["backup-key"].ChannelName)
 	assert.Equal(t, 0.8, byToken["backup-key"].GroupRatio)
+}
+
+func TestGetCostStatisticsHidesChannelsForSelfQuery(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&Channel{Id: 11, Name: "primary-channel", Key: "key-11"}).Error)
+	require.NoError(t, DB.Create(&Channel{Id: 22, Name: "backup-channel", Key: "key-22"}).Error)
+
+	base := time.Date(2026, 7, 16, 9, 0, 0, 0, time.Local)
+	logs := []*Log{
+		{
+			UserId:           7,
+			CreatedAt:        base.Unix(),
+			Type:             LogTypeConsume,
+			TokenId:          101,
+			TokenName:        "codex-key",
+			ModelName:        "gpt-5.5",
+			Group:            "default",
+			ChannelId:        11,
+			Quota:            100,
+			PromptTokens:     10,
+			CompletionTokens: 20,
+		},
+		{
+			UserId:           7,
+			CreatedAt:        base.Add(time.Minute).Unix(),
+			Type:             LogTypeConsume,
+			TokenId:          101,
+			TokenName:        "codex-key",
+			ModelName:        "gpt-5.5",
+			Group:            "default",
+			ChannelId:        22,
+			Quota:            200,
+			PromptTokens:     30,
+			CompletionTokens: 40,
+		},
+	}
+	require.NoError(t, DB.Create(&logs).Error)
+
+	rows, total, summary, err := GetCostStatistics(CostStatisticsQuery{
+		UserId:         7,
+		IsAdmin:        false,
+		LogType:        LogTypeConsume,
+		StartTimestamp: base.Add(-time.Hour).Unix(),
+		EndTimestamp:   base.Add(time.Hour).Unix(),
+		ChannelId:      11,
+	}, 0, 10)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, CostStatisticsSummary{
+		Quota:            300,
+		RequestCount:     2,
+		PromptTokens:     40,
+		CompletionTokens: 60,
+		TotalTokens:      100,
+	}, summary)
+	assert.Equal(t, 0, rows[0].ChannelId)
+	assert.Empty(t, rows[0].ChannelName)
+	assert.Equal(t, 2, rows[0].RequestCount)
+	assert.Equal(t, 300, rows[0].Quota)
+}
+
+func TestGetCostStatisticsKeepsChannelsForAdminQuery(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, DB.Create(&Channel{Id: 11, Name: "primary-channel", Key: "key-11"}).Error)
+	require.NoError(t, DB.Create(&Channel{Id: 22, Name: "backup-channel", Key: "key-22"}).Error)
+
+	base := time.Date(2026, 7, 16, 9, 0, 0, 0, time.Local)
+	logs := []*Log{
+		{
+			UserId:    7,
+			CreatedAt: base.Unix(),
+			Type:      LogTypeConsume,
+			TokenId:   101,
+			TokenName: "codex-key",
+			ModelName: "gpt-5.5",
+			Group:     "default",
+			ChannelId: 11,
+			Quota:     100,
+		},
+		{
+			UserId:    7,
+			CreatedAt: base.Add(time.Minute).Unix(),
+			Type:      LogTypeConsume,
+			TokenId:   101,
+			TokenName: "codex-key",
+			ModelName: "gpt-5.5",
+			Group:     "default",
+			ChannelId: 22,
+			Quota:     200,
+		},
+	}
+	require.NoError(t, DB.Create(&logs).Error)
+
+	rows, total, summary, err := GetCostStatistics(CostStatisticsQuery{
+		IsAdmin:        true,
+		LogType:        LogTypeConsume,
+		StartTimestamp: base.Add(-time.Hour).Unix(),
+		EndTimestamp:   base.Add(time.Hour).Unix(),
+	}, 0, 10)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, total)
+	assert.Equal(t, 300, summary.Quota)
+	byChannel := make(map[int]*CostStatisticsRow)
+	for _, row := range rows {
+		byChannel[row.ChannelId] = row
+	}
+	assert.Equal(t, "primary-channel", byChannel[11].ChannelName)
+	assert.Equal(t, "backup-channel", byChannel[22].ChannelName)
 }
 
 func TestGetCostStatisticsPagination(t *testing.T) {

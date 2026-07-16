@@ -118,12 +118,11 @@ type CostStatisticsColumnId =
   | 'date'
   | 'token'
   | 'model'
-  | 'duration'
   | 'tokens'
   | 'requests'
+  | 'duration'
   | 'groupRatio'
   | 'cost'
-  | 'details'
 
 type CostStatisticsColumnVisibility = Record<CostStatisticsColumnId, boolean>
 
@@ -146,26 +145,25 @@ const DEFAULT_COLUMN_VISIBILITY: CostStatisticsColumnVisibility = {
   date: true,
   token: true,
   model: true,
-  duration: false,
   tokens: true,
   requests: true,
+  duration: false,
   groupRatio: true,
   cost: true,
-  details: false,
 }
 
 const COLUMN_TOGGLE_OPTIONS: Array<{
   id: CostStatisticsColumnId
   label: string
 }> = [
+  { id: 'date', label: 'Date' },
   { id: 'token', label: 'Token' },
   { id: 'model', label: 'Model' },
-  { id: 'duration', label: 'Duration' },
   { id: 'tokens', label: 'Tokens' },
   { id: 'requests', label: 'Requests' },
+  { id: 'duration', label: 'Duration' },
   { id: 'groupRatio', label: 'Group Ratio' },
   { id: 'cost', label: 'Cost' },
-  { id: 'details', label: 'Details' },
 ]
 
 function defaultFilters(): CostStatisticsFilters {
@@ -190,17 +188,21 @@ function formatGroupRatio(value: number) {
   return `${value.toFixed(2)}x`
 }
 
-function formatRangeLabel(start: number, end: number) {
-  if (!start || !end) return '-'
-  return `${formatTimestampToDate(start).slice(0, 16)} ~ ${formatTimestampToDate(end).slice(0, 16)}`
-}
-
 function formatDuration(seconds: number) {
   if (!seconds) return '-'
   if (seconds < 60) return `${seconds}s`
   const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+  const restSeconds = seconds % 60
+  if (minutes < 60)
+    return restSeconds ? `${minutes}m ${restSeconds}s` : `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const restMinutes = minutes % 60
+  return restMinutes ? `${hours}h ${restMinutes}m` : `${hours}h`
+}
+
+function formatRangeLabel(start: number, end: number) {
+  if (!start || !end) return '-'
+  return `${formatTimestampToDate(start).slice(0, 16)} ~ ${formatTimestampToDate(end).slice(0, 16)}`
 }
 
 function formatExportDate(timestamp: number) {
@@ -289,11 +291,6 @@ function getExportRows(
       value: (row: CostStatisticsRow) => row.model_name || '-',
     },
     {
-      id: 'duration',
-      label: t('Duration'),
-      value: (row: CostStatisticsRow) => formatDuration(row.use_time_seconds),
-    },
-    {
       id: 'tokens',
       label: t('Tokens'),
       value: (row: CostStatisticsRow) =>
@@ -305,6 +302,11 @@ function getExportRows(
       value: (row: CostStatisticsRow) => row.request_count,
     },
     {
+      id: 'duration',
+      label: t('Duration'),
+      value: (row: CostStatisticsRow) => formatDuration(row.use_time_seconds),
+    },
+    {
       id: 'groupRatio',
       label: t('Group Ratio'),
       value: (row: CostStatisticsRow) => formatGroupRatio(row.group_ratio),
@@ -313,14 +315,6 @@ function getExportRows(
       id: 'cost',
       label: t('Deduction'),
       value: (row: CostStatisticsRow) => formatLogQuota(row.quota),
-    },
-    {
-      id: 'details',
-      label: t('Details'),
-      value: (row: CostStatisticsRow) =>
-        `${t('Group')}: ${row.group || '-'}; ${t('Channel')}: ${
-          row.channel_id ? `#${row.channel_id}` : '-'
-        } ${row.channel_name || ''}`,
     },
   ]
   const definitions = allDefinitions.filter((column) => visibility[column.id])
@@ -752,16 +746,6 @@ function CostStatisticsTable(props: {
             row.model_name ? <ModelBadge modelName={row.model_name} /> : '-',
         },
         {
-          id: 'duration',
-          header: <HeaderLabel>{t('Duration')}</HeaderLabel>,
-          className: 'w-[120px]',
-          cell: (row: CostStatisticsRow) => (
-            <span className='font-mono tabular-nums'>
-              {formatDuration(row.use_time_seconds)}
-            </span>
-          ),
-        },
-        {
           id: 'tokens',
           header: <HeaderLabel>{t('Tokens')}</HeaderLabel>,
           className: 'w-[180px]',
@@ -784,6 +768,13 @@ function CostStatisticsTable(props: {
           header: <HeaderLabel>{t('Requests')}</HeaderLabel>,
           className: 'w-[120px]',
           cell: (row: CostStatisticsRow) => formatNumber(row.request_count),
+        },
+        {
+          id: 'duration',
+          header: <HeaderLabel>{t('Duration')}</HeaderLabel>,
+          className: 'w-[120px]',
+          cell: (row: CostStatisticsRow) =>
+            formatDuration(row.use_time_seconds),
         },
         {
           id: 'groupRatio',
@@ -810,22 +801,6 @@ function CostStatisticsTable(props: {
             >
               {formatLogQuota(row.quota)}
             </Badge>
-          ),
-        },
-        {
-          id: 'details',
-          header: <HeaderLabel>{t('Details')}</HeaderLabel>,
-          className: 'min-w-[240px]',
-          cell: (row: CostStatisticsRow) => (
-            <div className='flex flex-col gap-1 text-xs'>
-              <span>
-                {t('Group')}: {row.group || '-'}
-              </span>
-              <span className='text-muted-foreground'>
-                {t('Channel')}: {row.channel_id ? `#${row.channel_id}` : '-'}{' '}
-                {row.channel_name || ''}
-              </span>
-            </div>
           ),
         },
       ].filter(
