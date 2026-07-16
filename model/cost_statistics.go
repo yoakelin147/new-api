@@ -293,7 +293,7 @@ func applyCostStatisticsOther(row *CostStatisticsRow, other costStatisticsLogOth
 	if row.CacheWrite1hRate == 0 && other.CacheCreationRatio1h != 0 {
 		row.CacheWrite1hRate = other.CacheCreationRatio1h
 	}
-	if row.ModelPrice == 0 && other.ModelPrice != 0 {
+	if row.ModelPrice == 0 && other.ModelPrice > 0 {
 		row.ModelPrice = other.ModelPrice
 	}
 	if other.BillingMode == "tiered_expr" || row.BillingMode == "" {

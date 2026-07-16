@@ -360,6 +360,11 @@ function nullableNumber(value: number | null | undefined) {
   return value
 }
 
+function nullablePositiveNumber(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null
+  return value
+}
+
 function getCostUsd(row: CostStatisticsRow) {
   return quotaUnitsToDollars(row.quota || 0)
 }
@@ -379,7 +384,7 @@ function getCostExportRows(rows: CostStatisticsRow[]): XlsxCell[][] {
     row.group || '',
     row.username || '',
     row.request_count || 0,
-    row.billing_mode || (row.model_price ? '按次计费' : '按量倍率'),
+    row.billing_mode || (row.model_price > 0 ? '按次计费' : '按量倍率'),
     row.matched_tier || '',
     row.prompt_tokens || 0,
     row.input_tokens || 0,
@@ -392,7 +397,7 @@ function getCostExportRows(rows: CostStatisticsRow[]): XlsxCell[][] {
     nullableNumber(row.cache_write_5m_ratio),
     row.cache_write_1h_tokens || 0,
     nullableNumber(row.cache_write_1h_ratio),
-    nullableNumber(row.model_price),
+    nullablePositiveNumber(row.model_price),
     nullableNumber(row.group_ratio),
     getCostUsd(row),
     getOriginalCostUsd(row),
