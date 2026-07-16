@@ -1120,9 +1120,9 @@ function CostStatisticsTable(props: {
     <StaticDataTable
       data={props.data}
       columns={columns}
-      className='rounded-none border-0'
-      tableClassName='min-w-[980px] [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-20 [&_thead]:bg-card'
-      headerRowClassName='bg-card shadow-[0_1px_0_var(--border)] hover:bg-card'
+      className='overflow-visible rounded-none border-0 [&_[data-slot=table-container]]:overflow-visible'
+      tableClassName='min-w-[980px] [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:bg-card [&_th]:shadow-[0_1px_0_var(--border)]'
+      headerRowClassName='bg-card hover:bg-card'
       getRowKey={(row) =>
         [
           row.date,
