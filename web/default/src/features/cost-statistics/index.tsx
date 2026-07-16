@@ -849,8 +849,8 @@ function CostStatisticsTable(props: {
       data={props.data}
       columns={columns}
       className='rounded-none border-0'
-      tableClassName='min-w-[980px]'
-      headerRowClassName='bg-muted/30 hover:bg-muted/30'
+      tableClassName='min-w-[980px] [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-20 [&_thead]:bg-card'
+      headerRowClassName='bg-card shadow-[0_1px_0_var(--border)] hover:bg-card'
       getRowKey={(row) =>
         [
           row.date,
