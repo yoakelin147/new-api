@@ -1,0 +1,1201 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import {
+  CalendarDays,
+  ChevronDown,
+  ChevronsUpDown,
+  Clock3,
+  Download,
+  Eye,
+  KeyRound,
+  RotateCcw,
+  Search,
+  Trash2,
+} from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import {
+  formatLogQuota,
+  formatNumber,
+  formatTimestampToDate,
+} from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { useIsAdmin } from '@/hooks/use-admin'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from '@/components/ui/empty'
+import { Input } from '@/components/ui/input'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
+import { StaticDataTable } from '@/components/data-table/static/static-data-table'
+import { Main } from '@/components/layout'
+import { ModelBadge } from '@/features/usage-logs/components/model-badge'
+import { getCostStatistics } from './api'
+import type {
+  CostStatisticsData,
+  CostStatisticsFilters,
+  CostStatisticsPeriod,
+  CostStatisticsRow,
+  CostStatisticsType,
+} from './types'
+
+const DEFAULT_PAGE_SIZE = 20
+const EXPORT_RECORDS_STORAGE_KEY = 'newapi:cost-statistics:export-records'
+
+const DEFAULT_DATA: CostStatisticsData = {
+  page: 1,
+  page_size: DEFAULT_PAGE_SIZE,
+  total: 0,
+  items: [],
+  summary: {
+    quota: 0,
+    request_count: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+  },
+  period: 'today',
+  start_timestamp: 0,
+  end_timestamp: 0,
+}
+
+const PERIOD_OPTIONS: Array<{ value: CostStatisticsPeriod; label: string }> = [
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'This Week Range' },
+  { value: 'month', label: 'This Month Range' },
+]
+
+const TYPE_OPTIONS: Array<{ value: CostStatisticsType; label: string }> = [
+  { value: 'all', label: 'All Types' },
+  { value: 'consume', label: 'Consumption' },
+  { value: 'refund', label: 'Refund' },
+]
+
+type CostStatisticsColumnId =
+  | 'date'
+  | 'token'
+  | 'model'
+  | 'duration'
+  | 'tokens'
+  | 'requests'
+  | 'groupRatio'
+  | 'cost'
+  | 'details'
+
+type CostStatisticsColumnVisibility = Record<CostStatisticsColumnId, boolean>
+
+type ExportRecord = {
+  id: string
+  filename: string
+  createdAt: number
+  size: number
+  rowCount: number
+  content: string
+}
+
+type ExportColumnDefinition = {
+  id: CostStatisticsColumnId
+  label: string
+  value: (row: CostStatisticsRow) => string | number
+}
+
+const DEFAULT_COLUMN_VISIBILITY: CostStatisticsColumnVisibility = {
+  date: true,
+  token: true,
+  model: true,
+  duration: false,
+  tokens: true,
+  requests: true,
+  groupRatio: true,
+  cost: true,
+  details: false,
+}
+
+const COLUMN_TOGGLE_OPTIONS: Array<{
+  id: CostStatisticsColumnId
+  label: string
+}> = [
+  { id: 'token', label: 'Token' },
+  { id: 'model', label: 'Model' },
+  { id: 'duration', label: 'Duration' },
+  { id: 'tokens', label: 'Tokens' },
+  { id: 'requests', label: 'Requests' },
+  { id: 'groupRatio', label: 'Group Ratio' },
+  { id: 'cost', label: 'Cost' },
+  { id: 'details', label: 'Details' },
+]
+
+function defaultFilters(): CostStatisticsFilters {
+  return {
+    period: 'today',
+    type: 'all',
+    model: '',
+    token: '',
+    group: '',
+    username: '',
+    channel: '',
+  }
+}
+
+function getLogTypeLabel(t: (key: string) => string, type: number) {
+  if (type === 6) return t('Refund')
+  return t('Consumption')
+}
+
+function formatGroupRatio(value: number) {
+  if (!value) return '-'
+  return `${value.toFixed(2)}x`
+}
+
+function formatRangeLabel(start: number, end: number) {
+  if (!start || !end) return '-'
+  return `${formatTimestampToDate(start).slice(0, 16)} ~ ${formatTimestampToDate(end).slice(0, 16)}`
+}
+
+function formatDuration(seconds: number) {
+  if (!seconds) return '-'
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+}
+
+function formatExportDate(timestamp: number) {
+  const date = new Date(timestamp)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function formatExportSize(size: number) {
+  if (size < 1024) return `${size} B`
+  return `${Math.max(1, Math.round(size / 1024))} KB`
+}
+
+function getPeriodRange(period: CostStatisticsPeriod) {
+  const now = new Date()
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+
+  if (period === 'week') {
+    const offset = (now.getDay() + 6) % 7
+    start.setDate(now.getDate() - offset)
+  } else if (period === 'month') {
+    start.setDate(1)
+  }
+
+  return {
+    start: Math.floor(start.getTime() / 1000),
+    end: Math.floor(now.getTime() / 1000),
+  }
+}
+
+function HeaderLabel(props: { children: React.ReactNode; align?: 'right' }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1',
+        props.align === 'right' && 'justify-end'
+      )}
+    >
+      {props.children}
+      <ChevronsUpDown className='text-muted-foreground size-3.5' />
+    </span>
+  )
+}
+
+function escapeXmlCell(value: string | number) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+function downloadTextFile(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function getExportRows(
+  rows: CostStatisticsRow[],
+  t: (key: string) => string,
+  visibility: CostStatisticsColumnVisibility
+) {
+  const allDefinitions: ExportColumnDefinition[] = [
+    {
+      id: 'date',
+      label: t('Date'),
+      value: (row: CostStatisticsRow) => row.date,
+    },
+    {
+      id: 'token',
+      label: t('Token'),
+      value: (row: CostStatisticsRow) => row.token_name || '-',
+    },
+    {
+      id: 'model',
+      label: t('Model'),
+      value: (row: CostStatisticsRow) => row.model_name || '-',
+    },
+    {
+      id: 'duration',
+      label: t('Duration'),
+      value: (row: CostStatisticsRow) => formatDuration(row.use_time_seconds),
+    },
+    {
+      id: 'tokens',
+      label: t('Tokens'),
+      value: (row: CostStatisticsRow) =>
+        `${row.prompt_tokens} / ${row.completion_tokens} / ${row.total_tokens}`,
+    },
+    {
+      id: 'requests',
+      label: t('Requests'),
+      value: (row: CostStatisticsRow) => row.request_count,
+    },
+    {
+      id: 'groupRatio',
+      label: t('Group Ratio'),
+      value: (row: CostStatisticsRow) => formatGroupRatio(row.group_ratio),
+    },
+    {
+      id: 'cost',
+      label: t('Deduction'),
+      value: (row: CostStatisticsRow) => formatLogQuota(row.quota),
+    },
+    {
+      id: 'details',
+      label: t('Details'),
+      value: (row: CostStatisticsRow) =>
+        `${t('Group')}: ${row.group || '-'}; ${t('Channel')}: ${
+          row.channel_id ? `#${row.channel_id}` : '-'
+        } ${row.channel_name || ''}`,
+    },
+  ]
+  const definitions = allDefinitions.filter((column) => visibility[column.id])
+
+  return {
+    headers: definitions.map((column) => column.label),
+    rows: rows.map((row) => definitions.map((column) => column.value(row))),
+  }
+}
+
+function buildExcelContent(
+  rows: CostStatisticsRow[],
+  t: (key: string) => string,
+  visibility: CostStatisticsColumnVisibility
+) {
+  const data = getExportRows(rows, t, visibility)
+  const tableRows = [
+    `<tr>${data.headers.map((cell) => `<th>${escapeXmlCell(cell)}</th>`).join('')}</tr>`,
+    ...data.rows.map(
+      (row) =>
+        `<tr>${row.map((cell) => `<td>${escapeXmlCell(cell)}</td>`).join('')}</tr>`
+    ),
+  ].join('')
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body><table>${tableRows}</table></body></html>`
+}
+
+function buildExportFilename() {
+  const date = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `cost_aggregate_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}.xlsx`
+}
+
+function loadStoredExportRecords(): ExportRecord[] {
+  try {
+    const raw = window.localStorage.getItem(EXPORT_RECORDS_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.slice(0, 20) : []
+  } catch {
+    return []
+  }
+}
+
+function storeExportRecords(records: ExportRecord[]) {
+  window.localStorage.setItem(
+    EXPORT_RECORDS_STORAGE_KEY,
+    JSON.stringify(records.slice(0, 20))
+  )
+}
+
+function SummaryBadge(props: {
+  label: string
+  value: string
+  loading: boolean
+}) {
+  return (
+    <Badge
+      variant='outline'
+      className='bg-background h-7 rounded-full px-2.5 font-normal shadow-none'
+    >
+      <span className='text-muted-foreground'>{props.label}</span>
+      <span className='font-mono font-semibold tabular-nums'>
+        {props.loading ? <Skeleton className='h-3.5 w-12' /> : props.value}
+      </span>
+    </Badge>
+  )
+}
+
+function ColumnVisibilityMenu(props: {
+  visibility: CostStatisticsColumnVisibility
+  onVisibilityChange: (visibility: CostStatisticsColumnVisibility) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+
+  const toggleColumn = (id: CostStatisticsColumnId, checked: boolean) => {
+    props.onVisibilityChange({
+      ...props.visibility,
+      [id]: checked,
+    })
+  }
+
+  return (
+    <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant='outline'
+            size='sm'
+            className='rounded-full'
+            onMouseEnter={() => setOpen(true)}
+            onFocus={() => setOpen(true)}
+          />
+        }
+      >
+        <Eye data-icon='inline-start' />
+        {t('View')}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align='end'
+        className='w-40'
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('Toggle columns')}</DropdownMenuLabel>
+          {COLUMN_TOGGLE_OPTIONS.map((column) => (
+            <DropdownMenuCheckboxItem
+              key={column.id}
+              checked={props.visibility[column.id]}
+              onCheckedChange={(value) => toggleColumn(column.id, !!value)}
+            >
+              {t(column.label)}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function ExportRecordsPopover(props: {
+  records: ExportRecord[]
+  onDownload: (record: ExportRecord) => void
+  onDelete: (id: string) => void
+  onClear: () => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={<Button variant='outline' size='sm' className='rounded-full' />}
+      >
+        <Clock3 data-icon='inline-start' />
+        {t('Export Records')}
+      </PopoverTrigger>
+      <PopoverContent
+        align='end'
+        className='w-[min(440px,calc(100vw-2rem))] p-0'
+      >
+        <div className='flex items-center justify-between border-b px-4 py-3'>
+          <div className='font-medium'>{t('Export Records')}</div>
+          {props.records.length > 0 && (
+            <Button
+              variant='ghost'
+              size='sm'
+              className='h-7 rounded-full text-xs'
+              onClick={props.onClear}
+            >
+              <Trash2 data-icon='inline-start' />
+              {t('Clear all')}
+            </Button>
+          )}
+        </div>
+        {props.records.length === 0 ? (
+          <div className='flex min-h-32 flex-col items-center justify-center gap-3 p-6 text-center'>
+            <Clock3 className='text-muted-foreground size-9' />
+            <div className='text-muted-foreground text-sm'>
+              {t('No export records')}
+            </div>
+          </div>
+        ) : (
+          <div className='max-h-80 overflow-auto p-2'>
+            {props.records.map((record) => (
+              <div
+                key={record.id}
+                className='hover:bg-muted/50 flex items-center gap-3 rounded-lg p-2'
+              >
+                <div className='bg-primary/10 text-primary flex size-5 shrink-0 items-center justify-center rounded-full'>
+                  <span className='text-xs'>✓</span>
+                </div>
+                <div className='min-w-0 flex-1'>
+                  <div className='truncate text-sm font-medium'>
+                    {record.filename}
+                  </div>
+                  <div className='text-muted-foreground text-xs'>
+                    {t('Completed')} · {formatExportSize(record.size)}
+                  </div>
+                  <div className='text-muted-foreground text-xs'>
+                    {formatExportDate(record.createdAt)}
+                  </div>
+                </div>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  className='rounded-full'
+                  onClick={() => props.onDownload(record)}
+                >
+                  <Download />
+                </Button>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  className='rounded-full'
+                  onClick={() => props.onDelete(record.id)}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function DateRangePicker(props: {
+  period: CostStatisticsPeriod
+  start: number
+  end: number
+  onPeriodChange: (period: CostStatisticsPeriod) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const activeLabel =
+    PERIOD_OPTIONS.find((option) => option.value === props.period)?.label ||
+    'Today'
+
+  const handlePeriodChange = (period: CostStatisticsPeriod) => {
+    props.onPeriodChange(period)
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button
+            type='button'
+            variant='outline'
+            className='h-9 min-w-0 flex-1 justify-start rounded-full px-3 font-normal tabular-nums lg:min-w-[480px]'
+          />
+        }
+      >
+        <CalendarDays data-icon='inline-start' />
+        <span className='truncate'>
+          {formatRangeLabel(props.start, props.end)}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent align='start' className='w-[min(420px,calc(100vw-2rem))]'>
+        <div className='flex flex-col gap-3'>
+          <div className='grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-end'>
+            <div className='flex flex-col gap-1.5'>
+              <div className='text-muted-foreground text-xs'>
+                {t('Start Time')}
+              </div>
+              <Input
+                readOnly
+                value={
+                  props.start
+                    ? formatTimestampToDate(props.start).slice(0, 16)
+                    : ''
+                }
+                className='h-8 font-mono text-xs tabular-nums'
+              />
+            </div>
+            <span className='text-muted-foreground hidden pb-2 text-xs sm:block'>
+              ~
+            </span>
+            <div className='flex flex-col gap-1.5'>
+              <div className='text-muted-foreground text-xs'>
+                {t('End Time')}
+              </div>
+              <Input
+                readOnly
+                value={
+                  props.end ? formatTimestampToDate(props.end).slice(0, 16) : ''
+                }
+                className='h-8 font-mono text-xs tabular-nums'
+              />
+            </div>
+          </div>
+          <div className='grid grid-cols-3 gap-2'>
+            {PERIOD_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                type='button'
+                variant={
+                  props.period === option.value ? 'default' : 'secondary'
+                }
+                size='sm'
+                className='h-8'
+                onClick={() => handlePeriodChange(option.value)}
+              >
+                {t(option.label)}
+              </Button>
+            ))}
+          </div>
+          <div className='text-muted-foreground text-xs'>{t(activeLabel)}</div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function PaginationControls(props: {
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number) => void
+}) {
+  const { t } = useTranslation()
+  const totalPages = Math.max(1, Math.ceil(props.total / props.pageSize))
+  const pages = Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
+    const start = Math.max(1, Math.min(props.page - 1, totalPages - 2))
+    return start + index
+  }).filter((page) => page <= totalPages)
+
+  return (
+    <div className='flex flex-wrap items-center justify-end gap-2 text-sm'>
+      <span className='text-muted-foreground'>
+        {t('Total')}:{' '}
+        <span className='text-foreground'>{formatNumber(props.total)}</span>
+      </span>
+      <span className='text-muted-foreground'>{t('Rows per page')}</span>
+      <Select value={String(props.pageSize)} onValueChange={() => undefined}>
+        <SelectTrigger size='sm' className='h-9 w-[76px] rounded-full'>
+          <SelectValue>{props.pageSize}</SelectValue>
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            <SelectItem value={String(props.pageSize)}>
+              {props.pageSize}
+            </SelectItem>
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <Button
+        variant='ghost'
+        size='icon'
+        className='rounded-full'
+        disabled={props.page <= 1}
+        onClick={() => props.onPageChange(1)}
+      >
+        «
+      </Button>
+      <Button
+        variant='ghost'
+        size='icon'
+        className='rounded-full'
+        disabled={props.page <= 1}
+        onClick={() => props.onPageChange(props.page - 1)}
+      >
+        ‹
+      </Button>
+      {pages.map((page) => (
+        <Button
+          key={page}
+          variant={page === props.page ? 'default' : 'ghost'}
+          size='icon'
+          className='rounded-full font-mono tabular-nums'
+          onClick={() => props.onPageChange(page)}
+        >
+          {page}
+        </Button>
+      ))}
+      <Button
+        variant='ghost'
+        size='icon'
+        className='rounded-full'
+        disabled={props.page >= totalPages}
+        onClick={() => props.onPageChange(props.page + 1)}
+      >
+        ›
+      </Button>
+      <Button
+        variant='ghost'
+        size='icon'
+        className='rounded-full'
+        disabled={props.page >= totalPages}
+        onClick={() => props.onPageChange(totalPages)}
+      >
+        »
+      </Button>
+    </div>
+  )
+}
+
+function CostStatisticsTable(props: {
+  data: CostStatisticsRow[]
+  loading: boolean
+  columnVisibility: CostStatisticsColumnVisibility
+}) {
+  const { t } = useTranslation()
+  const columns = useMemo(
+    () =>
+      [
+        {
+          id: 'date',
+          header: <HeaderLabel>{t('Date')}</HeaderLabel>,
+          className: 'w-[120px]',
+          cell: (row: CostStatisticsRow) => (
+            <div className='flex flex-col gap-1'>
+              <span className='font-mono tabular-nums'>{row.date}</span>
+              <span className='text-primary text-xs'>
+                {getLogTypeLabel(t, row.type)}
+              </span>
+            </div>
+          ),
+        },
+        {
+          id: 'token',
+          header: <HeaderLabel>{t('Token')}</HeaderLabel>,
+          className: 'min-w-[180px]',
+          cell: (row: CostStatisticsRow) => (
+            <div className='flex min-w-0 flex-col gap-1'>
+              <div>
+                <Badge
+                  variant='outline'
+                  className='bg-background max-w-full rounded-full font-medium'
+                >
+                  <KeyRound className='size-3.5' />
+                  <span className='truncate'>{row.token_name || '-'}</span>
+                </Badge>
+              </div>
+              <span className='text-muted-foreground truncate text-xs'>
+                {row.group || (row.token_id > 0 ? `#${row.token_id}` : '-')}
+              </span>
+            </div>
+          ),
+        },
+        {
+          id: 'model',
+          header: <HeaderLabel>{t('Model')}</HeaderLabel>,
+          className: 'min-w-[220px]',
+          cell: (row: CostStatisticsRow) =>
+            row.model_name ? <ModelBadge modelName={row.model_name} /> : '-',
+        },
+        {
+          id: 'duration',
+          header: <HeaderLabel>{t('Duration')}</HeaderLabel>,
+          className: 'w-[120px]',
+          cell: (row: CostStatisticsRow) => (
+            <span className='font-mono tabular-nums'>
+              {formatDuration(row.use_time_seconds)}
+            </span>
+          ),
+        },
+        {
+          id: 'tokens',
+          header: <HeaderLabel>{t('Tokens')}</HeaderLabel>,
+          className: 'w-[180px]',
+          cell: (row: CostStatisticsRow) => (
+            <div className='flex flex-col gap-1 font-mono tabular-nums'>
+              <span>
+                {formatNumber(row.prompt_tokens)} /{' '}
+                {formatNumber(row.completion_tokens)}
+              </span>
+              {row.total_tokens > 0 && (
+                <span className='text-muted-foreground text-xs'>
+                  {formatNumber(row.total_tokens)}
+                </span>
+              )}
+            </div>
+          ),
+        },
+        {
+          id: 'requests',
+          header: <HeaderLabel>{t('Requests')}</HeaderLabel>,
+          className: 'w-[120px]',
+          cell: (row: CostStatisticsRow) => formatNumber(row.request_count),
+        },
+        {
+          id: 'groupRatio',
+          header: <HeaderLabel>{t('Group Ratio')}</HeaderLabel>,
+          className: 'w-[150px]',
+          cell: (row: CostStatisticsRow) => (
+            <Badge
+              variant='outline'
+              className='bg-background rounded-full font-mono'
+            >
+              {formatGroupRatio(row.group_ratio)}
+            </Badge>
+          ),
+        },
+        {
+          id: 'cost',
+          header: <HeaderLabel align='right'>{t('Deduction')}</HeaderLabel>,
+          className: 'w-[160px] text-right',
+          cellClassName: 'text-right',
+          cell: (row: CostStatisticsRow) => (
+            <Badge
+              variant='secondary'
+              className='rounded-full font-mono font-semibold tabular-nums'
+            >
+              {formatLogQuota(row.quota)}
+            </Badge>
+          ),
+        },
+        {
+          id: 'details',
+          header: <HeaderLabel>{t('Details')}</HeaderLabel>,
+          className: 'min-w-[240px]',
+          cell: (row: CostStatisticsRow) => (
+            <div className='flex flex-col gap-1 text-xs'>
+              <span>
+                {t('Group')}: {row.group || '-'}
+              </span>
+              <span className='text-muted-foreground'>
+                {t('Channel')}: {row.channel_id ? `#${row.channel_id}` : '-'}{' '}
+                {row.channel_name || ''}
+              </span>
+            </div>
+          ),
+        },
+      ].filter(
+        (column) => props.columnVisibility[column.id as CostStatisticsColumnId]
+      ),
+    [props.columnVisibility, t]
+  )
+
+  if (props.loading) {
+    return (
+      <div className='flex flex-col gap-2 p-3'>
+        {Array.from({ length: 8 }).map((_, index) => (
+          <Skeleton key={index} className='h-12 w-full' />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <StaticDataTable
+      data={props.data}
+      columns={columns}
+      className='rounded-none border-0'
+      tableClassName='min-w-[980px]'
+      headerRowClassName='bg-muted/30 hover:bg-muted/30'
+      getRowKey={(row) =>
+        [
+          row.date,
+          row.type,
+          row.token_id,
+          row.token_name,
+          row.model_name,
+          row.group,
+          row.channel_id,
+        ].join(':')
+      }
+      getRowClassName={() => 'h-[66px]'}
+      emptyContent={
+        <Empty className='border-0'>
+          <EmptyHeader>
+            <EmptyTitle>{t('No Cost Statistics Found')}</EmptyTitle>
+            <EmptyDescription>
+              {t('No cost statistics match the current filters.')}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      }
+    />
+  )
+}
+
+export function CostStatistics() {
+  const { t } = useTranslation()
+  const isAdmin = useIsAdmin()
+  const [page, setPage] = useState(1)
+  const [searchVersion, setSearchVersion] = useState(0)
+  const [expanded, setExpanded] = useState(false)
+  const [draftFilters, setDraftFilters] = useState(defaultFilters)
+  const [filters, setFilters] = useState(defaultFilters)
+  const [exporting, setExporting] = useState(false)
+  const [columnVisibility, setColumnVisibility] =
+    useState<CostStatisticsColumnVisibility>(DEFAULT_COLUMN_VISIBILITY)
+  const [exportRecords, setExportRecords] = useState<ExportRecord[]>([])
+
+  useEffect(() => {
+    setExportRecords(loadStoredExportRecords())
+  }, [])
+
+  const updateExportRecords = (records: ExportRecord[]) => {
+    setExportRecords(records)
+    storeExportRecords(records)
+  }
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['cost-statistics', isAdmin, page, filters, searchVersion],
+    queryFn: async () => {
+      const result = await getCostStatistics({
+        isAdmin,
+        page,
+        pageSize: DEFAULT_PAGE_SIZE,
+        filters,
+      })
+      if (!result.success) {
+        toast.error(result.message || t('Failed to load cost statistics'))
+        return DEFAULT_DATA
+      }
+      return result.data || DEFAULT_DATA
+    },
+    placeholderData: (previousData) => previousData,
+  })
+
+  const stats = data || DEFAULT_DATA
+  const loadingContent = isLoading || (isFetching && !data)
+  const draftRange = getPeriodRange(draftFilters.period)
+
+  const applyFilters = () => {
+    setPage(1)
+    setFilters({ ...draftFilters })
+    setSearchVersion((value) => value + 1)
+  }
+
+  const resetFilters = () => {
+    const next = defaultFilters()
+    setPage(1)
+    setDraftFilters(next)
+    setFilters(next)
+    setSearchVersion((value) => value + 1)
+  }
+
+  const updateDraft = (
+    key: keyof CostStatisticsFilters,
+    value: string | CostStatisticsPeriod | CostStatisticsType
+  ) => {
+    setDraftFilters((current) => ({ ...current, [key]: value }))
+  }
+
+  const handleExportXlsx = async () => {
+    if (stats.total === 0) {
+      toast.warning(t('No data to export'))
+      return
+    }
+
+    setExporting(true)
+    try {
+      let rows = stats.items
+      if (stats.total > stats.items.length) {
+        const result = await getCostStatistics({
+          isAdmin,
+          page: 1,
+          pageSize: stats.total,
+          filters,
+        })
+        if (!result.success) {
+          toast.error(result.message || t('Failed to load cost statistics'))
+          return
+        }
+        rows = result.data?.items || []
+      }
+      if (rows.length === 0) {
+        toast.warning(t('No data to export'))
+        return
+      }
+
+      const filename = buildExportFilename()
+      const content = buildExcelContent(rows, t, columnVisibility)
+      downloadTextFile(
+        filename,
+        content,
+        'application/vnd.ms-excel;charset=utf-8'
+      )
+      const record: ExportRecord = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        filename,
+        createdAt: Date.now(),
+        size: new Blob([content]).size,
+        rowCount: rows.length,
+        content,
+      }
+      updateExportRecords([record, ...exportRecords])
+      toast.success(t('Export completed'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const activeTypeLabel =
+    TYPE_OPTIONS.find((option) => option.value === draftFilters.type)?.label ||
+    'All Types'
+
+  return (
+    <Main className='bg-muted/30 p-3 sm:p-4'>
+      <div className='bg-card flex min-h-0 flex-1 flex-col rounded-3xl border p-4 shadow-xs sm:p-6'>
+        <h1 className='text-2xl font-bold tracking-tight'>
+          {t('Cost Statistics')}
+        </h1>
+
+        <div className='mt-5 rounded-2xl border p-3'>
+          <div className='flex flex-col gap-3'>
+            <div className='flex flex-col gap-2 lg:flex-row'>
+              <DateRangePicker
+                period={draftFilters.period}
+                start={draftRange.start}
+                end={draftRange.end}
+                onPeriodChange={(period) => updateDraft('period', period)}
+              />
+
+              <Select value='day' onValueChange={() => undefined}>
+                <SelectTrigger className='h-9 flex-1 rounded-full lg:max-w-[370px]'>
+                  <SelectValue>{t('Daily Query')}</SelectValue>
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    <SelectItem value='day'>{t('Daily Query')}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={draftFilters.type}
+                onValueChange={(value) => {
+                  updateDraft('type', (value || 'all') as CostStatisticsType)
+                }}
+              >
+                <SelectTrigger className='h-9 flex-1 rounded-full lg:max-w-[370px]'>
+                  <SelectValue>{t(activeTypeLabel)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {t(option.label)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+
+              <Button
+                type='button'
+                variant='ghost'
+                className='h-9 rounded-full'
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {t(expanded ? 'Collapse' : 'Expand')}
+                <ChevronDown
+                  data-icon='inline-end'
+                  className={cn(expanded && 'rotate-180')}
+                />
+              </Button>
+            </div>
+
+            {expanded && (
+              <div
+                className={cn(
+                  'grid gap-2',
+                  isAdmin ? 'sm:grid-cols-2 lg:grid-cols-5' : 'sm:grid-cols-3'
+                )}
+              >
+                <Input
+                  placeholder={t('Model')}
+                  value={draftFilters.model}
+                  onChange={(event) => updateDraft('model', event.target.value)}
+                  className='h-9 rounded-full'
+                />
+                <Input
+                  placeholder={t('Token Name')}
+                  value={draftFilters.token}
+                  onChange={(event) => updateDraft('token', event.target.value)}
+                  className='h-9 rounded-full'
+                />
+                <Input
+                  placeholder={t('Group')}
+                  value={draftFilters.group}
+                  onChange={(event) => updateDraft('group', event.target.value)}
+                  className='h-9 rounded-full'
+                />
+                {isAdmin && (
+                  <>
+                    <Input
+                      placeholder={t('Username')}
+                      value={draftFilters.username}
+                      onChange={(event) =>
+                        updateDraft('username', event.target.value)
+                      }
+                      className='h-9 rounded-full'
+                    />
+                    <Input
+                      placeholder={t('Channel ID')}
+                      value={draftFilters.channel}
+                      onChange={(event) =>
+                        updateDraft('channel', event.target.value)
+                      }
+                      className='h-9 rounded-full'
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className='flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between'>
+              <div className='flex min-w-0 flex-col gap-2'>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <SummaryBadge
+                    label={t('Deduction')}
+                    value={formatLogQuota(stats.summary.quota)}
+                    loading={loadingContent}
+                  />
+                  <SummaryBadge
+                    label={t('Requests')}
+                    value={formatNumber(stats.summary.request_count)}
+                    loading={loadingContent}
+                  />
+                </div>
+                <div className='text-muted-foreground truncate text-xs'>
+                  {t(
+                    'Statistics refresh every 20 minutes; today data may be delayed by about 1.5 hours.'
+                  )}
+                </div>
+              </div>
+
+              <div className='flex flex-wrap justify-start gap-2 lg:justify-end'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='rounded-full'
+                  disabled={exporting}
+                  onClick={handleExportXlsx}
+                >
+                  <Download data-icon='inline-start' />
+                  {t('Export XLSX')}
+                </Button>
+                <ExportRecordsPopover
+                  records={exportRecords}
+                  onDownload={(record) =>
+                    downloadTextFile(
+                      record.filename,
+                      record.content,
+                      'application/vnd.ms-excel;charset=utf-8'
+                    )
+                  }
+                  onDelete={(id) =>
+                    updateExportRecords(
+                      exportRecords.filter((record) => record.id !== id)
+                    )
+                  }
+                  onClear={() => updateExportRecords([])}
+                />
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='rounded-full'
+                  onClick={resetFilters}
+                >
+                  <RotateCcw data-icon='inline-start' />
+                  {t('Reset')}
+                </Button>
+                <Button
+                  size='sm'
+                  className='rounded-full'
+                  onClick={applyFilters}
+                >
+                  <Search data-icon='inline-start' />
+                  {t('Search')}
+                </Button>
+                <ColumnVisibilityMenu
+                  visibility={columnVisibility}
+                  onVisibilityChange={setColumnVisibility}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className='mt-4 min-h-0 flex-1 overflow-auto rounded-2xl border'>
+          <CostStatisticsTable
+            data={stats.items}
+            loading={loadingContent}
+            columnVisibility={columnVisibility}
+          />
+        </div>
+
+        <div className='mt-3'>
+          <PaginationControls
+            page={page}
+            pageSize={stats.page_size || DEFAULT_PAGE_SIZE}
+            total={stats.total}
+            onPageChange={setPage}
+          />
+        </div>
+      </div>
+    </Main>
+  )
+}

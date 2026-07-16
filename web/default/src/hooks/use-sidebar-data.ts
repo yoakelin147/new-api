@@ -26,6 +26,7 @@ import {
   LayoutDashboard,
   ListTodo,
   MessageSquare,
+  ReceiptText,
   Radio,
   Settings,
   Ticket,
@@ -86,6 +87,11 @@ export function useSidebarData(): SidebarData {
             title: t('Usage Logs'),
             url: '/usage-logs/common',
             icon: FileText,
+          },
+          {
+            title: t('Cost Statistics'),
+            url: '/cost-statistics',
+            icon: ReceiptText,
           },
           {
             title: t('Task Logs'),

@@ -288,6 +288,12 @@ func SetApiRouter(router *gin.Engine) {
 			}
 		}
 
+		costStatisticsRoute := apiRouter.Group("/cost_statistics")
+		{
+			costStatisticsRoute.GET("/", middleware.AdminAuth(), controller.GetCostStatistics)
+			costStatisticsRoute.GET("/self", middleware.UserAuth(), controller.GetSelfCostStatistics)
+		}
+
 		redemptionRoute := apiRouter.Group("/redemption")
 		redemptionRoute.Use(middleware.AdminAuth())
 		{
