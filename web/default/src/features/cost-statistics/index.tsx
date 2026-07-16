@@ -36,6 +36,7 @@ import {
   formatLogQuota,
   formatNumber,
   formatTimestampToDate,
+  quotaUnitsToDollars,
 } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
@@ -137,11 +138,7 @@ type ExportRecord = {
   content: string
 }
 
-type ExportColumnDefinition = {
-  id: CostStatisticsColumnId
-  label: string
-  value: (row: CostStatisticsRow) => string | number
-}
+type XlsxCell = string | number | null
 
 const DEFAULT_COLUMN_VISIBILITY: CostStatisticsColumnVisibility = {
   date: true,
@@ -320,59 +317,140 @@ function base64ToBytes(base64: string) {
   return bytes
 }
 
-function getExportRows(
-  rows: CostStatisticsRow[],
-  t: (key: string) => string,
-  visibility: CostStatisticsColumnVisibility
-) {
-  const allDefinitions: ExportColumnDefinition[] = [
-    {
-      id: 'date',
-      label: t('Date'),
-      value: (row: CostStatisticsRow) => row.date,
-    },
-    {
-      id: 'token',
-      label: t('Token'),
-      value: (row: CostStatisticsRow) => row.token_name || '-',
-    },
-    {
-      id: 'model',
-      label: t('Model'),
-      value: (row: CostStatisticsRow) => row.model_name || '-',
-    },
-    {
-      id: 'tokens',
-      label: t('Tokens'),
-      value: (row: CostStatisticsRow) =>
-        `${row.prompt_tokens} / ${row.completion_tokens} / ${row.total_tokens}`,
-    },
-    {
-      id: 'requests',
-      label: t('Requests'),
-      value: (row: CostStatisticsRow) => row.request_count,
-    },
-    {
-      id: 'duration',
-      label: t('Duration'),
-      value: (row: CostStatisticsRow) => formatDuration(row.use_time_seconds),
-    },
-    {
-      id: 'groupRatio',
-      label: t('Group Ratio'),
-      value: (row: CostStatisticsRow) => formatGroupRatio(row.group_ratio),
-    },
-    {
-      id: 'cost',
-      label: t('Deduction'),
-      value: (row: CostStatisticsRow) => formatLogQuota(row.quota),
-    },
-  ]
-  const definitions = allDefinitions.filter((column) => visibility[column.id])
+const COST_EXPORT_HEADERS = [
+  '日期',
+  '类型',
+  '模型',
+  '令牌',
+  '分组',
+  '用户',
+  '请求数',
+  '计费模式',
+  '匹配阶梯',
+  '提示词 Token',
+  '输入 Token（不含缓存）',
+  '提示词单价 ($/1M)',
+  '补全 Token',
+  '补全单价 ($/1M)',
+  '缓存读取 Token',
+  '缓存读取单价 ($/1M)',
+  '缓存写入5m Token',
+  '缓存写入5m单价 ($/1M)',
+  '缓存写入1h Token',
+  '缓存写入1h单价 ($/1M)',
+  '固定单价 ($/次)',
+  '分组倍率',
+  '费用 ($)',
+  '原价 ($)',
+] as const
 
-  return {
-    headers: definitions.map((column) => column.label),
-    rows: rows.map((row) => definitions.map((column) => column.value(row))),
+function formatExportDateValue(date: string) {
+  if (/^\d{8}$/.test(date)) {
+    return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
+  }
+  return date
+}
+
+function getExportTypeLabel(type: number) {
+  return type === 6 ? '退款' : '消耗'
+}
+
+function nullableNumber(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value) || value === 0) return null
+  return value
+}
+
+function getCostUsd(row: CostStatisticsRow) {
+  return quotaUnitsToDollars(row.quota || 0)
+}
+
+function getOriginalCostUsd(row: CostStatisticsRow) {
+  const cost = getCostUsd(row)
+  if (!row.group_ratio) return cost
+  return cost / row.group_ratio
+}
+
+function getCostExportRows(rows: CostStatisticsRow[]): XlsxCell[][] {
+  return rows.map((row) => [
+    formatExportDateValue(row.date),
+    getExportTypeLabel(row.type),
+    row.model_name || '',
+    row.token_name || '',
+    row.group || '',
+    row.username || '',
+    row.request_count || 0,
+    row.billing_mode || (row.model_price ? '按次计费' : '按量倍率'),
+    row.matched_tier || '',
+    row.prompt_tokens || 0,
+    row.input_tokens || 0,
+    nullableNumber(row.model_ratio),
+    row.completion_tokens || 0,
+    nullableNumber(row.completion_ratio),
+    row.cache_tokens || 0,
+    nullableNumber(row.cache_ratio),
+    row.cache_write_5m_tokens || 0,
+    nullableNumber(row.cache_write_5m_ratio),
+    row.cache_write_1h_tokens || 0,
+    nullableNumber(row.cache_write_1h_ratio),
+    nullableNumber(row.model_price),
+    nullableNumber(row.group_ratio),
+    getCostUsd(row),
+    getOriginalCostUsd(row),
+  ])
+}
+
+function formatCostExportDateTime(timestamp: number) {
+  return formatTimestampToDate(timestamp).slice(0, 19)
+}
+
+function formatExportDay(timestamp: number) {
+  const formatted = formatTimestampToDate(timestamp).slice(0, 10)
+  if (formatted === '-') return ''
+  return formatted.replaceAll('-', '')
+}
+
+function getCostExportInfoRows(
+  data: CostStatisticsData,
+  filters: CostStatisticsFilters
+): XlsxCell[][] {
+  return [
+    ['费用导出说明'],
+    ['导出时间', formatCostExportDateTime(Math.floor(Date.now() / 1000))],
+    [
+      '时间范围',
+      `${formatExportDay(data.start_timestamp)} ~ ${formatExportDay(data.end_timestamp)}`,
+    ],
+    ['用户', filters.username || '全部'],
+    ['类型', getCostExportFilterTypeLabel(filters.type)],
+    ['记录数', String(data.total)],
+    [''],
+    ['字段与计算口径'],
+    ['费用 ($)', '实际扣费金额（最终价格）'],
+    ['原价 ($)', '费用 ÷ 分组倍率（即未享分组折扣前的金额）'],
+    ['分组倍率', '分组折扣倍率，小于 1 表示折扣'],
+    ['缓存 Token', '缓存读取 + 缓存写入5m + 缓存写入1h'],
+    [
+      '输入 Token（不含缓存）',
+      '按原价计费的输入 Token；Claude 类模型的“提示词 Token”本身已不含缓存，其余模型为提示词 Token 减去缓存读取与缓存写入；汇总（按小时/按天）导出中，本列在功能上线前的历史周期显示为 0，需管理员对该时间范围触发重算后才会补全',
+    ],
+    ['计费模式', '按量倍率 / 按次计费 / 动态计费'],
+    ['类型枚举', '消耗 / 退款'],
+    ['单价单位', '$ / 1M tokens 或 $ / 次'],
+    [
+      '统计延迟',
+      '统计数据每 20 分钟按已完成小时聚合一次，今日数据最长延迟约 1.5 小时',
+    ],
+  ]
+}
+
+function getCostExportFilterTypeLabel(type: CostStatisticsType) {
+  switch (type) {
+    case 'consume':
+      return '消耗'
+    case 'refund':
+      return '退款'
+    default:
+      return '全部'
   }
 }
 
@@ -387,16 +465,34 @@ function getColumnName(index: number) {
   return name
 }
 
-function getColumnWidth(rows: Array<Array<string | number>>, index: number) {
+function getColumnWidth(rows: XlsxCell[][], index: number) {
   const maxLength = rows.reduce((max, row) => {
     return Math.max(max, String(row[index] ?? '').length)
   }, 8)
-  return Math.min(Math.max(maxLength + 2, 10), 36)
+  return Math.min(Math.max(maxLength + 2, 10), 54)
 }
 
-function buildWorksheetXml(rows: Array<Array<string | number>>) {
-  const columns = rows[0] || []
-  const colsXml = columns
+function getCellStyle(rowIndex: number, columnIndex: number, value: XlsxCell) {
+  if (rowIndex === 0) return 1
+  if (typeof value !== 'number') return 2
+  if ([6, 9, 10, 12, 14, 16, 18].includes(columnIndex)) return 3
+  if (columnIndex === 21) return 5
+  return 4
+}
+
+function buildCellXml(cellRef: string, value: XlsxCell, style: number) {
+  if (value == null || value === '') {
+    return `<c r="${cellRef}" s="${style}"></c>`
+  }
+  if (typeof value === 'number') {
+    return `<c r="${cellRef}" s="${style}"><v>${value}</v></c>`
+  }
+  return `<c r="${cellRef}" s="${style}" t="inlineStr"><is><t>${escapeXmlCell(value)}</t></is></c>`
+}
+
+function buildWorksheetXml(rows: XlsxCell[][]) {
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 1)
+  const colsXml = Array.from({ length: columnCount })
     .map((_, index) => {
       const width = getColumnWidth(rows, index)
       return `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`
@@ -408,8 +504,11 @@ function buildWorksheetXml(rows: Array<Array<string | number>>) {
       const cellsXml = row
         .map((cell, columnIndex) => {
           const cellRef = `${getColumnName(columnIndex)}${rowNumber}`
-          const style = rowIndex === 0 ? ' s="1"' : ''
-          return `<c r="${cellRef}" t="inlineStr"${style}><is><t>${escapeXmlCell(cell)}</t></is></c>`
+          return buildCellXml(
+            cellRef,
+            cell,
+            getCellStyle(rowIndex, columnIndex, cell)
+          )
         })
         .join('')
       return `<row r="${rowNumber}">${cellsXml}</row>`
@@ -417,7 +516,8 @@ function buildWorksheetXml(rows: Array<Array<string | number>>) {
     .join('')
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:${getColumnName(columnCount - 1)}${rows.length}"/>
   <sheetViews>
     <sheetView workbookViewId="0" showGridLines="1"/>
   </sheetViews>
@@ -429,11 +529,14 @@ function buildWorksheetXml(rows: Array<Array<string | number>>) {
 
 function buildXlsxContent(
   rows: CostStatisticsRow[],
-  t: (key: string) => string,
-  visibility: CostStatisticsColumnVisibility
+  data: CostStatisticsData,
+  filters: CostStatisticsFilters
 ) {
-  const data = getExportRows(rows, t, visibility)
-  const sheetRows = [data.headers, ...data.rows]
+  const sheetRows: XlsxCell[][] = [
+    Array.from(COST_EXPORT_HEADERS),
+    ...getCostExportRows(rows),
+  ]
+  const infoRows = getCostExportInfoRows(data, filters)
   return createZip([
     {
       path: '[Content_Types].xml',
@@ -446,6 +549,7 @@ function buildXlsxContent(
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
 </Types>`,
     },
     {
@@ -477,7 +581,8 @@ function buildXlsxContent(
       content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
-    <sheet name="cost_aggregate" sheetId="1" r:id="rId1"/>
+    <sheet name="数据" sheetId="1" r:id="rId1"/>
+    <sheet name="说明" sheetId="2" r:id="rId2"/>
   </sheets>
 </workbook>`,
     },
@@ -486,27 +591,37 @@ function buildXlsxContent(
       content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`,
     },
     {
       path: 'xl/styles.xml',
       content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <numFmts count="3">
+    <numFmt numFmtId="164" formatCode="#,##0"/>
+    <numFmt numFmtId="165" formatCode="0.000000"/>
+    <numFmt numFmtId="166" formatCode="0.00"/>
+  </numFmts>
   <fonts count="2">
-    <font><sz val="11"/><name val="Microsoft YaHei"/></font>
-    <font><b/><sz val="11"/><name val="Microsoft YaHei"/></font>
+    <font><sz val="11"/><name val="Calibri"/><family val="2"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font>
   </fonts>
-  <fills count="3">
+  <fills count="2">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFF3F4F6"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
   <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="2">
-    <xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+  <cellXfs count="7">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="true" applyAlignment="true"><alignment horizontal="left"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="true"><alignment horizontal="left"/></xf>
+    <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="true" applyAlignment="true"><alignment horizontal="left"/></xf>
+    <xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="true" applyAlignment="true"><alignment horizontal="left"/></xf>
+    <xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="true" applyAlignment="true"><alignment horizontal="left"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="true"/>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`,
@@ -514,6 +629,10 @@ function buildXlsxContent(
     {
       path: 'xl/worksheets/sheet1.xml',
       content: buildWorksheetXml(sheetRows),
+    },
+    {
+      path: 'xl/worksheets/sheet2.xml',
+      content: buildWorksheetXml(infoRows),
     },
   ])
 }
@@ -1242,7 +1361,7 @@ export function CostStatistics() {
       }
 
       const filename = buildExportFilename()
-      const content = buildXlsxContent(rows, t, columnVisibility)
+      const content = buildXlsxContent(rows, stats, filters)
       downloadBinaryFile(filename, content, XLSX_MIME)
       const record: ExportRecord = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,

@@ -2,7 +2,6 @@ package model
 
 import (
 	"errors"
-	"fmt"
 	"sort"
 	"time"
 
@@ -39,14 +38,27 @@ type CostStatisticsRow struct {
 	TokenName        string  `json:"token_name"`
 	ModelName        string  `json:"model_name"`
 	Group            string  `json:"group"`
+	Username         string  `json:"username"`
 	ChannelId        int     `json:"channel_id"`
 	ChannelName      string  `json:"channel_name"`
 	PromptTokens     int     `json:"prompt_tokens"`
+	InputTokens      int     `json:"input_tokens"`
 	CompletionTokens int     `json:"completion_tokens"`
 	TotalTokens      int     `json:"total_tokens"`
 	RequestCount     int     `json:"request_count"`
 	Quota            int     `json:"quota"`
 	GroupRatio       float64 `json:"group_ratio"`
+	ModelRatio       float64 `json:"model_ratio"`
+	CompletionRatio  float64 `json:"completion_ratio"`
+	CacheTokens      int     `json:"cache_tokens"`
+	CacheRatio       float64 `json:"cache_ratio"`
+	CacheWrite5m     int     `json:"cache_write_5m_tokens"`
+	CacheWrite5mRate float64 `json:"cache_write_5m_ratio"`
+	CacheWrite1h     int     `json:"cache_write_1h_tokens"`
+	CacheWrite1hRate float64 `json:"cache_write_1h_ratio"`
+	ModelPrice       float64 `json:"model_price"`
+	BillingMode      string  `json:"billing_mode"`
+	MatchedTier      string  `json:"matched_tier"`
 	UseTimeSeconds   int     `json:"use_time_seconds"`
 }
 
@@ -57,8 +69,28 @@ type costStatisticsKey struct {
 	TokenName   string
 	ModelName   string
 	Group       string
+	Username    string
 	ChannelId   int
 	ChannelName string
+}
+
+type costStatisticsLogOther struct {
+	ModelRatio            float64 `json:"model_ratio"`
+	GroupRatio            float64 `json:"group_ratio"`
+	CompletionRatio       float64 `json:"completion_ratio"`
+	CacheTokens           int     `json:"cache_tokens"`
+	CacheRatio            float64 `json:"cache_ratio"`
+	CacheCreationTokens   int     `json:"cache_creation_tokens"`
+	CacheCreationRatio    float64 `json:"cache_creation_ratio"`
+	CacheCreationTokens5m int     `json:"cache_creation_tokens_5m"`
+	CacheCreationRatio5m  float64 `json:"cache_creation_ratio_5m"`
+	CacheCreationTokens1h int     `json:"cache_creation_tokens_1h"`
+	CacheCreationRatio1h  float64 `json:"cache_creation_ratio_1h"`
+	ModelPrice            float64 `json:"model_price"`
+	BillingMode           string  `json:"billing_mode"`
+	MatchedTier           string  `json:"matched_tier"`
+	UsageSemantic         string  `json:"usage_semantic"`
+	Claude                bool    `json:"claude"`
 }
 
 func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([]*CostStatisticsRow, int, CostStatisticsSummary, error) {
@@ -98,7 +130,7 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 		tx = tx.Where("logs."+logGroupCol+" = ?", query.Group)
 	}
 
-	tx = tx.Select("id, created_at, type, token_id, token_name, model_name, quota, prompt_tokens, completion_tokens, channel_id, use_time, " + logGroupCol + ", other")
+	tx = tx.Select("id, created_at, type, username, token_id, token_name, model_name, quota, prompt_tokens, completion_tokens, channel_id, use_time, " + logGroupCol + ", other")
 
 	var batch []Log
 	err := tx.Order("logs.created_at desc, logs.id desc").FindInBatches(&batch, 1000, func(_tx *gorm.DB, _batch int) error {
@@ -115,6 +147,7 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 				TokenName: log.TokenName,
 				ModelName: log.ModelName,
 				Group:     log.Group,
+				Username:  log.Username,
 				ChannelId: channelId,
 			}
 			row := rowsByKey[key]
@@ -126,22 +159,24 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 					TokenName:  log.TokenName,
 					ModelName:  log.ModelName,
 					Group:      log.Group,
+					Username:   log.Username,
 					ChannelId:  channelId,
 					GroupRatio: 0,
 				}
 				rowsByKey[key] = row
 			}
+			other := parseCostStatisticsLogOther(log.Other)
 			row.PromptTokens += log.PromptTokens
+			row.InputTokens += costStatisticsInputTokens(log.PromptTokens, other)
 			row.CompletionTokens += log.CompletionTokens
 			row.TotalTokens += log.PromptTokens + log.CompletionTokens
 			row.RequestCount++
 			row.Quota += log.Quota
 			row.UseTimeSeconds += log.UseTime
-			if row.GroupRatio == 0 {
-				if ratio, ok := parseLogGroupRatio(log.Other); ok {
-					row.GroupRatio = ratio
-				}
-			}
+			row.CacheTokens += other.CacheTokens
+			row.CacheWrite5m += costStatisticsCacheWrite5mTokens(other)
+			row.CacheWrite1h += other.CacheCreationTokens1h
+			applyCostStatisticsOther(row, other)
 
 			summary.PromptTokens += log.PromptTokens
 			summary.CompletionTokens += log.CompletionTokens
@@ -206,32 +241,78 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 	return rows[startIdx:endIdx], total, summary, nil
 }
 
-func parseLogGroupRatio(other string) (float64, bool) {
+func parseCostStatisticsLogOther(other string) costStatisticsLogOther {
 	if other == "" {
-		return 0, false
+		return costStatisticsLogOther{}
 	}
-	var data map[string]interface{}
+	var data costStatisticsLogOther
 	if err := common.UnmarshalJsonStr(other, &data); err != nil {
-		return 0, false
+		return costStatisticsLogOther{}
 	}
-	value, ok := data["group_ratio"]
-	if !ok {
-		return 0, false
+	return data
+}
+
+func costStatisticsInputTokens(promptTokens int, other costStatisticsLogOther) int {
+	if other.UsageSemantic == "anthropic" || other.Claude {
+		return promptTokens
 	}
-	switch ratio := value.(type) {
-	case float64:
-		return ratio, true
-	case int:
-		return float64(ratio), true
-	case string:
-		var parsed float64
-		if _, err := fmt.Sscanf(ratio, "%f", &parsed); err != nil {
-			return 0, false
+	inputTokens := promptTokens - other.CacheTokens - other.CacheCreationTokens - other.CacheCreationTokens5m - other.CacheCreationTokens1h
+	if inputTokens < 0 {
+		return 0
+	}
+	return inputTokens
+}
+
+func costStatisticsCacheWrite5mTokens(other costStatisticsLogOther) int {
+	if other.CacheCreationTokens5m > 0 {
+		return other.CacheCreationTokens5m
+	}
+	return other.CacheCreationTokens
+}
+
+func applyCostStatisticsOther(row *CostStatisticsRow, other costStatisticsLogOther) {
+	if row.GroupRatio == 0 && other.GroupRatio != 0 {
+		row.GroupRatio = other.GroupRatio
+	}
+	if row.ModelRatio == 0 && other.ModelRatio != 0 {
+		row.ModelRatio = other.ModelRatio
+	}
+	if row.CompletionRatio == 0 && other.CompletionRatio != 0 {
+		row.CompletionRatio = other.CompletionRatio
+	}
+	if row.CacheRatio == 0 && other.CacheRatio != 0 {
+		row.CacheRatio = other.CacheRatio
+	}
+	if row.CacheWrite5mRate == 0 {
+		if other.CacheCreationRatio5m != 0 {
+			row.CacheWrite5mRate = other.CacheCreationRatio5m
+		} else if other.CacheCreationRatio != 0 {
+			row.CacheWrite5mRate = other.CacheCreationRatio
 		}
-		return parsed, true
-	default:
-		return 0, false
 	}
+	if row.CacheWrite1hRate == 0 && other.CacheCreationRatio1h != 0 {
+		row.CacheWrite1hRate = other.CacheCreationRatio1h
+	}
+	if row.ModelPrice == 0 && other.ModelPrice != 0 {
+		row.ModelPrice = other.ModelPrice
+	}
+	if other.BillingMode == "tiered_expr" || row.BillingMode == "" {
+		row.BillingMode = costStatisticsBillingMode(other)
+	}
+	if row.MatchedTier == "" && other.MatchedTier != "" {
+		row.MatchedTier = other.MatchedTier
+	}
+}
+
+func costStatisticsBillingMode(other costStatisticsLogOther) string {
+	switch other.BillingMode {
+	case "tiered_expr":
+		return "动态计费"
+	}
+	if other.ModelPrice > 0 {
+		return "按次计费"
+	}
+	return "按量倍率"
 }
 
 func getChannelNameMap(channelIds map[int]struct{}) (map[int]string, error) {

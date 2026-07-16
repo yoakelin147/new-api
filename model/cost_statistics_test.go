@@ -114,11 +114,13 @@ func TestGetCostStatisticsAggregatesConsumeLogs(t *testing.T) {
 		ModelName:        "gpt-5.5",
 		Group:            "default",
 		PromptTokens:     40,
+		InputTokens:      40,
 		CompletionTokens: 60,
 		TotalTokens:      100,
 		RequestCount:     2,
 		Quota:            300,
 		GroupRatio:       0.5,
+		BillingMode:      "按量倍率",
 	}, byToken["codex-key"])
 	assert.Zero(t, byToken["backup-key"].ChannelId)
 	assert.Empty(t, byToken["backup-key"].ChannelName)
@@ -236,6 +238,71 @@ func TestGetCostStatisticsKeepsChannelsForAdminQuery(t *testing.T) {
 	}
 	assert.Equal(t, "primary-channel", byChannel[11].ChannelName)
 	assert.Equal(t, "backup-channel", byChannel[22].ChannelName)
+}
+
+func TestGetCostStatisticsAggregatesExportBillingFields(t *testing.T) {
+	truncateTables(t)
+
+	base := time.Date(2026, 7, 16, 9, 0, 0, 0, time.Local)
+	logs := []*Log{
+		{
+			UserId:           7,
+			Username:         "alice",
+			CreatedAt:        base.Unix(),
+			Type:             LogTypeConsume,
+			TokenId:          101,
+			TokenName:        "codex-key",
+			ModelName:        "claude-sonnet-4-6",
+			Group:            "default",
+			Quota:            100,
+			PromptTokens:     100,
+			CompletionTokens: 50,
+			Other:            `{"usage_semantic":"anthropic","claude":true,"model_ratio":3,"group_ratio":0.5,"completion_ratio":5,"cache_tokens":20,"cache_ratio":0.3,"cache_creation_tokens_5m":7,"cache_creation_ratio_5m":1.25,"cache_creation_tokens_1h":3,"cache_creation_ratio_1h":2,"model_price":0,"billing_mode":"tiered_expr","matched_tier":"standard"}`,
+		},
+		{
+			UserId:           7,
+			Username:         "alice",
+			CreatedAt:        base.Add(time.Minute).Unix(),
+			Type:             LogTypeConsume,
+			TokenId:          101,
+			TokenName:        "codex-key",
+			ModelName:        "claude-sonnet-4-6",
+			Group:            "default",
+			Quota:            200,
+			PromptTokens:     40,
+			CompletionTokens: 10,
+			Other:            `{"usage_semantic":"anthropic","claude":true,"model_ratio":3,"group_ratio":0.5,"completion_ratio":5,"cache_tokens":4,"cache_ratio":0.3,"cache_creation_tokens_5m":2,"cache_creation_ratio_5m":1.25}`,
+		},
+	}
+	require.NoError(t, DB.Create(&logs).Error)
+
+	rows, total, _, err := GetCostStatistics(CostStatisticsQuery{
+		UserId:         7,
+		IsAdmin:        false,
+		LogType:        LogTypeConsume,
+		StartTimestamp: base.Add(-time.Hour).Unix(),
+		EndTimestamp:   base.Add(time.Hour).Unix(),
+	}, 0, 10)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, total)
+	require.Len(t, rows, 1)
+	row := rows[0]
+	assert.Equal(t, "alice", row.Username)
+	assert.Equal(t, 140, row.PromptTokens)
+	assert.Equal(t, 140, row.InputTokens)
+	assert.Equal(t, 60, row.CompletionTokens)
+	assert.Equal(t, 24, row.CacheTokens)
+	assert.Equal(t, 9, row.CacheWrite5m)
+	assert.Equal(t, 3, row.CacheWrite1h)
+	assert.Equal(t, 3.0, row.ModelRatio)
+	assert.Equal(t, 0.5, row.GroupRatio)
+	assert.Equal(t, 5.0, row.CompletionRatio)
+	assert.Equal(t, 0.3, row.CacheRatio)
+	assert.Equal(t, 1.25, row.CacheWrite5mRate)
+	assert.Equal(t, 2.0, row.CacheWrite1hRate)
+	assert.Equal(t, "动态计费", row.BillingMode)
+	assert.Equal(t, "standard", row.MatchedTier)
 }
 
 func TestGetCostStatisticsPagination(t *testing.T) {

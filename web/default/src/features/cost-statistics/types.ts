@@ -37,14 +37,27 @@ export interface CostStatisticsRow {
   token_name: string
   model_name: string
   group: string
+  username: string
   channel_id: number
   channel_name: string
   prompt_tokens: number
+  input_tokens: number
   completion_tokens: number
   total_tokens: number
   request_count: number
   quota: number
   group_ratio: number
+  model_ratio: number
+  completion_ratio: number
+  cache_tokens: number
+  cache_ratio: number
+  cache_write_5m_tokens: number
+  cache_write_5m_ratio: number
+  cache_write_1h_tokens: number
+  cache_write_1h_ratio: number
+  model_price: number
+  billing_mode: string
+  matched_tier: string
   use_time_seconds: number
 }
 
