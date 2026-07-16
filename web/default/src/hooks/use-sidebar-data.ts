@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   Activity,
   Box,
+  CircleDollarSign,
   CreditCard,
   FileText,
   FlaskConical,
@@ -26,7 +27,6 @@ import {
   LayoutDashboard,
   ListTodo,
   MessageSquare,
-  ReceiptText,
   Radio,
   Settings,
   Ticket,
@@ -91,7 +91,7 @@ export function useSidebarData(): SidebarData {
           {
             title: t('Cost Statistics'),
             url: '/cost-statistics',
-            icon: ReceiptText,
+            icon: CircleDollarSign,
           },
           {
             title: t('Task Logs'),

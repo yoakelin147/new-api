@@ -1119,11 +1119,6 @@ export function CostStatistics() {
                     loading={loadingContent}
                   />
                 </div>
-                <div className='text-muted-foreground truncate text-xs'>
-                  {t(
-                    'Statistics refresh every 20 minutes; today data may be delayed by about 1.5 hours.'
-                  )}
-                </div>
               </div>
 
               <div className='flex flex-wrap justify-start gap-2 lg:justify-end'>
