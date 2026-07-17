@@ -294,6 +294,15 @@ func SetApiRouter(router *gin.Engine) {
 			costStatisticsRoute.GET("/self", middleware.UserAuth(), controller.GetSelfCostStatistics)
 		}
 
+		profitStatisticsRoute := apiRouter.Group("/profit_statistics")
+		profitStatisticsRoute.Use(middleware.AdminAuth())
+		{
+			profitStatisticsRoute.GET("/", controller.GetProfitStatistics)
+			profitStatisticsRoute.GET("/ratios", controller.ListChannelProfitRatios)
+			profitStatisticsRoute.POST("/ratios", controller.SaveChannelProfitRatio)
+			profitStatisticsRoute.DELETE("/ratios/:id", controller.DeleteChannelProfitRatio)
+		}
+
 		redemptionRoute := apiRouter.Group("/redemption")
 		redemptionRoute.Use(middleware.AdminAuth())
 		{

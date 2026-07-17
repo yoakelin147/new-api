@@ -30,6 +30,7 @@ import {
   Radio,
   Settings,
   Ticket,
+  TrendingUp,
   User,
   Users,
   Wallet,
@@ -126,6 +127,11 @@ export function useSidebarData(): SidebarData {
             title: t('Channels'),
             url: '/channels',
             icon: Radio,
+          },
+          {
+            title: t('Profit Statistics'),
+            url: '/profit-statistics',
+            icon: TrendingUp,
           },
           {
             title: t('Models'),
