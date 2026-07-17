@@ -2788,6 +2788,7 @@
     "No Uptime Kuma groups yet. Click \"Add Group\" to create one.": "暂无 Uptime Kuma 分组。点击“添加分组”来创建一个。",
     "No uptime monitoring configured": "未配置正常运行时间监控",
     "No usage logs available. Logs will appear here once API calls are made.": "暂无使用日志。发起 API 调用后日志将显示在此处。",
+    "No user found.": "未找到用户。",
     "No user information available": "暂无用户信息",
     "No user selected": "未选择用户",
     "No users available. Try adjusting your search or filters.": "没有可用的用户。请尝试调整您的搜索或筛选条件。",

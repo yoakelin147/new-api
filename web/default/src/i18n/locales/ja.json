@@ -2788,6 +2788,7 @@
     "No Uptime Kuma groups yet. Click \"Add Group\" to create one.": "Uptime Kumaグループはまだありません。「グループを追加」をクリックして作成してください。",
     "No uptime monitoring configured": "アップタイム監視が設定されていません",
     "No usage logs available. Logs will appear here once API calls are made.": "使用ログはありません。API呼び出し後にログがここに表示されます。",
+    "No user found.": "ユーザーが見つかりません。",
     "No user information available": "ユーザー情報はありません",
     "No user selected": "ユーザーが選択されていません",
     "No users available. Try adjusting your search or filters.": "利用可能なユーザーがいません。検索またはフィルターを調整してみてください。",

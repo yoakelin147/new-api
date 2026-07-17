@@ -40,6 +40,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ComboboxInput } from '@/components/ui/combobox-input'
 import {
   Dialog,
   DialogContent,
@@ -57,7 +58,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { ComboboxInput } from '@/components/ui/combobox-input'
 import { Input } from '@/components/ui/input'
 import {
   Popover,
@@ -77,6 +77,7 @@ import { StaticDataTable } from '@/components/data-table/static/static-data-tabl
 import { Main } from '@/components/layout'
 import { getChannels, getGroups } from '@/features/channels/api'
 import { ModelBadge } from '@/features/usage-logs/components/model-badge'
+import { getUsers } from '@/features/users/api'
 import {
   deleteChannelProfitRatio,
   getChannelProfitRatios,
@@ -95,6 +96,8 @@ import type {
 } from './types'
 
 const DEFAULT_PAGE_SIZE = 20
+const XLSX_MIME =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 const DEFAULT_DATA: ProfitStatisticsData = {
   page: 1,
@@ -160,7 +163,11 @@ type ProfitStatisticsColumnId =
   | 'profitRate'
   | 'status'
 
-type ProfitStatisticsColumnVisibility = Record<ProfitStatisticsColumnId, boolean>
+type ProfitStatisticsColumnVisibility = Record<
+  ProfitStatisticsColumnId,
+  boolean
+>
+type XlsxCell = string | number | null
 
 const DEFAULT_COLUMN_VISIBILITY: ProfitStatisticsColumnVisibility = {
   date: true,
@@ -283,20 +290,34 @@ function costStatusLabel(t: (key: string) => string, status: ProfitCostStatus) {
   }
 }
 
-function csvEscape(value: string | number | null | undefined) {
-  const text = String(value ?? '')
-  if (!/[",\n]/.test(text)) return text
-  return `"${text.replaceAll('"', '""')}"`
+function exportCostStatusLabel(status: ProfitCostStatus) {
+  switch (status) {
+    case 'configured':
+      return '已配置'
+    case 'estimated':
+      return '估算'
+    default:
+      return '未配置'
+  }
 }
 
-function downloadCsv(
+function escapeXmlCell(value: string | number) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+function downloadBinaryFile(
   filename: string,
-  rows: Array<Array<string | number | null>>
+  content: Uint8Array,
+  type: string
 ) {
-  const content = rows.map((row) => row.map(csvEscape).join(',')).join('\n')
-  const blob = new Blob([`\uFEFF${content}`], {
-    type: 'text/csv;charset=utf-8',
-  })
+  const buffer = new ArrayBuffer(content.byteLength)
+  new Uint8Array(buffer).set(content)
+  const blob = new Blob([buffer], { type })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -310,7 +331,355 @@ function downloadCsv(
 function buildExportFilename() {
   const date = new Date()
   const pad = (value: number) => String(value).padStart(2, '0')
-  return `profit_statistics_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}.csv`
+  return `profit_statistics_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}.xlsx`
+}
+
+const PROFIT_EXPORT_HEADERS = [
+  '日期',
+  '用户名',
+  '分组',
+  '渠道',
+  '模型',
+  '请求数',
+  '提示词 Token',
+  '补全 Token',
+  '总 Token',
+  '客户倍率',
+  '上游倍率',
+  '客户消费',
+  '折前原价',
+  '上游成本',
+  '利润',
+  '利润率',
+  '成本状态',
+] as const
+
+function roundExportNumber(value: number | null | undefined, digits: number) {
+  if (value == null || !Number.isFinite(value)) return null
+  return Number(value.toFixed(digits))
+}
+
+function getProfitExportRows(rows: ProfitStatisticsRow[]): XlsxCell[][] {
+  return rows.map((row) => [
+    row.date,
+    row.username || '全部',
+    row.group || '',
+    row.channel_name
+      ? `#${row.channel_id} ${row.channel_name}`
+      : `#${row.channel_id}`,
+    row.model_name || '',
+    row.request_count || 0,
+    row.prompt_tokens || 0,
+    row.completion_tokens || 0,
+    row.total_tokens || 0,
+    roundExportNumber(row.customer_ratio, 2),
+    roundExportNumber(row.upstream_ratio, 2),
+    roundExportNumber(row.customer_amount, 4),
+    roundExportNumber(row.original_amount, 4),
+    roundExportNumber(row.upstream_cost, 4),
+    roundExportNumber(row.profit, 4),
+    roundExportNumber(
+      row.profit_rate == null ? null : row.profit_rate * 100,
+      2
+    ),
+    exportCostStatusLabel(row.cost_status),
+  ])
+}
+
+function getColumnName(index: number) {
+  let value = index + 1
+  let name = ''
+  while (value > 0) {
+    const remainder = (value - 1) % 26
+    name = String.fromCharCode(65 + remainder) + name
+    value = Math.floor((value - 1) / 26)
+  }
+  return name
+}
+
+function getColumnWidth(rows: XlsxCell[][], index: number) {
+  const maxLength = rows.reduce((max, row) => {
+    return Math.max(max, String(row[index] ?? '').length)
+  }, 8)
+  return Math.min(Math.max(maxLength + 2, 10), 54)
+}
+
+function getExportCellStyle(
+  rowIndex: number,
+  columnIndex: number,
+  value: XlsxCell
+) {
+  if (rowIndex === 0) return 1
+  if (typeof value !== 'number') return 2
+  if ([5, 6, 7, 8].includes(columnIndex)) return 3
+  if ([11, 12, 13, 14].includes(columnIndex)) return 4
+  return 5
+}
+
+function buildCellXml(cellRef: string, value: XlsxCell, style: number) {
+  if (value == null || value === '') {
+    return `<c r="${cellRef}" s="${style}"></c>`
+  }
+  if (typeof value === 'number') {
+    return `<c r="${cellRef}" s="${style}"><v>${value}</v></c>`
+  }
+  return `<c r="${cellRef}" s="${style}" t="inlineStr"><is><t>${escapeXmlCell(value)}</t></is></c>`
+}
+
+function buildWorksheetXml(rows: XlsxCell[][]) {
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 1)
+  const colsXml = Array.from({ length: columnCount })
+    .map((_, index) => {
+      const width = getColumnWidth(rows, index)
+      return `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`
+    })
+    .join('')
+  const rowsXml = rows
+    .map((row, rowIndex) => {
+      const rowNumber = rowIndex + 1
+      const cellsXml = row
+        .map((cell, columnIndex) => {
+          const cellRef = `${getColumnName(columnIndex)}${rowNumber}`
+          return buildCellXml(
+            cellRef,
+            cell,
+            getExportCellStyle(rowIndex, columnIndex, cell)
+          )
+        })
+        .join('')
+      return `<row r="${rowNumber}">${cellsXml}</row>`
+    })
+    .join('')
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:${getColumnName(columnCount - 1)}${rows.length}"/>
+  <sheetViews>
+    <sheetView workbookViewId="0" showGridLines="1">
+      <pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>
+    </sheetView>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="15"/>
+  <cols>${colsXml}</cols>
+  <sheetData>${rowsXml}</sheetData>
+</worksheet>`
+}
+
+function buildXlsxContent(rows: ProfitStatisticsRow[]) {
+  const sheetRows: XlsxCell[][] = [
+    Array.from(PROFIT_EXPORT_HEADERS),
+    ...getProfitExportRows(rows),
+  ]
+  return createZip([
+    {
+      path: '[Content_Types].xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`,
+    },
+    {
+      path: '_rels/.rels',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`,
+    },
+    {
+      path: 'docProps/app.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>New API</Application>
+</Properties>`,
+    },
+    {
+      path: 'docProps/core.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:creator>New API</dc:creator>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created>
+</cp:coreProperties>`,
+    },
+    {
+      path: 'xl/workbook.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="利润统计" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`,
+    },
+    {
+      path: 'xl/_rels/workbook.xml.rels',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`,
+    },
+    {
+      path: 'xl/styles.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <numFmts count="3">
+    <numFmt numFmtId="164" formatCode="#,##0"/>
+    <numFmt numFmtId="165" formatCode="0.0000"/>
+    <numFmt numFmtId="166" formatCode="0.00"/>
+  </numFmts>
+  <fonts count="2">
+    <font><sz val="11"/><name val="Calibri"/><family val="2"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font>
+  </fonts>
+  <fills count="2">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+  </fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="6">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="true" applyAlignment="true"><alignment horizontal="left"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="true"><alignment horizontal="left"/></xf>
+    <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="true" applyAlignment="true"><alignment horizontal="left"/></xf>
+    <xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="true" applyAlignment="true"><alignment horizontal="left"/></xf>
+    <xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="true" applyAlignment="true"><alignment horizontal="left"/></xf>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`,
+    },
+    {
+      path: 'xl/worksheets/sheet1.xml',
+      content: buildWorksheetXml(sheetRows),
+    },
+  ])
+}
+
+type ZipFile = {
+  path: string
+  content: string
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256)
+  for (let index = 0; index < 256; index += 1) {
+    let value = index
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1
+    }
+    table[index] = value >>> 0
+  }
+  return table
+})()
+
+function getCrc32(bytes: Uint8Array) {
+  let value = 0xffffffff
+  for (const byte of bytes) {
+    value = CRC32_TABLE[(value ^ byte) & 0xff] ^ (value >>> 8)
+  }
+  return (value ^ 0xffffffff) >>> 0
+}
+
+function getDosDateTime(date: Date) {
+  const year = Math.max(date.getFullYear(), 1980)
+  return {
+    date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+    time:
+      (date.getHours() << 11) |
+      (date.getMinutes() << 5) |
+      Math.floor(date.getSeconds() / 2),
+  }
+}
+
+function concatBytes(parts: Uint8Array[], totalLength: number) {
+  const result = new Uint8Array(totalLength)
+  let offset = 0
+  for (const part of parts) {
+    result.set(part, offset)
+    offset += part.length
+  }
+  return result
+}
+
+function createZip(files: ZipFile[]) {
+  const encoder = new TextEncoder()
+  const now = getDosDateTime(new Date())
+  const localParts: Uint8Array[] = []
+  const centralParts: Uint8Array[] = []
+  let localOffset = 0
+  let localTotalLength = 0
+  let centralTotalLength = 0
+
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.path)
+    const contentBytes = encoder.encode(file.content)
+    const crc = getCrc32(contentBytes)
+
+    const localHeader = new Uint8Array(30 + nameBytes.length)
+    const localView = new DataView(localHeader.buffer)
+    localView.setUint32(0, 0x04034b50, true)
+    localView.setUint16(4, 20, true)
+    localView.setUint16(6, 0x0800, true)
+    localView.setUint16(8, 0, true)
+    localView.setUint16(10, now.time, true)
+    localView.setUint16(12, now.date, true)
+    localView.setUint32(14, crc, true)
+    localView.setUint32(18, contentBytes.length, true)
+    localView.setUint32(22, contentBytes.length, true)
+    localView.setUint16(26, nameBytes.length, true)
+    localView.setUint16(28, 0, true)
+    localHeader.set(nameBytes, 30)
+    localParts.push(localHeader, contentBytes)
+    localTotalLength += localHeader.length + contentBytes.length
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length)
+    const centralView = new DataView(centralHeader.buffer)
+    centralView.setUint32(0, 0x02014b50, true)
+    centralView.setUint16(4, 20, true)
+    centralView.setUint16(6, 20, true)
+    centralView.setUint16(8, 0x0800, true)
+    centralView.setUint16(10, 0, true)
+    centralView.setUint16(12, now.time, true)
+    centralView.setUint16(14, now.date, true)
+    centralView.setUint32(16, crc, true)
+    centralView.setUint32(20, contentBytes.length, true)
+    centralView.setUint32(24, contentBytes.length, true)
+    centralView.setUint16(28, nameBytes.length, true)
+    centralView.setUint16(30, 0, true)
+    centralView.setUint16(32, 0, true)
+    centralView.setUint16(34, 0, true)
+    centralView.setUint16(36, 0, true)
+    centralView.setUint32(38, 0, true)
+    centralView.setUint32(42, localOffset, true)
+    centralHeader.set(nameBytes, 46)
+    centralParts.push(centralHeader)
+    centralTotalLength += centralHeader.length
+
+    localOffset += localHeader.length + contentBytes.length
+  }
+
+  const endRecord = new Uint8Array(22)
+  const endView = new DataView(endRecord.buffer)
+  endView.setUint32(0, 0x06054b50, true)
+  endView.setUint16(4, 0, true)
+  endView.setUint16(6, 0, true)
+  endView.setUint16(8, files.length, true)
+  endView.setUint16(10, files.length, true)
+  endView.setUint32(12, centralTotalLength, true)
+  endView.setUint32(16, localTotalLength, true)
+  endView.setUint16(20, 0, true)
+
+  return concatBytes(
+    [...localParts, ...centralParts, endRecord],
+    localTotalLength + centralTotalLength + endRecord.length
+  )
 }
 
 function DateRangePicker(props: {
@@ -947,9 +1316,25 @@ export function ProfitStatistics() {
   const [draftFilters, setDraftFilters] = useState(defaultFilters)
   const [filters, setFilters] = useState(defaultFilters)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [columnVisibility, setColumnVisibility] =
     useState<ProfitStatisticsColumnVisibility>(DEFAULT_COLUMN_VISIBILITY)
   const draftRange = getFilterRange(draftFilters)
+  const { data: filterChannelsResponse } = useQuery({
+    queryKey: ['profit-statistics', 'filter-channels'],
+    queryFn: () => getChannels({ p: 0, page_size: 1000, id_sort: true }),
+    staleTime: 300_000,
+  })
+  const { data: filterGroupsResponse } = useQuery({
+    queryKey: ['profit-statistics', 'filter-groups'],
+    queryFn: getGroups,
+    staleTime: 300_000,
+  })
+  const { data: filterUsersResponse } = useQuery({
+    queryKey: ['profit-statistics', 'filter-users'],
+    queryFn: () => getUsers({ p: 1, page_size: 1000 }),
+    staleTime: 300_000,
+  })
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['profit-statistics', page, filters],
@@ -970,6 +1355,73 @@ export function ProfitStatistics() {
 
   const stats = data || DEFAULT_DATA
   const loadingContent = isLoading || (isFetching && !data)
+  const filterChannels = useMemo(() => {
+    const items = filterChannelsResponse?.success
+      ? (filterChannelsResponse.data?.items ?? [])
+      : []
+    return [...items].sort((left, right) => left.id - right.id)
+  }, [filterChannelsResponse])
+  const filterSelectedChannel = filterChannels.find(
+    (channel) => String(channel.id) === draftFilters.channel
+  )
+  const filterChannelOptions = useMemo(
+    () =>
+      filterChannels.map((channel) => ({
+        value: String(channel.id),
+        label: `#${channel.id} ${channel.name}`,
+      })),
+    [filterChannels]
+  )
+  const filterModelOptions = useMemo(() => {
+    const models = new Set<string>()
+    const sourceChannels = filterSelectedChannel
+      ? [filterSelectedChannel]
+      : filterChannels
+    for (const channel of sourceChannels) {
+      for (const model of channel.models.split(',')) {
+        const trimmed = model.trim()
+        if (trimmed) models.add(trimmed)
+      }
+    }
+    return [...models].sort().map((model) => ({
+      value: model,
+      label: model,
+    }))
+  }, [filterChannels, filterSelectedChannel])
+  const filterGroupOptions = useMemo(() => {
+    const groups = new Set<string>()
+    for (const group of filterGroupsResponse?.data ?? []) {
+      const trimmed = group.trim()
+      if (trimmed) groups.add(trimmed)
+    }
+    const sourceChannels = filterSelectedChannel
+      ? [filterSelectedChannel]
+      : filterChannels
+    for (const channel of sourceChannels) {
+      for (const group of channel.group.split(',')) {
+        const trimmed = group.trim()
+        if (trimmed) groups.add(trimmed)
+      }
+    }
+    return [...groups].sort().map((group) => ({
+      value: group,
+      label: group,
+    }))
+  }, [filterChannels, filterGroupsResponse?.data, filterSelectedChannel])
+  const filterUserOptions = useMemo(() => {
+    const users = filterUsersResponse?.success
+      ? (filterUsersResponse.data?.items ?? [])
+      : []
+    return [...users]
+      .sort((left, right) => left.username.localeCompare(right.username))
+      .map((user) => ({
+        value: user.username,
+        label:
+          user.display_name && user.display_name !== user.username
+            ? `${user.username} (${user.display_name})`
+            : user.username,
+      }))
+  }, [filterUsersResponse])
 
   const updateDraft = (
     key: keyof ProfitStatisticsFilters,
@@ -1008,54 +1460,41 @@ export function ProfitStatistics() {
     setFilters(next)
   }
 
-  const exportCsv = () => {
-    if (stats.items.length === 0) {
+  const handleExportXlsx = async () => {
+    if (stats.total === 0) {
       toast.warning(t('No data to export'))
       return
     }
-    downloadCsv(buildExportFilename(), [
-      [
-        '日期',
-        '用户名',
-        '分组',
-        '渠道',
-        '模型',
-        '请求数',
-        '提示词 Token',
-        '补全 Token',
-        '总 Token',
-        '客户倍率',
-        '上游倍率',
-        '客户消费',
-        '折前原价',
-        '上游成本',
-        '利润',
-        '利润率',
-        '成本状态',
-      ],
-      ...stats.items.map((row) => [
-        row.date,
-        row.username || '全部',
-        row.group,
-        row.channel_name
-          ? `#${row.channel_id} ${row.channel_name}`
-          : `#${row.channel_id}`,
-        row.model_name,
-        row.request_count,
-        row.prompt_tokens,
-        row.completion_tokens,
-        row.total_tokens,
-        row.customer_ratio,
-        row.upstream_ratio,
-        row.customer_amount,
-        row.original_amount,
-        row.upstream_cost,
-        row.profit,
-        row.profit_rate == null ? null : row.profit_rate * 100,
-        costStatusLabel(t, row.cost_status),
-      ]),
-    ])
-    toast.success(t('Export completed'))
+
+    setExporting(true)
+    try {
+      let rows = stats.items
+      if (stats.total > stats.items.length) {
+        const result = await getProfitStatistics({
+          page: 1,
+          pageSize: stats.total,
+          filters,
+        })
+        if (!result.success) {
+          toast.error(result.message || t('Failed to load profit statistics'))
+          return
+        }
+        rows = result.data?.items || []
+      }
+      if (rows.length === 0) {
+        toast.warning(t('No data to export'))
+        return
+      }
+
+      downloadBinaryFile(
+        buildExportFilename(),
+        buildXlsxContent(rows),
+        XLSX_MIME
+      )
+      toast.success(t('Export completed'))
+    } finally {
+      setExporting(false)
+    }
   }
 
   const activeTypeLabel =
@@ -1115,30 +1554,40 @@ export function ProfitStatistics() {
             </div>
 
             <div className='grid gap-2 sm:grid-cols-2 lg:grid-cols-4'>
-              <Input
-                placeholder={t('Model')}
+              <ComboboxInput
+                options={filterModelOptions}
+                placeholder={t('Select or enter model name')}
+                emptyText='No model found.'
                 value={draftFilters.model}
-                onChange={(event) => updateDraft('model', event.target.value)}
+                allowCustomValue
+                onValueChange={(value) => updateDraft('model', value)}
                 className='h-9 rounded-full'
               />
-              <Input
+              <ComboboxInput
+                options={filterGroupOptions}
                 placeholder={t('Group')}
                 value={draftFilters.group}
-                onChange={(event) => updateDraft('group', event.target.value)}
+                emptyText='No group found.'
+                allowCustomValue
+                onValueChange={(value) => updateDraft('group', value)}
                 className='h-9 rounded-full'
               />
-              <Input
+              <ComboboxInput
+                options={filterUserOptions}
                 placeholder={t('Username')}
                 value={draftFilters.username}
-                onChange={(event) =>
-                  updateDraft('username', event.target.value)
-                }
+                emptyText='No user found.'
+                allowCustomValue
+                onValueChange={(value) => updateDraft('username', value)}
                 className='h-9 rounded-full'
               />
-              <Input
-                placeholder={t('Channel ID')}
+              <ComboboxInput
+                options={filterChannelOptions}
+                placeholder={t('Select or enter channel ID')}
                 value={draftFilters.channel}
-                onChange={(event) => updateDraft('channel', event.target.value)}
+                emptyText='No channels found'
+                allowCustomValue
+                onValueChange={(value) => updateDraft('channel', value)}
                 className='h-9 rounded-full'
               />
             </div>
@@ -1176,10 +1625,11 @@ export function ProfitStatistics() {
                   variant='outline'
                   size='sm'
                   className='rounded-full'
-                  onClick={exportCsv}
+                  onClick={handleExportXlsx}
+                  disabled={exporting}
                 >
                   <Download data-icon='inline-start' />
-                  {t('Export CSV')}
+                  {t('Export XLSX')}
                 </Button>
                 <Button
                   variant='outline'

@@ -2788,6 +2788,7 @@
     "No Uptime Kuma groups yet. Click \"Add Group\" to create one.": "Пока нет групп Uptime Kuma. Нажмите \"Добавить группу\", чтобы создать одну.",
     "No uptime monitoring configured": "Мониторинг доступности не настроен",
     "No usage logs available. Logs will appear here once API calls are made.": "Нет логов использования. Они появятся после вызовов API.",
+    "No user found.": "Пользователь не найден.",
     "No user information available": "Нет данных пользователя",
     "No user selected": "Пользователь не выбран",
     "No users available. Try adjusting your search or filters.": "Нет доступных пользователей. Попробуйте изменить параметры поиска или фильтры.",
