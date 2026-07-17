@@ -131,10 +131,9 @@ func GetProfitStatistics(query ProfitStatisticsQuery, startIdx int, pageSize int
 
 	tx = tx.Select("id, created_at, type, username, model_name, quota, prompt_tokens, completion_tokens, channel_id, " + logGroupCol + ", other")
 	var logs []Log
-	includeUsername := query.Username != ""
 	if err := tx.Order("logs.created_at desc, logs.id desc").FindInBatches(&logs, 1000, func(_tx *gorm.DB, _batch int) error {
 		for _, log := range logs {
-			addProfitStatisticsLog(rowsByKey, ratiosByChannel, channelNames, log, includeUsername)
+			addProfitStatisticsLog(rowsByKey, ratiosByChannel, channelNames, log)
 		}
 		return nil
 	}).Error; err != nil {
@@ -215,12 +214,9 @@ func GetProfitStatistics(query ProfitStatisticsQuery, startIdx int, pageSize int
 	return rows[startIdx:endIdx], total, summary, nil
 }
 
-func addProfitStatisticsLog(rowsByKey map[profitStatisticsKey]*profitStatisticsAccumulator, ratiosByChannel map[int][]ChannelProfitRatio, channelNames map[int]string, log Log, includeUsername bool) {
+func addProfitStatisticsLog(rowsByKey map[profitStatisticsKey]*profitStatisticsAccumulator, ratiosByChannel map[int][]ChannelProfitRatio, channelNames map[int]string, log Log) {
 	date := time.Unix(log.CreatedAt, 0).Local().Format("20060102")
-	username := ""
-	if includeUsername {
-		username = log.Username
-	}
+	username := log.Username
 	other := parseCostStatisticsLogOther(log.Other)
 	sign := 1.0
 	if log.Type == LogTypeRefund {

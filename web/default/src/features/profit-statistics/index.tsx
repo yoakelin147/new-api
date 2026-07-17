@@ -60,6 +60,13 @@ import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+} from '@/components/ui/pagination'
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -168,6 +175,9 @@ type ProfitStatisticsColumnVisibility = Record<
   boolean
 >
 type XlsxCell = string | number | null
+type PaginationItemData =
+  | { type: 'page'; key: string; page: number }
+  | { type: 'ellipsis'; key: string }
 
 const DEFAULT_COLUMN_VISIBILITY: ProfitStatisticsColumnVisibility = {
   date: true,
@@ -334,6 +344,33 @@ function buildExportFilename() {
   return `profit_statistics_${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}.xlsx`
 }
 
+function getPaginationItems(
+  currentPage: number,
+  totalPages: number
+): PaginationItemData[] {
+  const visiblePages = new Set(
+    [1, totalPages, currentPage - 1, currentPage, currentPage + 1].filter(
+      (page) => page >= 1 && page <= totalPages
+    )
+  )
+  const pages = [...visiblePages].sort((left, right) => left - right)
+  const items: PaginationItemData[] = []
+  let previousPage = 0
+
+  for (const page of pages) {
+    if (previousPage > 0 && page - previousPage > 1) {
+      items.push({
+        type: 'ellipsis',
+        key: `ellipsis-${previousPage}-${page}`,
+      })
+    }
+    items.push({ type: 'page', key: `page-${page}`, page })
+    previousPage = page
+  }
+
+  return items
+}
+
 const PROFIT_EXPORT_HEADERS = [
   '日期',
   '用户名',
@@ -362,7 +399,7 @@ function roundExportNumber(value: number | null | undefined, digits: number) {
 function getProfitExportRows(rows: ProfitStatisticsRow[]): XlsxCell[][] {
   return rows.map((row) => [
     row.date,
-    row.username || '全部',
+    row.username || '',
     row.group || '',
     row.channel_name
       ? `#${row.channel_id} ${row.channel_name}`
@@ -874,7 +911,7 @@ function ProfitStatisticsTable(props: {
         {
           id: 'username',
           header: t('Username'),
-          cell: (row: ProfitStatisticsRow) => row.username || t('All'),
+          cell: (row: ProfitStatisticsRow) => row.username || '-',
         },
         {
           id: 'group',
@@ -1500,6 +1537,10 @@ export function ProfitStatistics() {
   const activeTypeLabel =
     TYPE_OPTIONS.find((option) => option.value === draftFilters.type)?.label ||
     'Consumption'
+  const totalPages = Math.max(1, Math.ceil(stats.total / DEFAULT_PAGE_SIZE))
+  const pageStart = stats.total === 0 ? 0 : (page - 1) * DEFAULT_PAGE_SIZE + 1
+  const pageEnd = Math.min(page * DEFAULT_PAGE_SIZE, stats.total)
+  const paginationItems = getPaginationItems(page, totalPages)
 
   return (
     <Main className='bg-muted/30 p-3 sm:p-4'>
@@ -1665,26 +1706,33 @@ export function ProfitStatistics() {
           />
         </div>
 
-        <div className='mt-3 flex flex-wrap items-center justify-end gap-2 text-sm'>
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={page <= 1}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-          >
-            {t('Previous')}
-          </Button>
+        <div className='mt-3 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between'>
           <span className='text-muted-foreground tabular-nums'>
-            {page} / {Math.max(1, Math.ceil(stats.total / DEFAULT_PAGE_SIZE))}
+            共 {formatNumber(stats.total)} 条，每页 {DEFAULT_PAGE_SIZE} 条，当前{' '}
+            {formatNumber(pageStart)}-{formatNumber(pageEnd)}
           </span>
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={page >= Math.ceil(stats.total / DEFAULT_PAGE_SIZE)}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            {t('Next')}
-          </Button>
+          <Pagination className='mx-0 w-auto justify-end'>
+            <PaginationContent>
+              {paginationItems.map((item) => (
+                <PaginationItem key={item.key}>
+                  {item.type === 'ellipsis' ? (
+                    <PaginationEllipsis />
+                  ) : (
+                    <PaginationLink
+                      href='#'
+                      isActive={item.page === page}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        setPage(item.page)
+                      }}
+                    >
+                      {item.page}
+                    </PaginationLink>
+                  )}
+                </PaginationItem>
+              ))}
+            </PaginationContent>
+          </Pagination>
         </div>
       </div>
       <RatioSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

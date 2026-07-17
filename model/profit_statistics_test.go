@@ -145,7 +145,7 @@ func TestGetProfitStatisticsSummaryProfitRateIgnoresUnconfiguredAmount(t *testin
 	assert.InDelta(t, 0.4, summary.ProfitRate, 0.000001)
 }
 
-func TestGetProfitStatisticsAggregatesAllUsersByDefault(t *testing.T) {
+func TestGetProfitStatisticsSeparatesUsersByDefault(t *testing.T) {
 	truncateTables(t)
 	common.QuotaPerUnit = 500000
 
@@ -176,11 +176,15 @@ func TestGetProfitStatisticsAggregatesAllUsersByDefault(t *testing.T) {
 		EndTimestamp:   base.Add(time.Hour).Unix(),
 	}, 0, 10)
 	require.NoError(t, err)
-	require.Equal(t, 1, total)
+	require.Equal(t, 2, total)
+	require.Len(t, rows, 2)
 
-	assert.Empty(t, rows[0].Username)
-	assert.Equal(t, 2, rows[0].RequestCount)
-	assert.InDelta(t, 200, rows[0].CustomerAmount, 0.000001)
+	assert.Equal(t, "alice", rows[0].Username)
+	assert.Equal(t, 1, rows[0].RequestCount)
+	assert.InDelta(t, 100, rows[0].CustomerAmount, 0.000001)
+	assert.Equal(t, "bob", rows[1].Username)
+	assert.Equal(t, 1, rows[1].RequestCount)
+	assert.InDelta(t, 100, rows[1].CustomerAmount, 0.000001)
 }
 
 func TestGetProfitStatisticsShowsUsernameWhenFiltered(t *testing.T) {
