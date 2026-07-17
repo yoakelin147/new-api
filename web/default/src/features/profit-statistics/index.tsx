@@ -998,7 +998,7 @@ function ProfitStatisticsTable(props: {
       columns={columns}
       data={props.data}
       getRowKey={(row) =>
-        `${row.date}-${row.username}-${row.group}-${row.channel_id}-${row.model_name}`
+        `${row.date}-${row.username}-${row.group}-${row.channel_id}-${row.model_name}-${row.customer_ratio}`
       }
       emptyContent={
         <Empty>

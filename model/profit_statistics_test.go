@@ -222,6 +222,68 @@ func TestGetProfitStatisticsShowsUsernameWhenFiltered(t *testing.T) {
 	assert.InDelta(t, 100, rows[0].CustomerAmount, 0.000001)
 }
 
+func TestGetProfitStatisticsSeparatesChangedCustomerRatios(t *testing.T) {
+	truncateTables(t)
+	common.QuotaPerUnit = 500000
+
+	base := time.Date(2026, 7, 17, 10, 0, 0, 0, time.Local)
+	require.NoError(t, DB.Create(&Channel{Id: 18, Name: "Claude", Key: "key"}).Error)
+	require.NoError(t, DB.Create(&ChannelProfitRatio{
+		ChannelId:     18,
+		UpstreamRatio: 0.4,
+		Enabled:       true,
+	}).Error)
+	for _, item := range []struct {
+		ratio string
+		quota int
+	}{
+		{ratio: `{"group_ratio":0.4}`, quota: int(40 * common.QuotaPerUnit)},
+		{ratio: `{"group_ratio":4}`, quota: int(80 * common.QuotaPerUnit)},
+	} {
+		require.NoError(t, DB.Create(&Log{
+			UserId:    7,
+			Username:  "alice",
+			CreatedAt: base.Unix(),
+			Type:      LogTypeConsume,
+			ModelName: "claude-sonnet-4-6",
+			Group:     "Claude Code专属",
+			ChannelId: 18,
+			Quota:     item.quota,
+			Other:     item.ratio,
+		}).Error)
+	}
+
+	rows, total, summary, err := GetProfitStatistics(ProfitStatisticsQuery{
+		LogType:        LogTypeConsume,
+		StartTimestamp: base.Add(-time.Hour).Unix(),
+		EndTimestamp:   base.Add(time.Hour).Unix(),
+		Username:       "alice",
+	}, 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, 2, total)
+	require.Len(t, rows, 2)
+
+	rowsByRatio := map[float64]*ProfitStatisticsRow{}
+	for _, row := range rows {
+		rowsByRatio[row.CustomerRatio] = row
+	}
+	require.Contains(t, rowsByRatio, 0.4)
+	require.Contains(t, rowsByRatio, 4.0)
+
+	assert.InDelta(t, 40, rowsByRatio[0.4].CustomerAmount, 0.000001)
+	assert.InDelta(t, 100, rowsByRatio[0.4].OriginalAmount, 0.000001)
+	require.NotNil(t, rowsByRatio[0.4].Profit)
+	assert.InDelta(t, 0, *rowsByRatio[0.4].Profit, 0.000001)
+
+	assert.InDelta(t, 80, rowsByRatio[4.0].CustomerAmount, 0.000001)
+	assert.InDelta(t, 20, rowsByRatio[4.0].OriginalAmount, 0.000001)
+	require.NotNil(t, rowsByRatio[4.0].Profit)
+	assert.InDelta(t, 72, *rowsByRatio[4.0].Profit, 0.000001)
+
+	assert.InDelta(t, 120, summary.CustomerAmount, 0.000001)
+	assert.InDelta(t, 72, summary.Profit, 0.000001)
+}
+
 func TestChannelProfitRatioSpecificMatchWins(t *testing.T) {
 	ratios := []ChannelProfitRatio{
 		{Id: 1, ChannelId: 18, UpstreamRatio: 0.3},

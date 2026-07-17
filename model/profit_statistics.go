@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"math"
 	"sort"
 	"time"
 
@@ -64,11 +65,12 @@ type ProfitStatisticsRow struct {
 }
 
 type profitStatisticsKey struct {
-	Date      string
-	Username  string
-	Group     string
-	ChannelId int
-	ModelName string
+	Date             string
+	Username         string
+	Group            string
+	ChannelId        int
+	ModelName        string
+	CustomerRatioKey int64
 }
 
 type profitStatisticsAccumulator struct {
@@ -219,29 +221,6 @@ func addProfitStatisticsLog(rowsByKey map[profitStatisticsKey]*profitStatisticsA
 	if includeUsername {
 		username = log.Username
 	}
-	key := profitStatisticsKey{
-		Date:      date,
-		Username:  username,
-		Group:     log.Group,
-		ChannelId: log.ChannelId,
-		ModelName: log.ModelName,
-	}
-	acc := rowsByKey[key]
-	if acc == nil {
-		acc = &profitStatisticsAccumulator{
-			row: &ProfitStatisticsRow{
-				Date:        date,
-				Username:    username,
-				Group:       log.Group,
-				ChannelId:   log.ChannelId,
-				ChannelName: channelNames[log.ChannelId],
-				ModelName:   log.ModelName,
-				CostStatus:  ProfitCostStatusUnconfigured,
-			},
-		}
-		rowsByKey[key] = acc
-	}
-
 	other := parseCostStatisticsLogOther(log.Other)
 	sign := 1.0
 	if log.Type == LogTypeRefund {
@@ -249,11 +228,39 @@ func addProfitStatisticsLog(rowsByKey map[profitStatisticsKey]*profitStatisticsA
 	}
 	customerAmount := sign * float64(log.Quota) / common.QuotaPerUnit
 	customerRatio := other.GroupRatio
+	missingRatio := false
 	if customerRatio <= 0 {
 		customerRatio = 1
-		acc.row.MissingRatioCount++
+		missingRatio = true
 	}
 	originalAmount := customerAmount / customerRatio
+	key := profitStatisticsKey{
+		Date:             date,
+		Username:         username,
+		Group:            log.Group,
+		ChannelId:        log.ChannelId,
+		ModelName:        log.ModelName,
+		CustomerRatioKey: normalizeProfitRatioKey(customerRatio),
+	}
+	acc := rowsByKey[key]
+	if acc == nil {
+		acc = &profitStatisticsAccumulator{
+			row: &ProfitStatisticsRow{
+				Date:          date,
+				Username:      username,
+				Group:         log.Group,
+				ChannelId:     log.ChannelId,
+				ChannelName:   channelNames[log.ChannelId],
+				ModelName:     log.ModelName,
+				CustomerRatio: customerRatio,
+				CostStatus:    ProfitCostStatusUnconfigured,
+			},
+		}
+		rowsByKey[key] = acc
+	}
+	if missingRatio {
+		acc.row.MissingRatioCount++
+	}
 
 	acc.row.RequestCount++
 	acc.row.PromptTokens += log.PromptTokens
@@ -268,6 +275,10 @@ func addProfitStatisticsLog(rowsByKey map[profitStatisticsKey]*profitStatisticsA
 		acc.upstreamCost += upstreamCost
 		acc.hasUpstreamRatio = true
 	}
+}
+
+func normalizeProfitRatioKey(ratio float64) int64 {
+	return int64(math.Round(ratio * 1_000_000_000))
 }
 
 func ProfitStatisticsHasConfiguredCost(row *ProfitStatisticsRow) bool {
