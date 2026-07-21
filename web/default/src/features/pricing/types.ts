@@ -97,8 +97,33 @@ export type PricingData = {
   vendors: PricingVendor[]
   group_ratio: Record<string, number>
   usable_group: Record<string, { desc: string; ratio: number }>
-  supported_endpoint: Record<string, string>
+  supported_endpoint: Record<string, EndpointInfo>
   auto_groups: string[]
+}
+
+export type EndpointParameter = {
+  name: string
+  type:
+    | 'number'
+    | 'integer'
+    | 'boolean'
+    | 'string'
+    | 'object'
+    | 'array'
+    | 'enum'
+  default?: string | number | boolean
+  range?: string
+  enum_values?: string[]
+  description: string
+  required?: boolean
+}
+
+export type EndpointInfo = {
+  path?: string
+  method?: string
+  description?: string
+  request_example?: Record<string, unknown>
+  parameters?: EndpointParameter[]
 }
 
 export type TokenUnit = 'M' | 'K'

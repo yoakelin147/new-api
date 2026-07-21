@@ -109,6 +109,7 @@ type ExtendedModelFormValues = z.infer<typeof extendedModelFormSchema>
 
 type PricingMode = 'per-token' | 'per-request'
 type PricingSubMode = 'ratio' | 'price'
+type EndpointTemplate = { path: string; method: string }
 
 type ModelMutateDrawerProps = {
   open: boolean
@@ -203,9 +204,22 @@ export function ModelMutateDrawer({
       'channel_affinity_setting.rules': '[]',
       'model_deployment.ionet.api_key': '',
       'model_deployment.ionet.enabled': false,
+      ModelEndpointTemplates: '{}',
+      AsyncTaskUpstreamTemplates: '[]',
     }
     return getOptionValue(systemOptionsData.data, defaultModelSettings)
   }, [systemOptionsData])
+
+  const endpointTemplates = useMemo<Record<string, EndpointTemplate>>(() => {
+    const customTemplates = safeJsonParse<Record<string, EndpointTemplate>>(
+      modelSettings?.ModelEndpointTemplates || '{}',
+      { fallback: {}, silent: true }
+    )
+    return {
+      ...ENDPOINT_TEMPLATES,
+      ...customTemplates,
+    }
+  }, [modelSettings?.ModelEndpointTemplates])
 
   const form = useForm<ExtendedModelFormValues>({
     resolver: zodResolver(extendedModelFormSchema),
@@ -627,7 +641,7 @@ export function ModelMutateDrawer({
   )
 
   const handleFillEndpointTemplate = (templateKey: string) => {
-    const template = ENDPOINT_TEMPLATES[templateKey]
+    const template = endpointTemplates[templateKey]
     if (template) {
       const templateJson = JSON.stringify({ [templateKey]: template }, null, 2)
       form.setValue('endpoints', templateJson)
@@ -837,7 +851,7 @@ export function ModelMutateDrawer({
                 <h3 className='text-sm font-semibold'>{t('Endpoints')}</h3>
                 <Select<string>
                   items={[
-                    ...Object.keys(ENDPOINT_TEMPLATES).map((key) => ({
+                    ...Object.keys(endpointTemplates).map((key) => ({
                       value: key,
                       label: key,
                     })),
@@ -851,7 +865,7 @@ export function ModelMutateDrawer({
                   </SelectTrigger>
                   <SelectContent alignItemWithTrigger={false}>
                     <SelectGroup>
-                      {Object.keys(ENDPOINT_TEMPLATES).map((key) => (
+                      {Object.keys(endpointTemplates).map((key) => (
                         <SelectItem key={key} value={key}>
                           {key}
                         </SelectItem>

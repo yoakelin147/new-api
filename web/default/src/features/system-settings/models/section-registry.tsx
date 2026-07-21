@@ -21,6 +21,7 @@ import { IoNetDeploymentSettingsSection } from '../integrations/ionet-deployment
 import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ClaudeSettingsCard } from './claude-settings-card'
+import { EndpointTemplateSettingsCard } from './endpoint-template-settings-card'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
@@ -64,6 +65,24 @@ const MODELS_SECTIONS = [
             ping_interval_seconds:
               settings['general_setting.ping_interval_seconds'],
           },
+        }}
+      />
+    ),
+  },
+  {
+    id: 'endpoint-templates',
+    titleKey: 'Global Template Configuration',
+    build: (settings: ModelSettings) => (
+      <EndpointTemplateSettingsCard
+        defaultValues={{
+          ModelEndpointTemplates: formatJsonForEditor(
+            settings.ModelEndpointTemplates,
+            '{}'
+          ),
+          AsyncTaskUpstreamTemplates: formatJsonForEditor(
+            settings.AsyncTaskUpstreamTemplates,
+            '[]'
+          ),
         }}
       />
     ),

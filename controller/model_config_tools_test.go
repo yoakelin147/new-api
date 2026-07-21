@@ -25,6 +25,45 @@ func TestNormalizeAIEndpointMetadataConvertsPathArrayToEndpointObject(t *testing
 	}, endpoints)
 }
 
+func TestNormalizeAIEndpointMetadataConvertsOpenAIVideoPath(t *testing.T) {
+	got := normalizeAIEndpointMetadata([]byte(`["/v1/videos"]`))
+
+	var endpoints map[string]common.EndpointInfo
+	require.NoError(t, common.Unmarshal(got, &endpoints))
+	require.Equal(t, map[string]common.EndpointInfo{
+		"openai-video": {
+			Path:   "/v1/videos",
+			Method: "POST",
+		},
+	}, endpoints)
+}
+
+func TestNormalizeAIEndpointMetadataConvertsAsyncImagePath(t *testing.T) {
+	got := normalizeAIEndpointMetadata([]byte(`["/v1/images/generations/async"]`))
+
+	var endpoints map[string]common.EndpointInfo
+	require.NoError(t, common.Unmarshal(got, &endpoints))
+	require.Equal(t, map[string]common.EndpointInfo{
+		"image-generation-async": {
+			Path:   "/v1/images/generations/async",
+			Method: "POST",
+		},
+	}, endpoints)
+}
+
+func TestNormalizeAIEndpointMetadataConvertsLegacyVideoGenerationPath(t *testing.T) {
+	got := normalizeAIEndpointMetadata([]byte(`["/v1/video/generations"]`))
+
+	var endpoints map[string]common.EndpointInfo
+	require.NoError(t, common.Unmarshal(got, &endpoints))
+	require.Equal(t, map[string]common.EndpointInfo{
+		"openai-video": {
+			Path:   "/v1/videos",
+			Method: "POST",
+		},
+	}, endpoints)
+}
+
 func TestNormalizeAIEndpointMetadataDropsUnknownPaths(t *testing.T) {
 	got := normalizeAIEndpointMetadata([]byte(`["/unknown"]`))
 

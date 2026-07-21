@@ -180,6 +180,7 @@ export const TASK_ACTIONS = {
 
   // Video generation (camelCase)
   GENERATE: 'generate', // 图生视频
+  IMAGE_GENERATE: 'imageGenerate', // 生成图片
   TEXT_GENERATE: 'textGenerate', // 文生视频
   FIRST_TAIL_GENERATE: 'firstTailGenerate', // 首尾生视频
   REFERENCE_GENERATE: 'referenceGenerate', // 参照生视频
@@ -285,6 +286,7 @@ export const MJ_SUBMIT_RESULT_MAPPINGS: Record<string, StatusMapping> = {
 export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
   [TASK_ACTIONS.MUSIC]: { label: 'Generate Music', variant: 'neutral' },
   [TASK_ACTIONS.LYRICS]: { label: 'Generate Lyrics', variant: 'pink' },
+  [TASK_ACTIONS.IMAGE_GENERATE]: { label: 'Image Generation', variant: 'blue' },
   [TASK_ACTIONS.GENERATE]: { label: 'Image to Video', variant: 'blue' },
   [TASK_ACTIONS.TEXT_GENERATE]: { label: 'Text to Video', variant: 'blue' },
   [TASK_ACTIONS.FIRST_TAIL_GENERATE]: {

@@ -229,7 +229,7 @@ Rules:
 - Leave endpoints as null for normal chat/completions models, because New API can infer endpoint support from enabled channels.
 - Only set endpoints when the model is clearly non-chat or needs an explicit marketplace endpoint override.
 - When endpoints is needed, it must be a JSON object keyed by endpoint type, never an array of API paths.
-- Allowed endpoint type keys are openai, openai-response, openai-response-compact, anthropic, gemini, jina-rerank, image-generation, embeddings, openai-video.
+- Allowed endpoint type keys are openai, openai-response, openai-response-compact, anthropic, gemini, jina-rerank, image-generation, image-generation-async, embeddings, openai-video.
 - Endpoint object example: {"embeddings":{"path":"/v1/embeddings","method":"POST"}} or {"image-generation":{"path":"/v1/images/generations","method":"POST"}}.
 - Deduplicate vendors.`
 	userPrompt := "Generate metadata configuration for these missing New API models:\n" + strings.Join(modelNames, "\n")
@@ -252,9 +252,6 @@ func extractJSONText(text string) string {
 }
 
 func defaultEndpointInfoByType(endpointType constant.EndpointType) (common.EndpointInfo, bool) {
-	if endpointType == constant.EndpointTypeOpenAIVideo {
-		return common.EndpointInfo{Path: "/v1/videos/generations", Method: "POST"}, true
-	}
 	return common.GetDefaultEndpointInfo(endpointType)
 }
 
@@ -271,6 +268,7 @@ func endpointTypeFromPathOrName(value string) (constant.EndpointType, bool) {
 		constant.EndpointTypeGemini,
 		constant.EndpointTypeJinaRerank,
 		constant.EndpointTypeImageGeneration,
+		constant.EndpointTypeImageGenerationAsync,
 		constant.EndpointTypeEmbeddings,
 		constant.EndpointTypeOpenAIVideo,
 	}
@@ -288,6 +286,10 @@ func endpointTypeFromPathOrName(value string) (constant.EndpointType, bool) {
 		return constant.EndpointTypeJinaRerank, true
 	case "/v1/images/generations":
 		return constant.EndpointTypeImageGeneration, true
+	case "/v1/images/generations/async":
+		return constant.EndpointTypeImageGenerationAsync, true
+	case "/v1/videos", "/v1/video/generations":
+		return constant.EndpointTypeOpenAIVideo, true
 	case "/v1/audio/speech", "/v1/audio/transcriptions":
 		return constant.EndpointTypeOpenAI, true
 	default:

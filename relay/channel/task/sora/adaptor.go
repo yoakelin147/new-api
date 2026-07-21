@@ -18,10 +18,11 @@ import (
 	taskcommon "github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
-	"github.com/tidwall/sjson"
+	"github.com/tidwall/gjson"
 )
 
 // ============================
@@ -45,6 +46,9 @@ type responseTask struct {
 	Model              string `json:"model"`
 	Status             string `json:"status"`
 	Progress           int    `json:"progress"`
+	VideoURL           string `json:"video_url,omitempty"`
+	URL                string `json:"url,omitempty"`
+	ImageURL           string `json:"image_url,omitempty"`
 	CreatedAt          int64  `json:"created_at"`
 	CompletedAt        int64  `json:"completed_at,omitempty"`
 	ExpiresAt          int64  `json:"expires_at,omitempty"`
@@ -63,15 +67,20 @@ type responseTask struct {
 
 type TaskAdaptor struct {
 	taskcommon.BaseBilling
-	ChannelType int
-	apiKey      string
-	baseURL     string
+	ChannelType     int
+	ChannelID       int
+	apiKey          string
+	baseURL         string
+	responseMapping *dto.AsyncTaskResponseMapping
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.ChannelType = info.ChannelType
 	a.baseURL = info.ChannelBaseUrl
 	a.apiKey = info.ApiKey
+	if info.ChannelMeta != nil {
+		a.ChannelID = info.ChannelMeta.ChannelId
+	}
 }
 
 func validateRemixRequest(c *gin.Context) *dto.TaskError {
@@ -98,6 +107,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	// remix 路径的 OtherRatios 已在 ResolveOriginTask 中设置
 	if info.Action == constant.TaskActionRemix {
+		return nil
+	}
+	if info.Action == constant.TaskActionImageGenerate {
 		return nil
 	}
 
@@ -129,9 +141,50 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	return ratios
 }
 
+func (a *TaskAdaptor) selectUpstreamTemplate(info *relaycommon.RelayInfo) *dto.AsyncTaskUpstreamTemplate {
+	if info == nil || info.ChannelMeta == nil {
+		return nil
+	}
+	return relaycommon.SelectAsyncTaskUpstreamTemplate(
+		setting.GetAsyncTaskUpstreamTemplates(),
+		info.ChannelMeta.ChannelId,
+		info.ChannelMeta.ChannelType,
+		info.RequestURLPath,
+		info.OriginModelName,
+	)
+}
+
+func (a *TaskAdaptor) templateContext(info *relaycommon.RelayInfo, body map[string]any, taskID string) relaycommon.AsyncTaskTemplateContext {
+	if info == nil {
+		return relaycommon.AsyncTaskTemplateContext{Body: body}
+	}
+	if taskID == "" && info.TaskRelayInfo != nil {
+		taskID = info.PublicTaskID
+	}
+	ctx := relaycommon.AsyncTaskTemplateContext{
+		RequestPath:   info.RequestURLPath,
+		Model:         info.OriginModelName,
+		UpstreamModel: info.UpstreamModelName,
+		TaskID:        taskID,
+		Body:          body,
+		APIKey:        a.apiKey,
+	}
+	if info.ChannelMeta != nil {
+		ctx.ChannelID = info.ChannelMeta.ChannelId
+		ctx.ChannelType = info.ChannelMeta.ChannelType
+	}
+	return ctx
+}
+
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.Action == constant.TaskActionRemix {
 		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, info.OriginTaskID), nil
+	}
+	if template := a.selectUpstreamTemplate(info); template != nil && strings.TrimSpace(template.SubmitPath) != "" {
+		return relaycommon.BuildAsyncTaskTemplateURL(a.baseURL, template.SubmitPath, a.templateContext(info, nil, "")), nil
+	}
+	if info.Action == constant.TaskActionImageGenerate {
+		return fmt.Sprintf("%s/v1/images/generations/async", a.baseURL), nil
 	}
 	return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
 }
@@ -140,6 +193,12 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
+	if template := a.selectUpstreamTemplate(info); template != nil {
+		ctx := a.templateContext(info, nil, "")
+		for key, value := range template.Headers {
+			req.Header.Set(key, relaycommon.ResolveAsyncTaskTemplateString(value, ctx))
+		}
+	}
 	return nil
 }
 
@@ -157,7 +216,18 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if strings.HasPrefix(contentType, "application/json") {
 		var bodyMap map[string]interface{}
 		if err := common.Unmarshal(cachedBody, &bodyMap); err == nil {
-			bodyMap["model"] = info.UpstreamModelName
+			if template := a.selectUpstreamTemplate(info); template != nil {
+				ctx := a.templateContext(info, bodyMap, "")
+				bodyMap = relaycommon.ApplyAsyncTaskTemplateToBody(bodyMap, *template, ctx)
+				if _, explicitlySetType := template.SetFields["type"]; !explicitlySetType {
+					if _, explicitlyTemplatedType := template.Body["type"]; !explicitlyTemplatedType {
+						delete(bodyMap, "type")
+					}
+				}
+			} else {
+				bodyMap["model"] = info.UpstreamModelName
+				delete(bodyMap, "type")
+			}
 			if newBody, err := common.Marshal(bodyMap); err == nil {
 				return bytes.NewReader(newBody), nil
 			}
@@ -174,7 +244,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		writer := multipart.NewWriter(&buf)
 		writer.WriteField("model", info.UpstreamModelName)
 		for key, values := range formData.Value {
-			if key == "model" {
+			if key == "model" || key == "type" {
 				continue
 			}
 			for _, v := range values {
@@ -240,7 +310,13 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
-	upstreamID := dResp.ID
+	var upstreamID string
+	if template := a.selectUpstreamTemplate(info); template != nil {
+		upstreamID = relaycommon.ExtractAsyncTaskMappedSubmitID(responseBody, template.ResponseMapping)
+	}
+	if upstreamID == "" {
+		upstreamID = dResp.ID
+	}
 	if upstreamID == "" {
 		upstreamID = dResp.TaskID
 	}
@@ -263,7 +339,39 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		return nil, fmt.Errorf("invalid task_id")
 	}
 
+	requestPath, _ := body["request_path"].(string)
+	modelName, _ := body["model"].(string)
+	channelID, _ := body["channel_id"].(int)
+	channelType, _ := body["channel_type"].(int)
+	template := relaycommon.SelectAsyncTaskUpstreamTemplate(
+		setting.GetAsyncTaskUpstreamTemplates(),
+		channelID,
+		channelType,
+		requestPath,
+		modelName,
+	)
+	a.responseMapping = nil
+	if template != nil {
+		a.responseMapping = template.ResponseMapping
+	}
+
+	ctx := relaycommon.AsyncTaskTemplateContext{
+		RequestPath:   requestPath,
+		Model:         modelName,
+		UpstreamModel: modelName,
+		TaskID:        taskID,
+		ChannelID:     channelID,
+		ChannelType:   channelType,
+		Body:          body,
+		APIKey:        key,
+	}
+
 	uri := fmt.Sprintf("%s/v1/videos/%s", baseUrl, taskID)
+	if template != nil && strings.TrimSpace(template.FetchPath) != "" {
+		uri = relaycommon.BuildAsyncTaskTemplateURL(baseUrl, template.FetchPath, ctx)
+	} else if body["action"] == constant.TaskActionImageGenerate {
+		uri = fmt.Sprintf("%s/v1/images/generations/async/%s", baseUrl, taskID)
+	}
 
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
@@ -271,6 +379,11 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	}
 
 	req.Header.Set("Authorization", "Bearer "+key)
+	if template != nil {
+		for header, value := range template.Headers {
+			req.Header.Set(header, relaycommon.ResolveAsyncTaskTemplateString(value, ctx))
+		}
+	}
 
 	client, err := service.GetHttpClientWithProxy(proxy)
 	if err != nil {
@@ -288,6 +401,10 @@ func (a *TaskAdaptor) GetChannelName() string {
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	if taskResult, ok := relaycommon.ParseAsyncTaskResultWithMapping(respBody, a.responseMapping); ok {
+		return taskResult, nil
+	}
+
 	resTask := responseTask{}
 	if err := common.Unmarshal(respBody, &resTask); err != nil {
 		return nil, errors.Wrap(err, "unmarshal task result failed")
@@ -297,15 +414,15 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		Code: 0,
 	}
 
-	switch resTask.Status {
-	case "queued", "pending":
+	switch strings.ToLower(strings.TrimSpace(resTask.Status)) {
+	case "queued", "pending", "submitted":
 		taskResult.Status = model.TaskStatusQueued
-	case "processing", "in_progress":
+	case "processing", "running", "in_progress":
 		taskResult.Status = model.TaskStatusInProgress
-	case "completed":
+	case "completed", "succeeded", "success":
 		taskResult.Status = model.TaskStatusSuccess
-		// Url intentionally left empty — the caller constructs the proxy URL using the public task ID
-	case "failed", "cancelled":
+		taskResult.Url = extractTaskResultURL(respBody)
+	case "failed", "cancelled", "canceled", "error":
 		taskResult.Status = model.TaskStatusFailure
 		if resTask.Error != nil {
 			taskResult.Reason = resTask.Error.Message
@@ -316,16 +433,67 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	}
 	if resTask.Progress > 0 && resTask.Progress < 100 {
 		taskResult.Progress = fmt.Sprintf("%d%%", resTask.Progress)
+	} else if taskResult.Status == model.TaskStatusSuccess {
+		taskResult.Progress = taskcommon.ProgressComplete
 	}
 
 	return &taskResult, nil
 }
 
-func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
-	data := task.Data
-	var err error
-	if data, err = sjson.SetBytes(data, "id", task.TaskID); err != nil {
-		return nil, errors.Wrap(err, "set id failed")
+// extractTaskResultURL 兼容 OpenAI/Sora 以及兔子、Dragon 等常见异步返回。
+// 当前第一阶段保存上游直链；后续接 OSS 时，应在任务完成后将该 URL 下载并上传，
+// 再把 task.PrivateData.ResultURL 替换为我们自己的 OSS 地址。
+func extractTaskResultURL(respBody []byte) string {
+	for _, path := range []string{
+		"video_url",
+		"url",
+		"image_url",
+		"data.video_url",
+		"data.url",
+		"data.image_url",
+		"data.0.url",
+		"data.0.video_url",
+		"data.0.image_url",
+		"data.result.images.0.url",
+		"data.result.images.0.url.0",
+		"result.images.0.url",
+		"result.images.0.url.0",
+		"images.0.url",
+		"images.0.url.0",
+		"output.0.url",
+	} {
+		value := gjson.GetBytes(respBody, path)
+		if value.Exists() && value.Type == gjson.String {
+			if url := strings.TrimSpace(value.String()); url != "" {
+				return url
+			}
+		}
 	}
-	return data, nil
+	return ""
+}
+
+func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
+	openAIVideo := task.ToOpenAIVideo()
+	openAIVideo.Object = "video"
+
+	var resTask responseTask
+	if err := common.Unmarshal(task.Data, &resTask); err == nil && resTask.Error != nil {
+		openAIVideo.Error = &dto.OpenAIVideoError{
+			Message: resTask.Error.Message,
+			Code:    resTask.Error.Code,
+		}
+	}
+
+	if openAIVideo.VideoURL == "" {
+		openAIVideo.VideoURL = extractTaskResultURL(task.Data)
+		if openAIVideo.VideoURL != "" {
+			openAIVideo.SetMetadata("url", openAIVideo.VideoURL)
+		}
+	}
+
+	// 对外永远返回 new-api 公开 task_id。上游 task_id 只保存在 PrivateData，
+	// 用于后台轮询和管理员排查，避免客户侧绑定具体供应商。
+	openAIVideo.ID = task.TaskID
+	openAIVideo.TaskID = task.TaskID
+	return common.Marshal(openAIVideo)
 }

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ChevronRight,
   ExternalLink,
@@ -49,7 +49,7 @@ import {
 } from '../lib/mock-stats'
 import { replaceModelInPath } from '../lib/model-helpers'
 import { inferApiInfo } from '../lib/model-metadata'
-import type { PricingModel } from '../types'
+import type { EndpointInfo, PricingModel } from '../types'
 
 // ---------------------------------------------------------------------------
 // Code-sample registry
@@ -82,6 +82,14 @@ type SampleContext = {
   modelName: string
   endpointType: string
   endpointPath: string
+  method?: string
+}
+
+type ResolvedEndpoint = {
+  type: string
+  path: string
+  method: string
+  info: EndpointInfo
 }
 
 function buildChatSample(lang: Lang, ctx: SampleContext): string {
@@ -425,17 +433,210 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
   ].join('\n')
 }
 
+function buildAsyncImageTaskSample(lang: Lang, ctx: SampleContext): string {
+  const url = `${ctx.baseUrl}${ctx.endpointPath}`
+  const prompt = 'A serene koi pond at sunset, ukiyo-e style.'
+  const body = { model: ctx.modelName, prompt, size: '1024x1024', n: 1 }
+  return buildAsyncTaskSample(lang, ctx, url, body)
+}
+
+function buildAsyncVideoTaskSample(lang: Lang, ctx: SampleContext): string {
+  const url = `${ctx.baseUrl}${ctx.endpointPath}`
+  const body = {
+    model: ctx.modelName,
+    prompt: 'A cinematic shot of a paper boat crossing a neon-lit canal.',
+    ratio: '16:9',
+    duration: 5,
+  }
+  return buildAsyncTaskSample(lang, ctx, url, body)
+}
+
+function buildAsyncTaskSample(
+  lang: Lang,
+  ctx: SampleContext,
+  url: string,
+  body: Record<string, unknown>
+): string {
+  const bodyJson = JSON.stringify(body, null, 2)
+  const fetchPath = `${ctx.endpointPath}/{task_id}`
+  const fetchUrl = `${ctx.baseUrl}${fetchPath}`
+
+  if (lang === 'curl') {
+    return [
+      `curl ${url} \\`,
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -H "Content-Type: application/json" \\`,
+      `  -d '${bodyJson.replace(/\n/g, '\n     ')}'`,
+      '',
+      `curl ${fetchUrl} \\`,
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}"`,
+    ].join('\n')
+  }
+
+  if (lang === 'python') {
+    return [
+      'import time',
+      'import requests',
+      '',
+      `base_url = "${ctx.baseUrl}"`,
+      'headers = {',
+      `    "Authorization": "Bearer <YOUR_API_KEY>",`,
+      `    "Content-Type": "application/json",`,
+      '}',
+      '',
+      `create_resp = requests.post("${url}", headers=headers, json=${bodyJson})`,
+      'create_resp.raise_for_status()',
+      'task_id = create_resp.json()["id"]',
+      '',
+      'while True:',
+      `    task_resp = requests.get(f"${fetchUrl.replace('{task_id}', '{task_id}')}", headers=headers)`,
+      '    task_resp.raise_for_status()',
+      '    task = task_resp.json()',
+      '    if task["status"] in ["completed", "failed", "cancelled"]:',
+      '        print(task)',
+      '        break',
+      '    time.sleep(2)',
+    ].join('\n')
+  }
+
+  const jsObject = bodyJson
+    .split('\n')
+    .map((line, index) => (index === 0 ? line : `  ${line}`))
+    .join('\n')
+
+  return [
+    `const createResponse = await fetch('${url}', {`,
+    `  method: 'POST',`,
+    `  headers: {`,
+    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `    'Content-Type': 'application/json',`,
+    `  },`,
+    `  body: JSON.stringify(${jsObject}),`,
+    `})`,
+    '',
+    `const task = await createResponse.json()`,
+    `const taskResponse = await fetch(\`${fetchUrl.replace('{task_id}', '${task.id}')}\`, {`,
+    `  headers: { Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\` },`,
+    `})`,
+    '',
+    `console.log(await taskResponse.json())`,
+  ].join('\n')
+}
+
+function buildCustomEndpointSample(
+  lang: Lang,
+  ctx: SampleContext,
+  body: Record<string, unknown>
+): string {
+  const url = `${ctx.baseUrl}${ctx.endpointPath}`
+  const bodyJson = JSON.stringify(body, null, 2)
+
+  if (lang === 'curl') {
+    return [
+      `curl ${url} \\`,
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -H "Content-Type: application/json" \\`,
+      `  -d '${bodyJson.replace(/\n/g, '\n     ')}'`,
+    ].join('\n')
+  }
+
+  if (lang === 'python') {
+    return [
+      'import requests',
+      '',
+      'headers = {',
+      `    "Authorization": "Bearer <YOUR_API_KEY>",`,
+      `    "Content-Type": "application/json",`,
+      '}',
+      '',
+      `response = requests.request("${ctx.method || 'POST'}", "${url}", headers=headers, json=${bodyJson})`,
+      'response.raise_for_status()',
+      'print(response.json())',
+    ].join('\n')
+  }
+
+  const jsObject = bodyJson
+    .split('\n')
+    .map((line, index) => (index === 0 ? line : `  ${line}`))
+    .join('\n')
+
+  return [
+    `const response = await fetch('${url}', {`,
+    `  method: '${ctx.method || 'POST'}',`,
+    `  headers: {`,
+    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `    'Content-Type': 'application/json',`,
+    `  },`,
+    `  body: JSON.stringify(${jsObject}),`,
+    `})`,
+    '',
+    `console.log(await response.json())`,
+  ].join('\n')
+}
+
+function resolveTemplateString(value: string, ctx: SampleContext): string {
+  return value
+    .replaceAll('{model}', ctx.modelName)
+    .replaceAll('{endpoint_type}', ctx.endpointType)
+    .replaceAll('{endpoint_path}', ctx.endpointPath)
+    .replaceAll('{method}', ctx.method || 'POST')
+}
+
+function resolveTemplateValue(value: unknown, ctx: SampleContext): unknown {
+  if (typeof value === 'string') return resolveTemplateString(value, ctx)
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveTemplateValue(item, ctx))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        resolveTemplateValue(item, ctx),
+      ])
+    )
+  }
+  return value
+}
+
 function buildSample(
   lang: Lang,
   endpointType: string,
-  ctx: SampleContext
+  ctx: SampleContext,
+  requestExample?: Record<string, unknown>
 ): string {
+  if (requestExample && Object.keys(requestExample).length > 0) {
+    const resolvedExample = resolveTemplateValue(
+      requestExample,
+      ctx
+    ) as Record<string, unknown>
+    return buildCustomEndpointSample(lang, ctx, resolvedExample)
+  }
   if (endpointType === 'anthropic') return buildAnthropicSample(lang, ctx)
   if (endpointType === 'gemini') return buildGeminiSample(lang, ctx)
   if (endpointType === 'embeddings' || endpointType === 'jina-rerank')
     return buildEmbeddingSample(lang, ctx)
   if (endpointType === 'image-generation') return buildImageSample(lang, ctx)
+  if (endpointType === 'image-generation-async')
+    return buildAsyncImageTaskSample(lang, ctx)
+  if (endpointType === 'openai-video') return buildAsyncVideoTaskSample(lang, ctx)
   return buildChatSample(lang, ctx)
+}
+
+function resolveModelEndpoints(
+  model: PricingModel,
+  endpointMap: Record<string, EndpointInfo>
+): ResolvedEndpoint[] {
+  const types = model.supported_endpoint_types || []
+  return types
+    .map((type) => {
+      const info = endpointMap[type] || {}
+      let path = info.path || ''
+      if (path && path.includes('{model}')) {
+        path = replaceModelInPath(path, model.model_name || '')
+      }
+      return { type, path, method: info.method || 'POST', info }
+    })
+    .filter((e) => Boolean(e.path))
 }
 
 // ---------------------------------------------------------------------------
@@ -444,7 +645,9 @@ function buildSample(
 
 function CodeSamplesSection(props: {
   model: PricingModel
-  endpointMap: Record<string, { path?: string; method?: string }>
+  endpoints: ResolvedEndpoint[]
+  endpointType: string
+  onEndpointTypeChange: (endpointType: string) => void
 }) {
   const { t } = useTranslation()
   const { status } = useStatus()
@@ -462,30 +665,16 @@ function CodeSamplesSection(props: {
     return 'https://api.example.com'
   }, [status])
 
-  const endpoints = useMemo(() => {
-    const types = props.model.supported_endpoint_types || []
-    return types
-      .map((type) => {
-        const info = props.endpointMap[type] || {}
-        let path = info.path || ''
-        if (path && path.includes('{model}')) {
-          path = replaceModelInPath(path, props.model.model_name || '')
-        }
-        return { type, path, method: info.method || 'POST' }
-      })
-      .filter((e) => Boolean(e.path))
-  }, [props.model, props.endpointMap])
-
-  const [endpointType, setEndpointType] = useState<string>(
-    endpoints[0]?.type ?? ''
-  )
   const [lang, setLang] = useState<Lang>('curl')
 
   const activeEndpoint = useMemo(() => {
-    return endpoints.find((e) => e.type === endpointType) ?? endpoints[0]
-  }, [endpointType, endpoints])
+    return (
+      props.endpoints.find((e) => e.type === props.endpointType) ??
+      props.endpoints[0]
+    )
+  }, [props.endpointType, props.endpoints])
 
-  if (endpoints.length === 0 || !activeEndpoint) {
+  if (props.endpoints.length === 0 || !activeEndpoint) {
     return null
   }
 
@@ -495,17 +684,21 @@ function CodeSamplesSection(props: {
     modelName: props.model.model_name || '',
     endpointType: activeEndpoint.type,
     endpointPath: activeEndpoint.path,
-  })
+    method: activeEndpoint.method,
+  }, activeEndpoint.info.request_example)
 
   return (
     <section>
       <SectionTitle icon={ScrollText}>{t('Code samples')}</SectionTitle>
 
       <div className='flex flex-wrap items-center gap-2'>
-        {endpoints.length > 1 && (
-          <Tabs value={endpointType} onValueChange={setEndpointType}>
+        {props.endpoints.length > 1 && (
+          <Tabs
+            value={props.endpointType}
+            onValueChange={props.onEndpointTypeChange}
+          >
             <TabsList className='bg-muted/40 h-8 p-0.5'>
-              {endpoints.map((ep) => (
+              {props.endpoints.map((ep) => (
                 <TabsTrigger
                   key={ep.type}
                   value={ep.type}
@@ -533,6 +726,12 @@ function CodeSamplesSection(props: {
         </Tabs>
       </div>
 
+      {activeEndpoint.info.description && (
+        <p className='text-muted-foreground mt-3 text-xs leading-relaxed'>
+          {activeEndpoint.info.description}
+        </p>
+      )}
+
       <div className='mt-3'>
         <CodeBlock code={code} language={LANG_HIGHLIGHT[lang]}>
           <CodeBlockCopyButton />
@@ -554,12 +753,26 @@ function CodeSamplesSection(props: {
 // Supported parameters table
 // ---------------------------------------------------------------------------
 
-function SupportedParametersSection(props: { model: PricingModel }) {
+function SupportedParametersSection(props: {
+  model: PricingModel
+  endpoint?: ResolvedEndpoint
+}) {
   const { t } = useTranslation()
-  const params = useMemo(
-    () => buildSupportedParameters(props.model),
-    [props.model]
-  )
+  const params = useMemo(() => {
+    const customParams = props.endpoint?.info.parameters
+    if (customParams && customParams.length > 0) {
+      return customParams.map<SupportedParameter>((param) => ({
+        name: param.name,
+        type: param.type,
+        defaultValue: param.default,
+        range: param.range,
+        enumValues: param.enum_values,
+        descriptionKey: param.description,
+        required: param.required,
+      }))
+    }
+    return buildSupportedParameters(props.model)
+  }, [props.model, props.endpoint])
 
   if (params.length === 0) return null
 
@@ -618,7 +831,10 @@ function SupportedParametersSection(props: { model: PricingModel }) {
             header: t('Description'),
             className: 'h-9',
             cellClassName: tableStyles.topMutedCell,
-            cell: (p) => t(p.descriptionKey),
+            cell: (p) =>
+              props.endpoint?.info.parameters?.length
+                ? p.descriptionKey
+                : t(p.descriptionKey),
           },
         ]}
       />
@@ -862,13 +1078,45 @@ function AuthSection() {
 
 export function ModelDetailsApi(props: {
   model: PricingModel
-  endpointMap: Record<string, { path?: string; method?: string }>
+  endpointMap: Record<string, EndpointInfo>
 }) {
+  const endpoints = useMemo(
+    () => resolveModelEndpoints(props.model, props.endpointMap),
+    [props.model, props.endpointMap]
+  )
+  const [endpointType, setEndpointType] = useState<string>(
+    endpoints[0]?.type ?? ''
+  )
+
+  useEffect(() => {
+    if (
+      endpoints.length > 0 &&
+      !endpoints.some((endpoint) => endpoint.type === endpointType)
+    ) {
+      setEndpointType(endpoints[0].type)
+    }
+  }, [endpointType, endpoints])
+
+  const activeEndpoint = useMemo(() => {
+    return (
+      endpoints.find((endpoint) => endpoint.type === endpointType) ??
+      endpoints[0]
+    )
+  }, [endpointType, endpoints])
+
   return (
     <div className='space-y-6'>
-      <CodeSamplesSection model={props.model} endpointMap={props.endpointMap} />
+      <CodeSamplesSection
+        model={props.model}
+        endpoints={endpoints}
+        endpointType={endpointType}
+        onEndpointTypeChange={setEndpointType}
+      />
       <AuthSection />
-      <SupportedParametersSection model={props.model} />
+      <SupportedParametersSection
+        model={props.model}
+        endpoint={activeEndpoint}
+      />
       <RateLimitsSection model={props.model} />
     </div>
   )

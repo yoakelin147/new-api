@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -10,6 +9,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -220,7 +221,7 @@ func updatePricing() {
 			continue
 		}
 		var raw map[string]interface{}
-		if err := json.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
+		if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
 			endpoints := make([]string, 0, len(raw))
 			for k, v := range raw {
 				switch v.(type) {
@@ -264,7 +265,7 @@ func updatePricing() {
 			continue
 		}
 		var raw map[string]interface{}
-		if err := json.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
+		if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
 			for k, v := range raw {
 				switch val := v.(type) {
 				case string:
@@ -282,6 +283,22 @@ func updatePricing() {
 					// ignore unsupported types
 				}
 			}
+		}
+	}
+	for key, template := range setting.GetModelEndpointTemplates() {
+		if strings.TrimSpace(key) == "" || strings.TrimSpace(template.Path) == "" {
+			continue
+		}
+		method := strings.ToUpper(strings.TrimSpace(template.Method))
+		if method == "" {
+			method = "POST"
+		}
+		supportedEndpointMap[key] = common.EndpointInfo{
+			Path:           template.Path,
+			Method:         method,
+			Description:    template.Description,
+			RequestExample: template.RequestExample,
+			Parameters:     convertEndpointParameters(template.Parameters),
 		}
 	}
 
@@ -356,6 +373,25 @@ func updatePricing() {
 	modelEnableGroupsLock.Unlock()
 
 	lastGetPricingTime = time.Now()
+}
+
+func convertEndpointParameters(parameters []dto.EndpointParameter) []common.EndpointParameter {
+	if len(parameters) == 0 {
+		return nil
+	}
+	result := make([]common.EndpointParameter, 0, len(parameters))
+	for _, parameter := range parameters {
+		result = append(result, common.EndpointParameter{
+			Name:        parameter.Name,
+			Type:        parameter.Type,
+			Default:     parameter.Default,
+			Range:       parameter.Range,
+			EnumValues:  parameter.EnumValues,
+			Description: parameter.Description,
+			Required:    parameter.Required,
+		})
+	}
+	return result
 }
 
 // GetSupportedEndpointMap 返回全局端点到路径的映射

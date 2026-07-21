@@ -3,10 +3,13 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -104,10 +107,17 @@ func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
 }
 
 func GetChannel(group string, model string, retry int) (*Channel, error) {
+	return GetChannelWithFilter(group, model, retry, nil)
+}
+
+func GetChannelWithFilter(group string, modelName string, retry int, filter ChannelFilter) (*Channel, error) {
+	if filter != nil {
+		return getChannelWithFilter(group, modelName, retry, filter)
+	}
 	var abilities []Ability
 
 	var err error = nil
-	channelQuery, err := getChannelQuery(group, model, retry)
+	channelQuery, err := getChannelQuery(group, modelName, retry)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +151,95 @@ func GetChannel(group string, model string, retry int) (*Channel, error) {
 	}
 	err = DB.First(&channel, "id = ?", channel.Id).Error
 	return &channel, err
+}
+
+func getChannelWithFilter(group string, modelName string, retry int, filter ChannelFilter) (*Channel, error) {
+	abilities, err := getAbilitiesForFilteredChannel(group, modelName)
+	if err != nil || len(abilities) == 0 {
+		return nil, err
+	}
+
+	channelIDs := make([]int, 0, len(abilities))
+	for _, ability := range abilities {
+		channelIDs = append(channelIDs, ability.ChannelId)
+	}
+	var channels []*Channel
+	if err = DB.Where("id in ?", channelIDs).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	channelByID := make(map[int]*Channel, len(channels))
+	for _, channel := range channels {
+		channelByID[channel.Id] = channel
+	}
+
+	filteredAbilities := make([]Ability, 0, len(abilities))
+	uniquePriorities := make(map[int64]bool)
+	for _, ability := range abilities {
+		channel := channelByID[ability.ChannelId]
+		if channel == nil {
+			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", ability.ChannelId)
+		}
+		if filter(channel) {
+			filteredAbilities = append(filteredAbilities, ability)
+			uniquePriorities[lo.FromPtrOr(ability.Priority, int64(0))] = true
+		}
+	}
+	if len(filteredAbilities) == 0 {
+		return nil, nil
+	}
+
+	priorities := make([]int, 0, len(uniquePriorities))
+	for priority := range uniquePriorities {
+		priorities = append(priorities, int(priority))
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(priorities)))
+	if retry >= len(priorities) {
+		retry = len(priorities) - 1
+	}
+	targetPriority := int64(priorities[retry])
+
+	targetAbilities := make([]Ability, 0)
+	weightSum := uint(0)
+	for _, ability := range filteredAbilities {
+		if lo.FromPtrOr(ability.Priority, int64(0)) != targetPriority {
+			continue
+		}
+		targetAbilities = append(targetAbilities, ability)
+		weightSum += ability.Weight + 10
+	}
+	if len(targetAbilities) == 0 {
+		return nil, nil
+	}
+
+	weight := rand.Intn(int(weightSum))
+	for _, ability := range targetAbilities {
+		weight -= int(ability.Weight) + 10
+		if weight <= 0 {
+			return channelByID[ability.ChannelId], nil
+		}
+	}
+	return nil, errors.New("channel not found")
+}
+
+func getAbilitiesForFilteredChannel(group string, modelName string) ([]Ability, error) {
+	var abilities []Ability
+	err := DB.Model(&Ability{}).
+		Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, modelName, true).
+		Order("priority DESC, weight DESC").
+		Find(&abilities).Error
+	if err != nil || len(abilities) > 0 {
+		return abilities, err
+	}
+
+	normalized := ratio_setting.FormatMatchingModelName(modelName)
+	if normalized == "" || normalized == modelName {
+		return abilities, nil
+	}
+	err = DB.Model(&Ability{}).
+		Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, normalized, true).
+		Order("priority DESC, weight DESC").
+		Find(&abilities).Error
+	return abilities, err
 }
 
 func (channel *Channel) AddAbilities(tx *gorm.DB) error {

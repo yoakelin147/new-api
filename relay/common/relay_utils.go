@@ -174,8 +174,14 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 	}
 
 	action := constant.TaskActionTextGenerate
-	if hasInputReference {
-		action = constant.TaskActionGenerate
+	if isAsyncImageGenerationPath(c.Request.URL.Path) {
+		action = constant.TaskActionImageGenerate
+	} else {
+		// /v1/videos 恢复为视频任务：客户端传 type:image 也不改变视频任务判断。
+		// 图片异步统一使用 /v1/images/generations/async，避免图片和视频挤在同一个入口。
+		if hasInputReference {
+			action = constant.TaskActionGenerate
+		}
 	}
 	if strings.HasPrefix(model, "sora-2") {
 
@@ -201,6 +207,10 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 	return nil
 }
 
+func isAsyncImageGenerationPath(path string) bool {
+	return strings.HasPrefix(path, "/v1/images/generations/async")
+}
+
 func isKnownTaskField(field string) bool {
 	knownFields := map[string]bool{
 		"prompt":          true,
@@ -210,6 +220,7 @@ func isKnownTaskField(field string) bool {
 		"images":          true,
 		"size":            true,
 		"duration":        true,
+		"type":            true,
 		"input_reference": true, // Sora 特有字段
 	}
 	return knownFields[field]

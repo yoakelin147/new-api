@@ -71,6 +71,8 @@ const defaultModelSettings: ModelSettings = {
   'channel_affinity_setting.rules': '[]',
   'model_deployment.ionet.api_key': '',
   'model_deployment.ionet.enabled': false,
+  ModelEndpointTemplates: '{}',
+  AsyncTaskUpstreamTemplates: '[]',
 }
 
 export function ModelSettings() {

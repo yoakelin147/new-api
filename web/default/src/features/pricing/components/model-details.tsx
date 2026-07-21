@@ -57,6 +57,7 @@ import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
 import { inferModelMetadata } from '../lib/model-metadata'
 import { formatFixedPrice, formatGroupPrice } from '../lib/price'
 import type {
+  EndpointInfo,
   Modality,
   ModelCapability,
   PriceType,
@@ -890,7 +891,7 @@ export interface ModelDetailsContentProps {
   model: PricingModel
   groupRatio: Record<string, number>
   usableGroup: Record<string, { desc: string; ratio: number }>
-  endpointMap: Record<string, { path?: string; method?: string }>
+  endpointMap: Record<string, EndpointInfo>
   autoGroups: string[]
   priceRate: number
   usdExchangeRate: number
@@ -1109,10 +1110,7 @@ export function ModelDetails() {
           tokenUnit={tokenUnit}
           showRechargePrice={search.rechargePrice ?? false}
           endpointMap={
-            (endpointMap as Record<
-              string,
-              { path?: string; method?: string }
-            >) || {}
+            (endpointMap as Record<string, EndpointInfo>) || {}
           }
         />
       </div>

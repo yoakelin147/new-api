@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
@@ -73,6 +74,47 @@ func buildCompletionRatioMetaValue(optionValues map[string]string) string {
 		return "{}"
 	}
 	return string(jsonBytes)
+}
+
+func validateModelEndpointTemplates(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var templates map[string]dto.ModelEndpointTemplate
+	if err := common.UnmarshalJsonStr(raw, &templates); err != nil {
+		return err
+	}
+	for key, template := range templates {
+		if strings.TrimSpace(key) == "" {
+			return fmt.Errorf("端点模板 key 不能为空")
+		}
+		if strings.TrimSpace(template.Path) == "" {
+			return fmt.Errorf("端点模板 %s 的 path 不能为空", key)
+		}
+		if strings.TrimSpace(template.Method) == "" {
+			return fmt.Errorf("端点模板 %s 的 method 不能为空", key)
+		}
+	}
+	return nil
+}
+
+func validateAsyncTaskUpstreamTemplates(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var templates []dto.AsyncTaskUpstreamTemplate
+	if err := common.UnmarshalJsonStr(raw, &templates); err != nil {
+		return err
+	}
+	for i, template := range templates {
+		if strings.TrimSpace(template.RequestPath) == "" {
+			return fmt.Errorf("第 %d 条异步上游模板 request_path 不能为空", i+1)
+		}
+		if template.NameRule < 0 || template.NameRule > 3 {
+			return fmt.Errorf("第 %d 条异步上游模板 name_rule 必须是 0-3", i+1)
+		}
+	}
+	return nil
 }
 
 func GetOptions(c *gin.Context) {
@@ -301,6 +343,24 @@ func UpdateOption(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "upstream circuit breaker timeout must be a positive integer",
+			})
+			return
+		}
+	case setting.ModelEndpointTemplatesOptionKey:
+		err = validateModelEndpointTemplates(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "模型端点模板格式错误: " + err.Error(),
+			})
+			return
+		}
+	case setting.AsyncTaskUpstreamTemplatesOptionKey:
+		err = validateAsyncTaskUpstreamTemplates(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "异步上游模板格式错误: " + err.Error(),
 			})
 			return
 		}

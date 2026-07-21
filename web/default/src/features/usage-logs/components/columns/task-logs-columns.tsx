@@ -235,6 +235,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           }
         }
 
+        const isImageTask = log.action === TASK_ACTIONS.IMAGE_GENERATE
         const isVideoTask =
           log.action === TASK_ACTIONS.GENERATE ||
           log.action === TASK_ACTIONS.TEXT_GENERATE ||
@@ -242,9 +243,22 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           log.action === TASK_ACTIONS.REFERENCE_GENERATE ||
           log.action === TASK_ACTIONS.REMIX_GENERATE
         const isSuccess = status === TASK_STATUS.SUCCESS
-        const isUrl = failReason?.startsWith('http')
+        const resultUrl = log.result_url || ''
 
-        if (isSuccess && isVideoTask && isUrl) {
+        if (isSuccess && isImageTask && resultUrl) {
+          return (
+            <a
+              href={resultUrl}
+              target='_blank'
+              rel='noopener noreferrer'
+              className='text-foreground text-xs hover:underline'
+            >
+              {t('Click to preview image')}
+            </a>
+          )
+        }
+
+        if (isSuccess && isVideoTask && resultUrl) {
           const videoUrl = `/v1/videos/${log.task_id}/content`
           return (
             <a

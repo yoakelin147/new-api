@@ -500,6 +500,11 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		},
 	}
 
+	if relayMode, ok := c.Get("relay_mode"); ok {
+		if relayModeInt, ok := relayMode.(int); ok && relayModeInt != relayconstant.RelayModeUnknown {
+			info.RelayMode = relayModeInt
+		}
+	}
 	if info.RelayMode == relayconstant.RelayModeUnknown {
 		info.RelayMode = c.GetInt("relay_mode")
 	}

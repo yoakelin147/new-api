@@ -32,6 +32,57 @@ func TestValidateMultipartDirectNormalizesInputReference(t *testing.T) {
 	require.Equal(t, constant.TaskActionGenerate, info.Action)
 }
 
+func TestValidateMultipartDirectUsesRequestPathForAsyncImage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name       string
+		path       string
+		body       string
+		wantAction string
+	}{
+		{
+			name:       "async image path",
+			path:       "/v1/images/generations/async",
+			body:       `{"type":"image","model":"custom-image-model","prompt":"draw a cat"}`,
+			wantAction: constant.TaskActionImageGenerate,
+		},
+		{
+			name:       "video path ignores legacy image type",
+			path:       "/v1/videos",
+			body:       `{"type":"image","model":"custom-image-model","prompt":"draw a cat"}`,
+			wantAction: constant.TaskActionTextGenerate,
+		},
+		{
+			name:       "image model name alone does not switch action",
+			path:       "/v1/videos",
+			body:       `{"model":"gpt-image-2","prompt":"draw a cat"}`,
+			wantAction: constant.TaskActionTextGenerate,
+		},
+		{
+			name:       "default image input remains image to video",
+			path:       "/v1/videos",
+			body:       `{"model":"video-model","prompt":"animate","image":"https://example.com/a.png","images":["https://example.com/a.png"]}`,
+			wantAction: constant.TaskActionGenerate,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(tt.body))
+			request.Header.Set("Content-Type", "application/json")
+			context, _ := gin.CreateTestContext(httptest.NewRecorder())
+			context.Request = request
+			info := &RelayInfo{TaskRelayInfo: &TaskRelayInfo{}}
+
+			taskErr := ValidateMultipartDirect(context, info)
+
+			require.Nil(t, taskErr)
+			require.Equal(t, tt.wantAction, info.Action)
+		})
+	}
+}
+
 // TestTaskDurationBounds guards the billing invariant that user-supplied
 // video duration (a quota multiplier via OtherRatio "seconds") is bounded, so
 // it can never overflow quota calculation into a negative charge.

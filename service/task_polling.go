@@ -327,8 +327,14 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 	}
 	info := &relaycommon.RelayInfo{}
 	info.ChannelMeta = &relaycommon.ChannelMeta{
-		ChannelBaseUrl: cacheGetChannel.GetBaseURL(),
+		ChannelId:            cacheGetChannel.Id,
+		ChannelType:          cacheGetChannel.Type,
+		ChannelBaseUrl:       cacheGetChannel.GetBaseURL(),
+		ChannelSetting:       cacheGetChannel.GetSetting(),
+		ChannelOtherSettings: cacheGetChannel.GetOtherSettings(),
 	}
+	info.ChannelId = cacheGetChannel.Id
+	info.ChannelType = cacheGetChannel.Type
 	info.ApiKey = cacheGetChannel.Key
 	adaptor.Init(info)
 	for _, taskId := range taskIds {
@@ -360,8 +366,12 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		key = privateData.Key
 	}
 	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
-		"task_id": task.GetUpstreamTaskID(),
-		"action":  task.Action,
+		"channel_id":   ch.Id,
+		"channel_type": ch.Type,
+		"task_id":      task.GetUpstreamTaskID(),
+		"action":       task.Action,
+		"model":        task.Properties.OriginModelName,
+		"request_path": taskRequestPath(task),
 	}, proxy)
 	if err != nil {
 		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)
@@ -499,6 +509,13 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	return nil
+}
+
+func taskRequestPath(task *model.Task) string {
+	if task != nil && task.Action == constant.TaskActionImageGenerate {
+		return "/v1/images/generations/async"
+	}
+	return "/v1/videos"
 }
 
 func redactVideoResponseBody(body []byte) []byte {

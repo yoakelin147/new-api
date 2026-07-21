@@ -2,21 +2,25 @@ package service
 
 import (
 	"errors"
+	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 )
 
 type RetryParam struct {
-	Ctx          *gin.Context
-	TokenGroup   string
-	ModelName    string
-	Retry        *int
-	resetNextTry bool
+	Ctx           *gin.Context
+	TokenGroup    string
+	ModelName     string
+	Retry         *int
+	ChannelFilter model.ChannelFilter
+	resetNextTry  bool
 }
 
 func (p *RetryParam) GetRetry() int {
@@ -43,6 +47,30 @@ func (p *RetryParam) IncreaseRetry() {
 
 func (p *RetryParam) ResetRetryNextTry() {
 	p.resetNextTry = true
+}
+
+func BuildAsyncTaskChannelFilter(c *gin.Context, modelName string) model.ChannelFilter {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return nil
+	}
+	if c.Request.Method != http.MethodPost || !strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations/async") {
+		return nil
+	}
+
+	requestPath := c.Request.URL.Path
+	templates := setting.GetAsyncTaskUpstreamTemplates()
+	return func(channel *model.Channel) bool {
+		if channel == nil {
+			return false
+		}
+		return relaycommon.SelectAsyncTaskUpstreamTemplate(
+			templates,
+			channel.Id,
+			channel.Type,
+			requestPath,
+			modelName,
+		) != nil
+	}
 }
 
 // CacheGetRandomSatisfiedChannel tries to get a random channel that satisfies the requirements.
@@ -115,7 +143,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			}
 			logger.LogDebug(param.Ctx, "Auto selecting group: %s, priorityRetry: %d", autoGroup, priorityRetry)
 
-			channel, _ = model.GetRandomSatisfiedChannel(autoGroup, param.ModelName, priorityRetry)
+			channel, _ = model.GetRandomSatisfiedChannelWithFilter(autoGroup, param.ModelName, priorityRetry, param.ChannelFilter)
 			if channel == nil {
 				// Current group has no available channel for this model, try next group
 				// 当前分组没有该模型的可用渠道，尝试下一个分组
@@ -153,7 +181,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			break
 		}
 	} else {
-		channel, err = model.GetRandomSatisfiedChannel(param.TokenGroup, param.ModelName, param.GetRetry())
+		channel, err = model.GetRandomSatisfiedChannelWithFilter(param.TokenGroup, param.ModelName, param.GetRetry(), param.ChannelFilter)
 		if err != nil {
 			return nil, param.TokenGroup, err
 		}
