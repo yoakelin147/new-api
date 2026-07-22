@@ -3169,6 +3169,7 @@
     "Please enter your verification code": "Veuillez saisir votre code de vérification",
     "Please enter your verification code or backup code": "Veuillez saisir votre code de vérification ou votre code de secours",
     "Please fix JSON errors before saving": "Veuillez corriger les erreurs JSON avant d’enregistrer",
+    "Please fix the endpoints JSON before loading a template": "Corrigez le JSON des points de terminaison avant de charger un modèle",
     "Please fix the highlighted fields before saving": "Veuillez corriger les champs en surbrillance avant d’enregistrer",
     "Please log in with the appropriate credentials": "Veuillez vous connecter avec les identifiants appropriés",
     "Please retry or refresh.": "Veuillez réessayer ou actualiser.",

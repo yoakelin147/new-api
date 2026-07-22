@@ -3169,6 +3169,7 @@
     "Please enter your verification code": "Please enter your verification code",
     "Please enter your verification code or backup code": "Please enter your verification code or backup code",
     "Please fix JSON errors before saving": "Please fix JSON errors before saving",
+    "Please fix the endpoints JSON before loading a template": "Please fix the endpoints JSON before loading a template",
     "Please fix the highlighted fields before saving": "Please fix the highlighted fields before saving",
     "Please log in with the appropriate credentials": "Please log in with the appropriate credentials",
     "Please retry or refresh.": "Please retry or refresh.",

@@ -111,6 +111,36 @@ type PricingMode = 'per-token' | 'per-request'
 type PricingSubMode = 'ratio' | 'price'
 type EndpointTemplate = { path: string; method: string }
 
+function parseEndpointConfig(value: string): Record<string, unknown> | null {
+  const trimmed = value.trim()
+  if (!trimmed) return {}
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (parsed !== null && !Array.isArray(parsed) && typeof parsed === 'object') {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+function getNextEndpointTemplateKey(
+  endpoints: Record<string, unknown>,
+  templateKey: string
+) {
+  if (!Object.prototype.hasOwnProperty.call(endpoints, templateKey)) {
+    return templateKey
+  }
+  let index = 2
+  let nextKey = `${templateKey}_${index}`
+  while (Object.prototype.hasOwnProperty.call(endpoints, nextKey)) {
+    index += 1
+    nextKey = `${templateKey}_${index}`
+  }
+  return nextKey
+}
+
 type ModelMutateDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -643,8 +673,21 @@ export function ModelMutateDrawer({
   const handleFillEndpointTemplate = (templateKey: string) => {
     const template = endpointTemplates[templateKey]
     if (template) {
-      const templateJson = JSON.stringify({ [templateKey]: template }, null, 2)
-      form.setValue('endpoints', templateJson)
+      const currentEndpoints = parseEndpointConfig(form.getValues('endpoints') || '')
+      if (currentEndpoints === null) {
+        toast.error(t('Please fix the endpoints JSON before loading a template'))
+        return
+      }
+      const nextKey = getNextEndpointTemplateKey(currentEndpoints, templateKey)
+      const templateJson = JSON.stringify(
+        { ...currentEndpoints, [nextKey]: template },
+        null,
+        2
+      )
+      form.setValue('endpoints', templateJson, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
     }
   }
 

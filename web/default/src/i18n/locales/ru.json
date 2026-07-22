@@ -3169,6 +3169,7 @@
     "Please enter your verification code": "Пожалуйста, введите код подтверждения",
     "Please enter your verification code or backup code": "Пожалуйста, введите код подтверждения или резервный код",
     "Please fix JSON errors before saving": "Исправьте ошибки JSON перед сохранением",
+    "Please fix the endpoints JSON before loading a template": "Исправьте JSON конечных точек перед загрузкой шаблона",
     "Please fix the highlighted fields before saving": "Исправьте выделенные поля перед сохранением",
     "Please log in with the appropriate credentials": "Пожалуйста, войдите с соответствующими учетными данными",
     "Please retry or refresh.": "Повторите попытку или обновите страницу.",

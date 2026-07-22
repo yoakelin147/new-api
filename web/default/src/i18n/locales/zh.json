@@ -3169,6 +3169,7 @@
     "Please enter your verification code": "请输入您的验证码",
     "Please enter your verification code or backup code": "请输入您的验证码或备用码",
     "Please fix JSON errors before saving": "请先修复 JSON 错误再保存",
+    "Please fix the endpoints JSON before loading a template": "请先修复端点 JSON 后再加载模板",
     "Please fix the highlighted fields before saving": "请先修复高亮字段后再保存",
     "Please log in with the appropriate credentials": "请使用适当的凭据登录",
     "Please retry or refresh.": "请重试或刷新页面。",

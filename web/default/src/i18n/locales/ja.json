@@ -3169,6 +3169,7 @@
     "Please enter your verification code": "認証コードを入力してください",
     "Please enter your verification code or backup code": "認証コードまたはバックアップコードを入力してください",
     "Please fix JSON errors before saving": "保存する前に JSON エラーを直してください",
+    "Please fix the endpoints JSON before loading a template": "テンプレートを読み込む前にエンドポイント JSON を修正してください",
     "Please fix the highlighted fields before saving": "保存する前に強調表示された項目を修正してください",
     "Please log in with the appropriate credentials": "適切な認証情報でログインしてください",
     "Please retry or refresh.": "再試行するか更新してください。",

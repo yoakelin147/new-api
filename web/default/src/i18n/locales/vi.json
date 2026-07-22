@@ -3169,6 +3169,7 @@
     "Please enter your verification code": "Vui lòng nhập mã xác thực của bạn",
     "Please enter your verification code or backup code": "Vui lòng nhập mã xác thực hoặc mã dự phòng của bạn",
     "Please fix JSON errors before saving": "Vui lòng sửa lỗi JSON trước khi lưu",
+    "Please fix the endpoints JSON before loading a template": "Vui lòng sửa JSON endpoint trước khi tải mẫu",
     "Please fix the highlighted fields before saving": "Vui lòng sửa các trường được đánh dấu trước khi lưu",
     "Please log in with the appropriate credentials": "Vui lòng đăng nhập bằng thông tin xác thực phù hợp",
     "Please retry or refresh.": "Vui lòng thử lại hoặc làm mới.",
