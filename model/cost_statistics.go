@@ -166,12 +166,13 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 				rowsByKey[key] = row
 			}
 			other := parseCostStatisticsLogOther(log.Other)
+			quota := costStatisticsSignedQuota(log)
 			row.PromptTokens += log.PromptTokens
 			row.InputTokens += costStatisticsInputTokens(log.PromptTokens, other)
 			row.CompletionTokens += log.CompletionTokens
 			row.TotalTokens += log.PromptTokens + log.CompletionTokens
 			row.RequestCount++
-			row.Quota += log.Quota
+			row.Quota += quota
 			row.UseTimeSeconds += log.UseTime
 			row.CacheTokens += other.CacheTokens
 			row.CacheWrite5m += costStatisticsCacheWrite5mTokens(other)
@@ -182,7 +183,7 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 			summary.CompletionTokens += log.CompletionTokens
 			summary.TotalTokens += log.PromptTokens + log.CompletionTokens
 			summary.RequestCount++
-			summary.Quota += log.Quota
+			summary.Quota += quota
 			if query.IsAdmin && log.ChannelId != 0 {
 				channelIds[log.ChannelId] = struct{}{}
 			}
@@ -239,6 +240,13 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 		endIdx = total
 	}
 	return rows[startIdx:endIdx], total, summary, nil
+}
+
+func costStatisticsSignedQuota(log Log) int {
+	if log.Type == LogTypeRefund {
+		return -log.Quota
+	}
+	return log.Quota
 }
 
 func parseCostStatisticsLogOther(other string) costStatisticsLogOther {

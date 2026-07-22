@@ -127,6 +127,79 @@ func TestGetCostStatisticsAggregatesConsumeLogs(t *testing.T) {
 	assert.Equal(t, 0.8, byToken["backup-key"].GroupRatio)
 }
 
+func TestGetCostStatisticsSubtractsRefundQuota(t *testing.T) {
+	truncateTables(t)
+
+	base := time.Date(2026, 7, 16, 9, 0, 0, 0, time.Local)
+	logs := []*Log{
+		{
+			UserId:    7,
+			CreatedAt: base.Unix(),
+			Type:      LogTypeConsume,
+			TokenId:   101,
+			TokenName: "codex-key",
+			ModelName: "gpt-image-2",
+			Group:     "default",
+			Quota:     100,
+		},
+		{
+			UserId:    7,
+			CreatedAt: base.Add(time.Minute).Unix(),
+			Type:      LogTypeConsume,
+			TokenId:   101,
+			TokenName: "codex-key",
+			ModelName: "gpt-image-2",
+			Group:     "default",
+			Quota:     200,
+		},
+		{
+			UserId:    7,
+			CreatedAt: base.Add(2 * time.Minute).Unix(),
+			Type:      LogTypeRefund,
+			TokenId:   101,
+			TokenName: "codex-key",
+			ModelName: "gpt-image-2",
+			Group:     "default",
+			Quota:     50,
+		},
+	}
+	require.NoError(t, DB.Create(&logs).Error)
+
+	rows, total, summary, err := GetCostStatistics(CostStatisticsQuery{
+		UserId:         7,
+		IsAdmin:        false,
+		LogType:        LogTypeUnknown,
+		StartTimestamp: base.Add(-time.Hour).Unix(),
+		EndTimestamp:   base.Add(time.Hour).Unix(),
+	}, 0, 10)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, total)
+	assert.Equal(t, 250, summary.Quota)
+	byType := make(map[int]*CostStatisticsRow)
+	for _, row := range rows {
+		byType[row.Type] = row
+	}
+	require.Contains(t, byType, LogTypeConsume)
+	assert.Equal(t, 300, byType[LogTypeConsume].Quota)
+	require.Contains(t, byType, LogTypeRefund)
+	assert.Equal(t, -50, byType[LogTypeRefund].Quota)
+
+	rows, total, summary, err = GetCostStatistics(CostStatisticsQuery{
+		UserId:         7,
+		IsAdmin:        false,
+		LogType:        LogTypeRefund,
+		StartTimestamp: base.Add(-time.Hour).Unix(),
+		EndTimestamp:   base.Add(time.Hour).Unix(),
+	}, 0, 10)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, -50, summary.Quota)
+	assert.Equal(t, -50, rows[0].Quota)
+}
+
 func TestGetCostStatisticsHidesChannelsForSelfQuery(t *testing.T) {
 	truncateTables(t)
 
