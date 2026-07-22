@@ -4009,6 +4009,8 @@
     "Structured output": "Sortie structurée",
     "Submit": "Soumettre",
     "Submit directly": "Soumettre directement",
+    "Submit method": "Méthode de soumission",
+    "Submit method only applies to the upstream submit request. Fetch requests are sent with GET.": "La méthode de soumission s’applique uniquement à la requête de soumission en amont. Les requêtes de consultation sont envoyées en GET.",
     "Submit path": "Chemin de soumission",
     "Submit response example JSON": "JSON exemple de réponse de soumission",
     "Submit Result": "Soumettre le résultat",

@@ -1716,7 +1716,7 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                       }
                     />
                   </TemplateInlineField>
-                  <TemplateInlineField label={t('Method')}>
+                  <TemplateInlineField label={t('Submit method')}>
                     <NativeSelect
                       className='w-full'
                       value={draft.method}
@@ -1741,6 +1741,11 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                       <p className='text-muted-foreground text-xs'>
                         {t(
                           'When model is empty, this async upstream template matches all models under the selected channel and request path.'
+                        )}
+                      </p>
+                      <p className='text-muted-foreground text-xs'>
+                        {t(
+                          'Submit method only applies to the upstream submit request. Fetch requests are sent with GET.'
                         )}
                       </p>
                       <div className='grid gap-3 md:grid-cols-2'>

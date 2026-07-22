@@ -311,8 +311,10 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 
 	var upstreamID string
+	var mappedStatus string
 	if template := a.selectUpstreamTemplate(info); template != nil {
 		upstreamID = relaycommon.ExtractAsyncTaskMappedSubmitID(responseBody, template.ResponseMapping)
+		mappedStatus = relaycommon.ExtractAsyncTaskMappedSubmitStatus(responseBody, template.ResponseMapping)
 	}
 	if upstreamID == "" {
 		upstreamID = dResp.ID
@@ -328,8 +330,45 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	// 使用公开 task_xxxx ID 返回给客户端
 	dResp.ID = info.PublicTaskID
 	dResp.TaskID = info.PublicTaskID
+	if dResp.Object == "" {
+		dResp.Object = defaultTaskResponseObject(info)
+	}
+	if dResp.Model == "" && info != nil {
+		dResp.Model = info.OriginModelName
+	}
+	if dResp.Status == "" {
+		dResp.Status = taskStatusToVideoStatus(mappedStatus)
+	}
+	if dResp.Status == "" {
+		dResp.Status = dto.VideoStatusQueued
+	}
+	if dResp.CreatedAt == 0 {
+		dResp.CreatedAt = common.GetTimestamp()
+	}
 	c.JSON(http.StatusOK, dResp)
 	return upstreamID, responseBody, nil
+}
+
+func defaultTaskResponseObject(info *relaycommon.RelayInfo) string {
+	if info != nil && info.TaskRelayInfo != nil && info.Action == constant.TaskActionImageGenerate {
+		return "image"
+	}
+	return "video"
+}
+
+func taskStatusToVideoStatus(status string) string {
+	switch model.TaskStatus(status) {
+	case model.TaskStatusQueued, model.TaskStatusSubmitted:
+		return dto.VideoStatusQueued
+	case model.TaskStatusInProgress:
+		return dto.VideoStatusInProgress
+	case model.TaskStatusSuccess:
+		return dto.VideoStatusCompleted
+	case model.TaskStatusFailure:
+		return dto.VideoStatusFailed
+	default:
+		return ""
+	}
 }
 
 // FetchTask fetch task status

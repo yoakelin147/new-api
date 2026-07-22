@@ -4009,6 +4009,8 @@
     "Structured output": "Структурированный вывод",
     "Submit": "Отправить",
     "Submit directly": "Отправить напрямую",
+    "Submit method": "Метод отправки",
+    "Submit method only applies to the upstream submit request. Fetch requests are sent with GET.": "Метод отправки применяется только к запросу отправки на вышестоящий сервис. Запросы получения отправляются через GET.",
     "Submit path": "Путь отправки",
     "Submit response example JSON": "Пример JSON ответа отправки",
     "Submit Result": "Отправить результат",

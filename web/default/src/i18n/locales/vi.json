@@ -4009,6 +4009,8 @@
     "Structured output": "Đầu ra có cấu trúc",
     "Submit": "Gửi",
     "Submit directly": "Gửi trực tiếp",
+    "Submit method": "Phương thức gửi",
+    "Submit method only applies to the upstream submit request. Fetch requests are sent with GET.": "Phương thức gửi chỉ áp dụng cho yêu cầu gửi lên thượng nguồn. Yêu cầu truy vấn được gửi bằng GET.",
     "Submit path": "Đường dẫn gửi",
     "Submit response example JSON": "JSON ví dụ phản hồi gửi",
     "Submit Result": "Gửi Kết quả",

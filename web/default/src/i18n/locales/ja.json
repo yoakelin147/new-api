@@ -4009,6 +4009,8 @@
     "Structured output": "構造化出力",
     "Submit": "送信",
     "Submit directly": "直接送信",
+    "Submit method": "送信メソッド",
+    "Submit method only applies to the upstream submit request. Fetch requests are sent with GET.": "送信メソッドは上流への送信リクエストにのみ適用されます。取得リクエストは GET で送信されます。",
     "Submit path": "送信パス",
     "Submit response example JSON": "送信レスポンス例 JSON",
     "Submit Result": "結果を送信",

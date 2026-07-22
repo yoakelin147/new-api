@@ -113,6 +113,7 @@ func TestDoResponseUsesConfiguredSubmitTaskIDMapping(t *testing.T) {
 			Model:       "gpt-image-2",
 			ResponseMapping: &dto.AsyncTaskResponseMapping{
 				SubmitTaskIDPaths: []string{"data.task_id"},
+				SubmitStatusPaths: []string{"data.status"},
 			},
 		},
 	})
@@ -136,14 +137,14 @@ func TestDoResponseUsesConfiguredSubmitTaskIDMapping(t *testing.T) {
 	resp := &http.Response{
 		Body: io.NopCloser(bytes.NewReader([]byte(`{
 			"id": "wrong_id",
-			"data": {"task_id": "mapped_upstream_task"},
-			"status": "queued"
+			"data": {"task_id": "mapped_upstream_task", "status": "submitted"}
 		}`))),
 	}
 	info := &relaycommon.RelayInfo{
 		RequestURLPath:  "/v1/images/generations/async",
 		OriginModelName: "gpt-image-2",
 		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			Action:       constant.TaskActionImageGenerate,
 			PublicTaskID: "task_public",
 		},
 		ChannelMeta: &relaycommon.ChannelMeta{
@@ -157,6 +158,11 @@ func TestDoResponseUsesConfiguredSubmitTaskIDMapping(t *testing.T) {
 	require.Nil(t, taskErr)
 	require.Equal(t, "mapped_upstream_task", taskID)
 	require.Contains(t, recorder.Body.String(), `"id":"task_public"`)
+	require.Contains(t, recorder.Body.String(), `"task_id":"task_public"`)
+	require.Contains(t, recorder.Body.String(), `"object":"image"`)
+	require.Contains(t, recorder.Body.String(), `"model":"gpt-image-2"`)
+	require.Contains(t, recorder.Body.String(), `"status":"queued"`)
+	require.NotContains(t, recorder.Body.String(), `"created_at":0`)
 }
 
 func TestParseTaskResultUsesConfiguredResponseMapping(t *testing.T) {

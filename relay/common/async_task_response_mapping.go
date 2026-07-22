@@ -23,6 +23,16 @@ func ExtractAsyncTaskMappedSubmitID(respBody []byte, mapping *dto.AsyncTaskRespo
 	return ExtractAsyncTaskMappedString(respBody, mapping.SubmitTaskIDPaths)
 }
 
+func ExtractAsyncTaskMappedSubmitStatus(respBody []byte, mapping *dto.AsyncTaskResponseMapping) string {
+	if mapping == nil {
+		return ""
+	}
+	return normalizeAsyncTaskMappedStatus(
+		ExtractAsyncTaskMappedString(respBody, mapping.SubmitStatusPaths),
+		mapping.FetchStatusMap,
+	)
+}
+
 func ParseAsyncTaskResultWithMapping(respBody []byte, mapping *dto.AsyncTaskResponseMapping) (*TaskInfo, bool) {
 	if mapping == nil {
 		return nil, false

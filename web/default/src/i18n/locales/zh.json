@@ -4009,6 +4009,8 @@
     "Structured output": "结构化输出",
     "Submit": "提交",
     "Submit directly": "直接提交",
+    "Submit method": "提交方法",
+    "Submit method only applies to the upstream submit request. Fetch requests are sent with GET.": "提交方法仅用于上游提交请求，查询任务固定使用 GET。",
     "Submit path": "提交路径",
     "Submit response example JSON": "提交回参示例 JSON",
     "Submit Result": "提交结果",

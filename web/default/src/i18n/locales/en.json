@@ -4009,6 +4009,8 @@
     "Structured output": "Structured output",
     "Submit": "Submit",
     "Submit directly": "Submit directly",
+    "Submit method": "Submit method",
+    "Submit method only applies to the upstream submit request. Fetch requests are sent with GET.": "Submit method only applies to the upstream submit request. Fetch requests are sent with GET.",
     "Submit path": "Submit path",
     "Submit response example JSON": "Submit response example JSON",
     "Submit Result": "Submit Result",
