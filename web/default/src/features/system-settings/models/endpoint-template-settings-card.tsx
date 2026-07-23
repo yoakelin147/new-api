@@ -24,7 +24,7 @@ import {
   ChevronRight,
   Code2,
   Copy,
-  FileJson,
+  HelpCircle,
   Palette,
   Plus,
   Trash2,
@@ -32,12 +32,16 @@ import {
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -48,6 +52,13 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from '@/components/ui/native-select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import {
   Tabs,
@@ -56,6 +67,11 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  sideDrawerContentClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { getChannels } from '@/features/channels/api'
 import { CHANNEL_TYPE_OPTIONS } from '@/features/channels/constants'
 import type { Channel } from '@/features/channels/types'
@@ -108,6 +124,36 @@ const modelEndpointTemplatesExample = JSON.stringify(
   2
 )
 
+const modelEndpointRequestExample = {
+  model: '{model}',
+  prompt: 'A serene koi pond at sunset, ukiyo-e style.',
+  size: '1024x1024',
+  n: 1,
+}
+
+const modelEndpointParametersExample = [
+  {
+    name: 'prompt',
+    type: 'string',
+    required: true,
+    description: '想要生成图像的文字描述',
+  },
+  {
+    name: 'size',
+    type: 'enum',
+    default: '1024x1024',
+    enum_values: ['1024x1024'],
+    description: '输出图像尺寸',
+  },
+  {
+    name: 'n',
+    type: 'integer',
+    default: 1,
+    range: '1 ~ 10',
+    description: '生成图片数量',
+  },
+]
+
 const defaultAsyncTaskResponseMapping = {
   submit_task_id_paths: [
     'id',
@@ -127,29 +173,9 @@ const defaultAsyncTaskResponseMapping = {
   ],
   fetch_status_map: {
     queued: 'QUEUED',
-    pending: 'QUEUED',
-    submitted: 'QUEUED',
-    waiting: 'QUEUED',
-    wait: 'QUEUED',
-    created: 'QUEUED',
     processing: 'IN_PROGRESS',
-    running: 'IN_PROGRESS',
-    in_progress: 'IN_PROGRESS',
-    'in-progress': 'IN_PROGRESS',
-    generating: 'IN_PROGRESS',
-    active: 'IN_PROGRESS',
     completed: 'SUCCESS',
-    succeeded: 'SUCCESS',
-    success: 'SUCCESS',
-    done: 'SUCCESS',
-    finished: 'SUCCESS',
     failed: 'FAILURE',
-    failure: 'FAILURE',
-    error: 'FAILURE',
-    cancelled: 'FAILURE',
-    canceled: 'FAILURE',
-    rejected: 'FAILURE',
-    timeout: 'FAILURE',
   },
   fetch_progress_paths: [
     'progress',
@@ -162,26 +188,11 @@ const defaultAsyncTaskResponseMapping = {
     'video_url',
     'image_url',
     'url',
-    'data.video_url',
-    'data.image_url',
     'data.url',
-    'data.0.url',
-    'data.0.video_url',
-    'data.0.image_url',
-    'data.result.video_url',
-    'data.result.image_url',
     'data.result.url',
     'data.result.images.0.url',
-    'data.result.images.0.url.0',
-    'result.video_url',
-    'result.image_url',
     'result.url',
     'result.images.0.url',
-    'result.images.0.url.0',
-    'images.0.url',
-    'images.0.url.0',
-    'output.0.url',
-    'data.output.0.url',
   ],
   fetch_error_message_paths: [
     'error.message',
@@ -193,6 +204,37 @@ const defaultAsyncTaskResponseMapping = {
     'reason',
     'data.reason',
   ],
+}
+
+const asyncTaskStripFieldsExample = ['metadata.debug', 'response_format']
+
+const asyncTaskHeadersExample = {
+  Authorization: 'Bearer {api_key}',
+}
+
+const asyncTaskSetFieldsExample = {
+  model: '{upstream_model}',
+}
+
+const asyncTaskBodyExample = {
+  model: '{upstream_model}',
+  prompt: '{body:prompt}',
+  size: '{body:size}',
+}
+
+const asyncTaskSubmitResponseExample = {
+  id: 'task_123456',
+  status: 'queued',
+}
+
+const asyncTaskFetchResponseExample = {
+  status: 'completed',
+  progress: 100,
+  data: {
+    result: {
+      images: [{ url: 'https://example.com/image.png' }],
+    },
+  },
 }
 
 const asyncTaskUpstreamTemplatesExample = JSON.stringify(
@@ -207,26 +249,13 @@ const asyncTaskUpstreamTemplatesExample = JSON.stringify(
       submit_path: '/v1/videos',
       fetch_path: '/v1/videos/{task_id}',
       method: 'POST',
-      headers: {
-        Authorization: 'Bearer {api_key}',
-      },
-      set_fields: {
-        model: '{upstream_model}',
-        prompt: '{body:prompt}',
-      },
+      headers: asyncTaskHeadersExample,
+      strip_fields: asyncTaskStripFieldsExample,
+      set_fields: asyncTaskSetFieldsExample,
+      body: asyncTaskBodyExample,
       response_mapping: defaultAsyncTaskResponseMapping,
-      submit_response_example: {
-        id: 'upstream_task_id',
-        status: 'queued',
-      },
-      fetch_response_example: {
-        status: 'completed',
-        data: {
-          result: {
-            images: [{ url: 'https://example.com/image.png' }],
-          },
-        },
-      },
+      submit_response_example: asyncTaskSubmitResponseExample,
+      fetch_response_example: asyncTaskFetchResponseExample,
     },
     {
       enabled: true,
@@ -237,9 +266,9 @@ const asyncTaskUpstreamTemplatesExample = JSON.stringify(
       name_rule: 0,
       submit_path: '/v1/images/generations/async',
       fetch_path: '/v1/images/generations/async/{task_id}',
-      set_fields: {
-        model: '{upstream_model}',
-      },
+      strip_fields: asyncTaskStripFieldsExample,
+      set_fields: asyncTaskSetFieldsExample,
+      body: asyncTaskBodyExample,
     },
   ],
   null,
@@ -472,8 +501,8 @@ function createEmptyModelEndpointTemplateDraft(): ModelEndpointTemplateDraft {
     path: '',
     method: 'POST',
     description: '',
-    requestExample: '{}',
-    parameters: '[]',
+    requestExample: stringifyTemplatePart(modelEndpointRequestExample, {}),
+    parameters: stringifyTemplatePart(modelEndpointParametersExample, []),
   }
 }
 
@@ -651,17 +680,23 @@ function createEmptyAsyncTaskTemplateDraft(): AsyncTaskUpstreamTemplateDraft {
     submitPath: '',
     fetchPath: '',
     method: 'POST',
-    headers: '{}',
-    stripFields: '[]',
-    setFields: '{}',
-    body: '{}',
+    headers: stringifyTemplatePart(asyncTaskHeadersExample, {}),
+    stripFields: stringifyTemplatePart(asyncTaskStripFieldsExample, []),
+    setFields: stringifyTemplatePart(asyncTaskSetFieldsExample, {}),
+    body: stringifyTemplatePart(asyncTaskBodyExample, {}),
     responseMapping: JSON.stringify(
       defaultAsyncTaskResponseMapping,
       null,
       2
     ),
-    submitResponseExample: '{}',
-    fetchResponseExample: '{}',
+    submitResponseExample: stringifyTemplatePart(
+      asyncTaskSubmitResponseExample,
+      {}
+    ),
+    fetchResponseExample: stringifyTemplatePart(
+      asyncTaskFetchResponseExample,
+      {}
+    ),
   }
 }
 
@@ -826,6 +861,7 @@ export function EndpointTemplateSettingsCard({
   const [asyncTemplateMode, setAsyncTemplateMode] = useState<'visual' | 'json'>(
     'visual'
   )
+  const [guideOpen, setGuideOpen] = useState(false)
   const form = useForm<EndpointTemplateSettingsFormValues>({
     resolver: zodResolver(schema),
     defaultValues,
@@ -898,15 +934,18 @@ export function EndpointTemplateSettingsCard({
             isSaving={updateOption.isPending}
           />
 
-          <Alert>
-            <FileJson />
-            <AlertTitle>{t('Configuration scope')}</AlertTitle>
-            <AlertDescription>
-              {t(
-                'These templates only affect model endpoint display and async task upstream routing. They are not mixed into channel edit settings.'
-              )}
-            </AlertDescription>
-          </Alert>
+          <div className='flex flex-wrap justify-end gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={() => setGuideOpen(true)}
+            >
+              <HelpCircle data-icon='inline-start' />
+              {t('Usage guide')}
+            </Button>
+          </div>
+          <EndpointTemplateGuide open={guideOpen} onOpenChange={setGuideOpen} />
 
           <Tabs defaultValue='model-endpoints' className='gap-4'>
             <TabsList className='w-fit'>
@@ -927,11 +966,6 @@ export function EndpointTemplateSettingsCard({
                     <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                       <div className='flex flex-col gap-1'>
                         <FormLabel>{t('Model endpoint templates')}</FormLabel>
-                        <FormDescription>
-                          {t(
-                            'Controls the endpoint templates available in the model management form. Visual mode only lists existing NewAPI routes.'
-                          )}
-                        </FormDescription>
                       </div>
                       <Button
                         type='button'
@@ -1025,11 +1059,6 @@ export function EndpointTemplateSettingsCard({
                         <FormLabel>
                           {t('Async task upstream templates')}
                         </FormLabel>
-                        <FormDescription>
-                          {t(
-                            'Matches an existing NewAPI async route, channel, and model before rewriting the upstream submit/fetch path, request body, and response mapping.'
-                          )}
-                        </FormDescription>
                       </div>
                       <Button
                         type='button'
@@ -1112,18 +1141,212 @@ export function EndpointTemplateSettingsCard({
               />
             </TabsContent>
           </Tabs>
-
-          <Alert>
-            <AlertTitle>{t('Template notes')}</AlertTitle>
-            <AlertDescription>
-              {t(
-                'Request path selects an existing NewAPI route and does not create a new public API. Upstream differences should be handled by submit path, fetch path, body fields, and response mapping.'
-              )}
-            </AlertDescription>
-          </Alert>
         </SettingsForm>
       </Form>
     </SettingsSection>
+  )
+}
+
+type EndpointTemplateGuideProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+function EndpointTemplateGuideCodeBlock({ children }: { children: string }) {
+  return (
+    <pre className='bg-muted/60 overflow-x-auto rounded-lg border px-3 py-2 text-xs leading-6 whitespace-pre-wrap'>
+      {children}
+    </pre>
+  )
+}
+
+function EndpointTemplateGuide({
+  open,
+  onOpenChange,
+}: EndpointTemplateGuideProps) {
+  const { t } = useTranslation()
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side='right'
+        className={sideDrawerContentClassName('sm:max-w-2xl')}
+      >
+        <SheetHeader className={sideDrawerHeaderClassName()}>
+          <SheetTitle>{t('Template configuration usage guide')}</SheetTitle>
+          <SheetDescription>
+            {t(
+              'Understand model endpoint templates and async upstream templates before enabling them.'
+            )}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className={sideDrawerFormClassName('gap-5')}>
+          <section className='flex flex-col gap-2'>
+            <h3 className='text-sm font-semibold'>
+              {t('What this page controls')}
+            </h3>
+            <div className='text-muted-foreground flex flex-col gap-2 text-sm leading-6'>
+              <p>
+                {t(
+                  'Model endpoint templates control the usage examples shown in model management and client documentation.'
+                )}
+              </p>
+              <p>
+                {t(
+                  'Async task upstream templates rewrite upstream submit/fetch requests for existing NewAPI async routes.'
+                )}
+              </p>
+              <p>
+                {t(
+                  'They do not create new public API paths. Request path must be one of the supported local routes.'
+                )}
+              </p>
+            </div>
+          </section>
+
+          <Accordion className='rounded-lg border px-3'>
+            <AccordionItem value='model-endpoint'>
+              <AccordionTrigger>
+                {t('Model endpoint template')}
+              </AccordionTrigger>
+              <AccordionContent className='flex flex-col gap-3'>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Use this when a model needs to display a specific API path, request method, request example, and parameter list.'
+                  )}
+                </p>
+                <EndpointTemplateGuideCodeBlock>
+                  {`{
+  "image-generation-async": {
+    "path": "/v1/images/generations/async",
+    "method": "POST",
+    "request_example": {
+      "model": "{model}",
+      "prompt": "A koi pond at sunset",
+      "size": "1024x1024"
+    }
+  }
+}`}
+                </EndpointTemplateGuideCodeBlock>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Common placeholders include {model}, {endpoint_type}, {endpoint_path}, and {method}.'
+                  )}
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value='async-upstream'>
+              <AccordionTrigger>{t('Async upstream template')}</AccordionTrigger>
+              <AccordionContent className='flex flex-col gap-3'>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Use this when the local route stays the same, but a selected upstream channel needs a different submit path, fetch path, or body format.'
+                  )}
+                </p>
+                <EndpointTemplateGuideCodeBlock>
+                  {`{
+  "enabled": true,
+  "channel_id": 19,
+  "request_path": "/v1/images/generations/async",
+  "model": "gpt-image-2",
+  "submit_path": "/v1/videos",
+  "fetch_path": "/v1/videos/{task_id}"
+}`}
+                </EndpointTemplateGuideCodeBlock>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Enabled templates are checked from top to bottom. The first matching channel, request path, and model rule is used.'
+                  )}
+                </p>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Channel ID has priority when configured. Channel type can be used as a broader fallback. Leave model empty to match all models.'
+                  )}
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value='body'>
+              <AccordionTrigger>{t('Request body rewriting')}</AccordionTrigger>
+              <AccordionContent className='flex flex-col gap-3'>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Body JSON rebuilds the whole upstream request body. Fields not listed there are not sent upstream.'
+                  )}
+                </p>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Strip fields JSON removes fields from the selected body before set fields are applied.'
+                  )}
+                </p>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Set fields JSON adds or overrides fields after strip fields. It is suitable for changing model, prompt, size, or nested parameters.'
+                  )}
+                </p>
+                <EndpointTemplateGuideCodeBlock>
+                  {`"strip_fields": ["metadata.debug"],
+"body": {
+  "model": "{upstream_model}",
+  "prompt": "{body:prompt}",
+  "size": "{body:size}"
+},
+"set_fields": {
+  "parameters.ratio": "{body:ratio}"
+}`}
+                </EndpointTemplateGuideCodeBlock>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value='mapping'>
+              <AccordionTrigger>{t('Response mapping')}</AccordionTrigger>
+              <AccordionContent className='flex flex-col gap-3'>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Response mapping tells the system where to read task ID, status, progress, result URL, and error message from upstream responses.'
+                  )}
+                </p>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'fetch_status_map only needs provider-specific values. Add more mappings only when the upstream status is not already normalized.'
+                  )}
+                </p>
+                <EndpointTemplateGuideCodeBlock>
+                  {`{
+  "submit_task_id_paths": ["id", "data.id"],
+  "fetch_status_paths": ["status", "data.status"],
+  "fetch_status_map": {
+    "completed": "SUCCESS",
+    "failed": "FAILURE"
+  },
+  "fetch_result_url_paths": ["url", "data.result.images.0.url"]
+}`}
+                </EndpointTemplateGuideCodeBlock>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value='advice'>
+              <AccordionTrigger>{t('Operational advice')}</AccordionTrigger>
+              <AccordionContent className='flex flex-col gap-2'>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t('Keep new templates disabled until you finish a test request.')}
+                </p>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t('Put provider-specific templates before broad fallback templates.')}
+                </p>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'After changing templates, test submit and fetch flows with one model and one channel first.'
+                  )}
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -1327,16 +1550,6 @@ function ModelEndpointTemplateVisualEditor({
                 {expanded && (
                   <div className='border-t bg-muted/20 p-3'>
                     <div className='flex flex-col gap-3 rounded-lg border bg-background p-3'>
-                      <p className='text-muted-foreground text-xs'>
-                        {t(
-                          'Configure the API documentation shown in the model details panel.'
-                        )}
-                      </p>
-                      <p className='text-muted-foreground text-xs'>
-                        {t(
-                          'Request examples support placeholders: {model}, {endpoint_type}, {endpoint_path}, and {method}.'
-                        )}
-                      </p>
                       <TemplateInlineField label={t('Endpoint description')}>
                         <Textarea
                           rows={3}
@@ -1733,21 +1946,6 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                 {expanded && (
                   <div className='border-t bg-muted/20 p-3'>
                     <div className='flex flex-col gap-3 rounded-lg border bg-background p-3'>
-                      <p className='text-muted-foreground text-xs'>
-                        {t(
-                          'Configure the upstream request details for this template row.'
-                        )}
-                      </p>
-                      <p className='text-muted-foreground text-xs'>
-                        {t(
-                          'When model is empty, this async upstream template matches all models under the selected channel and request path.'
-                        )}
-                      </p>
-                      <p className='text-muted-foreground text-xs'>
-                        {t(
-                          'Submit method only applies to the upstream submit request. Fetch requests are sent with GET.'
-                        )}
-                      </p>
                       <div className='grid gap-3 md:grid-cols-2'>
                         <TemplateJsonField
                           label={t('Headers JSON')}
@@ -1786,11 +1984,6 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                         <div className='flex flex-col gap-1'>
                           <span className='text-sm font-medium'>
                             {t('Response mapping')}
-                          </span>
-                          <span className='text-muted-foreground text-xs'>
-                            {t(
-                              'Map upstream submit and fetch responses to local task fields. Leave empty to use the built-in compatible parser.'
-                            )}
                           </span>
                         </div>
                         <TemplateJsonField
