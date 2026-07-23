@@ -43,7 +43,7 @@ func TestOaiResponsesStreamHandlerMarksCompletedEvent(t *testing.T) {
 
 	body := strings.Join([]string{
 		`data: {"type":"response.output_text.delta","delta":"ok"}`,
-		`data: {"type":"response.completed","response":{"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}}`,
+		`data: {"type":"response.completed","response":{"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4,"input_tokens_details":{"cached_tokens":2,"cache_write_tokens":1}}}}`,
 		``,
 	}, "\n")
 
@@ -55,6 +55,8 @@ func TestOaiResponsesStreamHandlerMarksCompletedEvent(t *testing.T) {
 	require.Equal(t, 3, usage.PromptTokens)
 	require.Equal(t, 1, usage.CompletionTokens)
 	require.Equal(t, 4, usage.TotalTokens)
+	require.Equal(t, 2, usage.PromptTokensDetails.CachedTokens)
+	require.Equal(t, 1, usage.PromptTokensDetails.CacheWriteTokens)
 	require.NotNil(t, info.StreamStatus)
 	require.True(t, info.StreamStatus.CompletedBeforeClose())
 	require.Equal(t, relaycommon.StreamEndReasonEOF, info.StreamStatus.EndReason)

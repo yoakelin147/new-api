@@ -425,7 +425,7 @@ func tieredQuota(exprStr string, usage *dto.Usage, isClaudeSemantic bool, groupR
 func ratioQuota(usage *dto.Usage, isClaudeSemantic bool, modelRatio, completionRatio, cacheRatio, imageRatio, groupRatio float64) float64 {
 	dPromptTokens := decimal.NewFromInt(int64(usage.PromptTokens))
 	dCacheTokens := decimal.NewFromInt(int64(usage.PromptTokensDetails.CachedTokens))
-	dCcTokens := decimal.NewFromInt(int64(usage.PromptTokensDetails.CachedCreationTokens))
+	dCcTokens := decimal.NewFromInt(int64(usage.PromptTokensDetails.CacheCreationTokensTotal()))
 	dImgTokens := decimal.NewFromInt(int64(usage.PromptTokensDetails.ImageTokens))
 	dCompletionTokens := decimal.NewFromInt(int64(usage.CompletionTokens))
 	dModelRatio := decimal.NewFromFloat(modelRatio)
@@ -464,6 +464,24 @@ func TestBuildTieredTokenParams_GPT_WithCache(t *testing.T) {
 	expr := `tier("base", p * 2.5 + c * 15 + cr * 0.25)`
 	got := tieredQuota(expr, usage, false, 1.0)
 	// P=800, C=500, CR=200 → (800*2.5 + 500*15 + 200*0.25) * 0.5 = 4775
+	want := 4775.0
+	if math.Abs(got-want) > 0.01 {
+		t.Fatalf("quota = %f, want %f", got, want)
+	}
+}
+
+func TestBuildTieredTokenParams_GPT_WithCacheWrite(t *testing.T) {
+	usage := &dto.Usage{
+		PromptTokens:     1000,
+		CompletionTokens: 500,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CacheWriteTokens: 200,
+			TextTokens:       800,
+		},
+	}
+	expr := `tier("base", p * 2.5 + c * 15 + cc * 0.25)`
+	got := tieredQuota(expr, usage, false, 1.0)
+	// P=800, C=500, CC=200 -> (800*2.5 + 500*15 + 200*0.25) * 0.5 = 4775
 	want := 4775.0
 	if math.Abs(got-want) > 0.01 {
 		t.Fatalf("quota = %f, want %f", got, want)
