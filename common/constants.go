@@ -13,7 +13,7 @@ import (
 )
 
 var StartTime = time.Now().Unix() // unit: second
-var Version = "1.1-rc21"          // this hard coding will be replaced automatically when building, no need to manually change
+var Version = "1.0.7-rc21"          // this hard coding will be replaced automatically when building, no need to manually change
 var SystemName = "New API"
 var Footer = ""
 var Logo = ""
