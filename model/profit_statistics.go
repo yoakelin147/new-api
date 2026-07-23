@@ -131,7 +131,7 @@ func GetProfitStatistics(query ProfitStatisticsQuery, startIdx int, pageSize int
 
 	tx = tx.Select("id, created_at, type, username, model_name, quota, prompt_tokens, completion_tokens, channel_id, " + logGroupCol + ", other")
 	var logs []Log
-	if err := tx.Order("logs.created_at desc, logs.id desc").FindInBatches(&logs, 1000, func(_tx *gorm.DB, _batch int) error {
+	if err := tx.FindInBatches(&logs, 1000, func(_tx *gorm.DB, _batch int) error {
 		for _, log := range logs {
 			addProfitStatisticsLog(rowsByKey, ratiosByChannel, channelNames, log)
 		}

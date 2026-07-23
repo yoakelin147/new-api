@@ -288,6 +288,51 @@ func TestGetProfitStatisticsSeparatesChangedCustomerRatios(t *testing.T) {
 	assert.InDelta(t, 72, summary.Profit, 0.000001)
 }
 
+func TestGetProfitStatisticsScansAllBatches(t *testing.T) {
+	truncateTables(t)
+	common.QuotaPerUnit = 500000
+
+	base := time.Date(2026, 7, 22, 0, 0, 0, 0, time.Local)
+	require.NoError(t, DB.Create(&Channel{Id: 18, Name: "Azure", Key: "key"}).Error)
+	require.NoError(t, DB.Create(&ChannelProfitRatio{
+		ChannelId:     18,
+		UpstreamRatio: 0.1,
+		Enabled:       true,
+	}).Error)
+	logs := make([]*Log, 0, 2500)
+	for i := 0; i < 2500; i++ {
+		logs = append(logs, &Log{
+			UserId:    7,
+			Username:  "transsion",
+			CreatedAt: base.Add(time.Duration(i) * time.Second).Unix(),
+			Type:      LogTypeConsume,
+			ModelName: "gpt-5.6-sol",
+			Group:     "OpenAI官方",
+			ChannelId: 18,
+			Quota:     100,
+			Other:     `{"group_ratio":0.5}`,
+		})
+	}
+	require.NoError(t, DB.CreateInBatches(&logs, 200).Error)
+
+	rows, total, summary, err := GetProfitStatistics(ProfitStatisticsQuery{
+		LogType:        LogTypeConsume,
+		StartTimestamp: base.Unix(),
+		EndTimestamp:   base.Add(2499 * time.Second).Unix(),
+		Username:       "transsion",
+	}, 0, 10)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 2500, summary.RequestCount)
+	assert.InDelta(t, 0.5, rows[0].CustomerRatio, 0.000001)
+	assert.InDelta(t, 0.5, summary.CustomerAmount, 0.000001)
+	assert.InDelta(t, 1, summary.OriginalAmount, 0.000001)
+	assert.InDelta(t, 0.1, summary.UpstreamCost, 0.000001)
+	assert.InDelta(t, 0.4, summary.Profit, 0.000001)
+}
+
 func TestChannelProfitRatioSpecificMatchWins(t *testing.T) {
 	ratios := []ChannelProfitRatio{
 		{Id: 1, ChannelId: 18, UpstreamRatio: 0.3},

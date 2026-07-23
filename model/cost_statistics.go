@@ -133,7 +133,7 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 	tx = tx.Select("id, created_at, type, username, token_id, token_name, model_name, quota, prompt_tokens, completion_tokens, channel_id, use_time, " + logGroupCol + ", other")
 
 	var batch []Log
-	err := tx.Order("logs.created_at desc, logs.id desc").FindInBatches(&batch, 1000, func(_tx *gorm.DB, _batch int) error {
+	err := tx.FindInBatches(&batch, 1000, func(_tx *gorm.DB, _batch int) error {
 		for _, log := range batch {
 			date := time.Unix(log.CreatedAt, 0).Local().Format("20060102")
 			channelId := 0

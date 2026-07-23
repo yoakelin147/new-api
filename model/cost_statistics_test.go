@@ -401,3 +401,41 @@ func TestGetCostStatisticsPagination(t *testing.T) {
 	assert.Len(t, rows, 1)
 	assert.Equal(t, 300, summary.Quota)
 }
+
+func TestGetCostStatisticsScansAllBatches(t *testing.T) {
+	truncateTables(t)
+
+	base := time.Date(2026, 7, 22, 0, 0, 0, 0, time.Local)
+	logs := make([]*Log, 0, 2500)
+	for i := 0; i < 2500; i++ {
+		logs = append(logs, &Log{
+			UserId:    7,
+			Username:  "transsion",
+			CreatedAt: base.Add(time.Duration(i) * time.Second).Unix(),
+			Type:      LogTypeConsume,
+			TokenId:   101,
+			TokenName: "api-key",
+			ModelName: "gpt-5.6-sol",
+			Group:     "OpenAI官方",
+			ChannelId: 18,
+			Quota:     100,
+		})
+	}
+	require.NoError(t, DB.CreateInBatches(&logs, 200).Error)
+
+	rows, total, summary, err := GetCostStatistics(CostStatisticsQuery{
+		IsAdmin:        true,
+		LogType:        LogTypeConsume,
+		StartTimestamp: base.Unix(),
+		EndTimestamp:   base.Add(2499 * time.Second).Unix(),
+		Username:       "transsion",
+	}, 0, 10)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 2500, summary.RequestCount)
+	assert.Equal(t, 250000, summary.Quota)
+	assert.Equal(t, 2500, rows[0].RequestCount)
+	assert.Equal(t, 250000, rows[0].Quota)
+}
