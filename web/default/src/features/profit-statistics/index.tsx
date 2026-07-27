@@ -1174,16 +1174,16 @@ function RatioSettingsDialog(props: {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='sm:max-w-4xl'>
-        <DialogHeader>
+      <DialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden max-sm:w-[calc(100vw-1rem)] sm:max-w-4xl'>
+        <DialogHeader className='shrink-0'>
           <DialogTitle>{t('Upstream Ratio Settings')}</DialogTitle>
           <DialogDescription>
             {t('Configure channel upstream cost ratios for profit statistics.')}
           </DialogDescription>
         </DialogHeader>
 
-        <div className='grid gap-4 lg:grid-cols-[280px_1fr]'>
-          <FieldGroup>
+        <div className='grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[280px_minmax(0,1fr)]'>
+          <FieldGroup className='min-h-0 overflow-y-auto pr-1'>
             <Field>
               <FieldLabel>{t('Channel ID')}</FieldLabel>
               <ComboboxInput
@@ -1274,7 +1274,7 @@ function RatioSettingsDialog(props: {
             ) : null}
           </FieldGroup>
 
-          <div className='min-h-[320px] overflow-auto rounded-lg border'>
+          <div className='min-h-[320px] overflow-auto rounded-lg border lg:min-h-0'>
             <StaticDataTable
               data={ratios}
               columns={[
