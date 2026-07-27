@@ -61,6 +61,9 @@ func BuildAsyncTaskTemplateURL(baseURL string, pathTemplate string, ctx AsyncTas
 func ResolveAsyncTaskTemplateValue(value any, ctx AsyncTaskTemplateContext) any {
 	switch v := value.(type) {
 	case string:
+		if path, ok := exactBodyTemplatePath(v); ok {
+			return cloneTemplateValue(getTemplateBodyValue(ctx.Body, path))
+		}
 		return ResolveAsyncTaskTemplateString(v, ctx)
 	case map[string]any:
 		out := make(map[string]any, len(v))
@@ -183,6 +186,21 @@ func cloneTemplateBody(source map[string]any) map[string]any {
 	return out
 }
 
+func exactBodyTemplatePath(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "{body:") || !strings.HasSuffix(value, "}") {
+		return "", false
+	}
+	if strings.Count(value, "{body:") != 1 || strings.Count(value, "}") != 1 {
+		return "", false
+	}
+	path := strings.TrimSuffix(strings.TrimPrefix(value, "{body:"), "}")
+	if strings.TrimSpace(path) == "" {
+		return "", false
+	}
+	return path, true
+}
+
 func getTemplateBodyValue(body map[string]any, path string) any {
 	if body == nil {
 		return ""
@@ -199,6 +217,21 @@ func getTemplateBodyValue(body map[string]any, path string) any {
 		}
 	}
 	return current
+}
+
+func cloneTemplateValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		return cloneTemplateBody(v)
+	case []any:
+		out := make([]any, 0, len(v))
+		for _, item := range v {
+			out = append(out, cloneTemplateValue(item))
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 func deleteTemplateBodyField(body map[string]any, path string) {

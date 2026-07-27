@@ -66,6 +66,11 @@ func VideoProxy(c *gin.Context) {
 		baseURL = "https://api.openai.com"
 	}
 
+	if directURL := getStoredVideoResultURL(task); directURL != "" {
+		redirectVideoResultURL(c, directURL)
+		return
+	}
+
 	var videoURL string
 	proxy := channel.GetSetting().Proxy
 	client := service.GetSSRFProtectedHTTPClient()
@@ -213,4 +218,28 @@ func writeVideoDataURL(c *gin.Context, dataURL string) error {
 	c.Writer.WriteHeader(http.StatusOK)
 	_, err = c.Writer.Write(videoBytes)
 	return err
+}
+
+func getStoredVideoResultURL(task *model.Task) string {
+	if task == nil {
+		return ""
+	}
+	videoURL := strings.TrimSpace(task.GetResultURL())
+	if videoURL == "" || isTaskProxyContentURL(videoURL, task.TaskID) || !isRedirectableVideoResultURL(videoURL) {
+		return ""
+	}
+	return videoURL
+}
+
+func isRedirectableVideoResultURL(videoURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(videoURL))
+	if err != nil {
+		return false
+	}
+	return parsed.Scheme == "http" || parsed.Scheme == "https"
+}
+
+func redirectVideoResultURL(c *gin.Context, videoURL string) {
+	c.Header("Cache-Control", "public, max-age=86400")
+	c.Redirect(http.StatusFound, videoURL)
 }

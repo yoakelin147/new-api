@@ -54,6 +54,14 @@ function parseTaskData(data: unknown): unknown[] {
   return []
 }
 
+function getTaskVideoPreviewUrl(log: TaskLog): string {
+  const resultUrl = (log.result_url || '').trim()
+  const proxyUrl = `/v1/videos/${log.task_id}/content`
+  if (!resultUrl) return proxyUrl
+  if (resultUrl.includes(`/v1/videos/${log.task_id}/content`)) return proxyUrl
+  return resultUrl
+}
+
 function AudioPreviewCell({ log }: { log: TaskLog }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -259,7 +267,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         }
 
         if (isSuccess && isVideoTask && resultUrl) {
-          const videoUrl = `/v1/videos/${log.task_id}/content`
+          const videoUrl = getTaskVideoPreviewUrl(log)
           return (
             <a
               href={videoUrl}
