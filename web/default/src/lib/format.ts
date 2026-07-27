@@ -166,14 +166,28 @@ export function formatLogQuota(quota: number): string {
   })
 }
 
+function formatChineseUnitNumber(value: number, divisor: number, unit: string) {
+  const formatted = (value / divisor).toFixed(2).replace(/\.?0+$/, '')
+  return `${formatted}${unit}`
+}
+
 /**
- * Format tokens count with K/M suffixes
+ * Format tokens count with Chinese large-number units for dashboard readability.
  */
 export function formatTokens(tokens: number): string {
-  if (tokens === 0) return '-'
-  if (tokens < 1000) return tokens.toString()
-  if (tokens < 1000000) return `${(tokens / 1000).toFixed(1)}K`
-  return `${(tokens / 1000000).toFixed(2)}M`
+  if (!Number.isFinite(tokens) || tokens <= 0) return '-'
+  if (tokens >= 1_0000_0000_0000) {
+    return formatChineseUnitNumber(tokens, 1_0000_0000_0000, '万亿')
+  }
+  if (tokens >= 1_0000_0000) {
+    return formatChineseUnitNumber(tokens, 1_0000_0000, '亿')
+  }
+  if (tokens >= 1_0000) {
+    return formatChineseUnitNumber(tokens, 1_0000, '万')
+  }
+  return Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+    tokens
+  )
 }
 
 /**

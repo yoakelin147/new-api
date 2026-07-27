@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
-import { formatNumber, formatQuota } from '@/lib/format'
+import { formatNumber, formatQuota, formatTokens } from '@/lib/format'
 import { computeTimeRange } from '@/lib/time'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserQuotaDates } from '@/features/dashboard/api'
@@ -105,7 +105,10 @@ export function LogStatCards(props: LogStatCardsProps) {
     value:
       config.key === 'quota'
         ? formatQuota(config.getValue(adaptedStats, timeRangeMinutes))
-        : formatNumber(config.getValue(adaptedStats, timeRangeMinutes)),
+        : config.key === 'tokens' || config.key === 'avgTpm'
+          ? formatTokens(config.getValue(adaptedStats, timeRangeMinutes))
+          : formatNumber(config.getValue(adaptedStats, timeRangeMinutes)),
+    rawValue: config.getValue(adaptedStats, timeRangeMinutes),
     desc: config.description,
     icon: config.icon,
   }))
@@ -144,7 +147,7 @@ export function LogStatCards(props: LogStatCardsProps) {
               ) : (
                 <>
                   <div className='text-foreground mt-1.5 font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
-                    {it.value}
+                    <span title={formatNumber(it.rawValue)}>{it.value}</span>
                   </div>
                   <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
                     {it.desc}

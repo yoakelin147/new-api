@@ -35,6 +35,7 @@ import {
   formatNumber,
   formatTimestampForInput,
   formatTimestampToDate,
+  formatTokens,
   parseTimestampFromInput,
 } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -938,7 +939,11 @@ function ProfitStatisticsTable(props: {
           header: t('Tokens'),
           className: 'text-right',
           cellClassName: 'text-right tabular-nums',
-          cell: (row: ProfitStatisticsRow) => formatNumber(row.total_tokens),
+          cell: (row: ProfitStatisticsRow) => (
+            <span title={formatNumber(row.total_tokens)}>
+              {formatTokens(row.total_tokens)}
+            </span>
+          ),
         },
         {
           id: 'requests',

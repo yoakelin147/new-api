@@ -20,17 +20,23 @@ For commercial licensing, please contact support@quantumnous.com
 // Rankings formatting helpers
 // ----------------------------------------------------------------------------
 
-/** Format a token count as `1.2B`, `42M`, `980K`, or `512`. */
+function formatChineseUnitNumber(value: number, divisor: number, unit: string) {
+  const formatted = (value / divisor).toFixed(2).replace(/\.?0+$/, '')
+  return `${formatted}${unit}`
+}
+
+/** Format a token count with Chinese large-number units. */
 export function formatTokens(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0'
-  if (value >= 1_000_000_000_000)
-    return `${(value / 1_000_000_000_000).toFixed(2)}T`
-  if (value >= 1_000_000_000)
-    return `${(value / 1_000_000_000).toFixed(value >= 10_000_000_000 ? 1 : 2)}B`
-  if (value >= 1_000_000)
-    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}M`
-  if (value >= 1_000)
-    return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`
+  if (value >= 1_0000_0000_0000) {
+    return formatChineseUnitNumber(value, 1_0000_0000_0000, '万亿')
+  }
+  if (value >= 1_0000_0000) {
+    return formatChineseUnitNumber(value, 1_0000_0000, '亿')
+  }
+  if (value >= 1_0000) {
+    return formatChineseUnitNumber(value, 1_0000, '万')
+  }
   return value.toLocaleString()
 }
 

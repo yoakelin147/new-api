@@ -40,7 +40,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { formatNumber, formatQuota } from '@/lib/format'
+import { formatNumber, formatQuota, formatTokens } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -264,7 +264,10 @@ export function KeyCharts() {
   })
 
   const userOptions = useMemo(() => {
-    const users = new Map<number, Pick<User, 'id' | 'username'> & { display_name?: string }>()
+    const users = new Map<
+      number,
+      Pick<User, 'id' | 'username'> & { display_name?: string }
+    >()
     if (currentUser?.id) {
       users.set(currentUser.id, {
         id: currentUser.id,
@@ -288,7 +291,9 @@ export function KeyCharts() {
   }, [effectiveUserId, userOptions])
 
   const selectedUserLabel =
-    selectedUser?.display_name || selectedUser?.username || `#${effectiveUserId}`
+    selectedUser?.display_name ||
+    selectedUser?.username ||
+    `#${effectiveUserId}`
 
   const handleUserSelect = useCallback((value: string) => {
     setSelectedUserId(value)
@@ -358,7 +363,7 @@ export function KeyCharts() {
     {
       key: 'tokens',
       title: t('Token Usage'),
-      value: formatNumber(summaryStats.tokenUsed),
+      value: formatTokens(summaryStats.tokenUsed),
       icon: KeyRound,
     },
     {
@@ -527,7 +532,7 @@ export function KeyCharts() {
                   size='sm'
                   role='combobox'
                   aria-expanded={userSelectorOpen}
-                  className='min-w-48 max-w-64 justify-between gap-2'
+                  className='max-w-64 min-w-48 justify-between gap-2'
                 />
               }
             >

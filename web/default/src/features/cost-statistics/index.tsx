@@ -37,6 +37,7 @@ import {
   formatNumber,
   formatTimestampForInput,
   formatTimestampToDate,
+  formatTokens,
   parseTimestampFromInput,
   quotaUnitsToDollars,
 } from '@/lib/format'
@@ -1243,13 +1244,18 @@ function CostStatisticsTable(props: {
           className: 'w-[180px]',
           cell: (row: CostStatisticsRow) => (
             <div className='flex flex-col gap-1 font-mono tabular-nums'>
-              <span>
-                {formatNumber(row.prompt_tokens)} /{' '}
-                {formatNumber(row.completion_tokens)}
+              <span
+                title={`${formatNumber(row.prompt_tokens)} / ${formatNumber(row.completion_tokens)}`}
+              >
+                {formatTokens(row.prompt_tokens)} /{' '}
+                {formatTokens(row.completion_tokens)}
               </span>
               {row.total_tokens > 0 && (
-                <span className='text-muted-foreground text-xs'>
-                  {formatNumber(row.total_tokens)}
+                <span
+                  className='text-muted-foreground text-xs'
+                  title={formatNumber(row.total_tokens)}
+                >
+                  {formatTokens(row.total_tokens)}
                 </span>
               )}
             </div>

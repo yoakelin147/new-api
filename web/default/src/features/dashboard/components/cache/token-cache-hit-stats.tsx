@@ -22,7 +22,7 @@ import { VChart } from '@visactor/react-vchart'
 import { BarChart3, Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import dayjs from '@/lib/dayjs'
-import { formatNumber } from '@/lib/format'
+import { formatNumber, formatTokens } from '@/lib/format'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
@@ -64,6 +64,10 @@ function formatRate(rate: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(rate)
+}
+
+function formatTokenCell(value: number) {
+  return <span title={formatNumber(value)}>{formatTokens(value)}</span>
 }
 
 function getChannelLabel(row: TokenCacheHitStatItem) {
@@ -366,21 +370,21 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         header: t('Non-Cache Input Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
-        cell: (row) => formatNumber(row.prompt_tokens),
+        cell: (row) => formatTokenCell(row.prompt_tokens),
       },
       {
         id: 'cache_write_tokens',
         header: t('Cache Write Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
-        cell: (row) => formatNumber(row.cache_write_tokens || 0),
+        cell: (row) => formatTokenCell(row.cache_write_tokens || 0),
       },
       {
         id: 'cache_tokens',
         header: t('Cache Read Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
-        cell: (row) => formatNumber(row.cache_tokens),
+        cell: (row) => formatTokenCell(row.cache_tokens),
       },
       {
         id: 'cache_input_tokens',
@@ -388,14 +392,14 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
         cell: (row) =>
-          formatNumber(row.cache_input_tokens || row.prompt_tokens),
+          formatTokenCell(row.cache_input_tokens || row.prompt_tokens),
       },
       {
         id: 'completion_tokens',
         header: t('Output Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
-        cell: (row) => formatNumber(row.completion_tokens),
+        cell: (row) => formatTokenCell(row.completion_tokens),
       },
     ],
     [t]
@@ -456,21 +460,21 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         header: t('Non-Cache Input Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
-        cell: (row) => formatNumber(row.prompt_tokens),
+        cell: (row) => formatTokenCell(row.prompt_tokens),
       },
       {
         id: 'cache_write_tokens',
         header: t('Cache Write Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
-        cell: (row) => formatNumber(row.cache_write_tokens || 0),
+        cell: (row) => formatTokenCell(row.cache_write_tokens || 0),
       },
       {
         id: 'cache_tokens',
         header: t('Cache Read Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
-        cell: (row) => formatNumber(row.cache_tokens),
+        cell: (row) => formatTokenCell(row.cache_tokens),
       },
       {
         id: 'cache_input_tokens',
@@ -478,14 +482,14 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
         cell: (row) =>
-          formatNumber(row.cache_input_tokens || row.prompt_tokens),
+          formatTokenCell(row.cache_input_tokens || row.prompt_tokens),
       },
       {
         id: 'completion_tokens',
         header: t('Output Tokens'),
         cellClassName: 'text-right tabular-nums',
         className: 'text-right',
-        cell: (row) => formatNumber(row.completion_tokens),
+        cell: (row) => formatTokenCell(row.completion_tokens),
       },
     ],
     [t]
@@ -509,12 +513,14 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
     },
     {
       label: t('Cache Read Tokens'),
-      value: formatNumber(summary.cacheTokens),
+      value: formatTokens(summary.cacheTokens),
+      fullValue: formatNumber(summary.cacheTokens),
       description: t('Total cache read tokens'),
     },
     {
       label: t('Cache Write Tokens'),
-      value: formatNumber(summary.cacheWriteTokens),
+      value: formatTokens(summary.cacheWriteTokens),
+      fullValue: formatNumber(summary.cacheWriteTokens),
       description: t('Total cache write tokens'),
     },
     {
@@ -538,7 +544,7 @@ export function TokenCacheHitStats({ filters }: TokenCacheHitStatsProps) {
                 <Skeleton className='h-7 w-24' />
               ) : (
                 <div className='text-2xl font-semibold tabular-nums'>
-                  {card.value}
+                  <span title={card.fullValue}>{card.value}</span>
                 </div>
               )}
             </CardContent>
@@ -659,9 +665,9 @@ function buildTrendSpec(options: {
       DimensionName: dimensionLabel,
       HitRate: rateValue,
       hitRateText: `${rateValue.toFixed(2)}%`,
-      cacheTokensText: formatNumber(item.cache_tokens),
-      cacheWriteTokensText: formatNumber(item.cache_write_tokens || 0),
-      cacheInputTokensText: formatNumber(
+      cacheTokensText: formatTokens(item.cache_tokens),
+      cacheWriteTokensText: formatTokens(item.cache_write_tokens || 0),
+      cacheInputTokensText: formatTokens(
         item.cache_input_tokens || item.prompt_tokens
       ),
       requestsText: formatNumber(item.request_count),
