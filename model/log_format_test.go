@@ -33,3 +33,24 @@ func TestFormatUserLogsStripsQuotaSaturation(t *testing.T) {
 	// Non-admin billing fields remain visible.
 	require.Contains(t, parsed, "model_price")
 }
+
+func TestFormatUserLogsStripsModelMappingDetails(t *testing.T) {
+	other := common.MapToJsonStr(map[string]interface{}{
+		"is_model_mapped":     true,
+		"upstream_model_name": "GLM-5.2_Gem",
+		"model_ratio":         0.45,
+	})
+	logs := []*Log{{
+		ModelName: "glm-5.2",
+		Other:     other,
+	}}
+
+	formatUserLogs(logs, 0)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.NotContains(t, parsed, "is_model_mapped")
+	require.NotContains(t, parsed, "upstream_model_name")
+	require.Equal(t, "glm-5.2", logs[0].ModelName)
+	require.Contains(t, parsed, "model_ratio")
+}
