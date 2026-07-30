@@ -23,23 +23,33 @@ type EndpointParameter struct {
 // AsyncTaskUpstreamTemplate 是内部异步任务上游模板。
 // 关键匹配维度为 channel_id/channel_type + request_path + model/name_rule，避免同名模型在不同渠道混用规则。
 type AsyncTaskUpstreamTemplate struct {
-	Enabled               bool                      `json:"enabled,omitempty"`
-	Name                  string                    `json:"name,omitempty"`
-	ChannelID             int                       `json:"channel_id,omitempty"`   // 指定渠道 ID；0 表示不限制
-	ChannelType           int                       `json:"channel_type,omitempty"` // 指定渠道类型；0 表示不限制
-	RequestPath           string                    `json:"request_path,omitempty"` // 客户请求 new-api 的路径，如 /v1/images/generations/async
-	Model                 string                    `json:"model,omitempty"`        // 模型匹配值
-	NameRule              int                       `json:"name_rule,omitempty"`    // 0 精确，1 前缀，2 包含，3 后缀
-	SubmitPath            string                    `json:"submit_path,omitempty"`  // 上游提交路径，支持 {task_id}/{model}/{upstream_model}
-	FetchPath             string                    `json:"fetch_path,omitempty"`   // 上游查询路径，支持 {task_id}
-	Method                string                    `json:"method,omitempty"`
-	Headers               map[string]string         `json:"headers,omitempty"`
-	StripFields           []string                  `json:"strip_fields,omitempty"`            // 透传原请求时需要删除的字段
-	SetFields             map[string]any            `json:"set_fields,omitempty"`              // 透传原请求时需要覆盖/补充的字段
-	Body                  map[string]any            `json:"body,omitempty"`                    // 非空时用该模板生成上游请求体
-	ResponseMapping       *AsyncTaskResponseMapping `json:"response_mapping,omitempty"`        // 上游提交/查询回参字段映射
-	SubmitResponseExample map[string]any            `json:"submit_response_example,omitempty"` // 后台配置预览用，不参与运行
-	FetchResponseExample  map[string]any            `json:"fetch_response_example,omitempty"`  // 后台配置预览用，不参与运行
+	Enabled               bool                        `json:"enabled,omitempty"`
+	Name                  string                      `json:"name,omitempty"`
+	ChannelID             int                         `json:"channel_id,omitempty"`   // 指定渠道 ID；0 表示不限制
+	ChannelType           int                         `json:"channel_type,omitempty"` // 指定渠道类型；0 表示不限制
+	RequestPath           string                      `json:"request_path,omitempty"` // 客户请求 new-api 的路径，如 /v1/images/generations/async
+	Model                 string                      `json:"model,omitempty"`        // 模型匹配值
+	NameRule              int                         `json:"name_rule,omitempty"`    // 0 精确，1 前缀，2 包含，3 后缀
+	SubmitPath            string                      `json:"submit_path,omitempty"`  // 上游提交路径，支持 {task_id}/{model}/{upstream_model}
+	FetchPath             string                      `json:"fetch_path,omitempty"`   // 上游查询路径，支持 {task_id}
+	Method                string                      `json:"method,omitempty"`
+	Headers               map[string]string           `json:"headers,omitempty"`
+	StripFields           []string                    `json:"strip_fields,omitempty"`            // 透传原请求时需要删除的字段
+	SetFields             map[string]any              `json:"set_fields,omitempty"`              // 透传原请求时需要覆盖/补充的字段
+	ParameterMappings     []AsyncTaskParameterMapping `json:"parameter_mappings,omitempty"`      // 根据客户原始请求参数条件改写上游字段
+	Body                  map[string]any              `json:"body,omitempty"`                    // 非空时用该模板生成上游请求体
+	ResponseMapping       *AsyncTaskResponseMapping   `json:"response_mapping,omitempty"`        // 上游提交/查询回参字段映射
+	SubmitResponseExample map[string]any              `json:"submit_response_example,omitempty"` // 后台配置预览用，不参与运行
+	FetchResponseExample  map[string]any              `json:"fetch_response_example,omitempty"`  // 后台配置预览用，不参与运行
+}
+
+// AsyncTaskParameterMapping 根据客户原始请求体中的字段组合，条件性改写上游请求体。
+// When 中的所有字段都严格匹配时生效；模板中的规则按顺序匹配，首条命中后停止。
+type AsyncTaskParameterMapping struct {
+	Name        string         `json:"name,omitempty"`
+	When        map[string]any `json:"when"`
+	StripFields []string       `json:"strip_fields,omitempty"`
+	SetFields   map[string]any `json:"set_fields,omitempty"`
 }
 
 // AsyncTaskResponseMapping 描述异步任务上游响应字段如何映射到本站任务字段。

@@ -16,7 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type ReactNode, useEffect, useState } from 'react'
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from 'react'
 import { useQuery } from '@tanstack/react-query'
 import * as z from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -39,6 +45,11 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   Form,
   FormControl,
@@ -67,11 +78,13 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { MultiSelect, type Option as MultiSelectOption } from '@/components/multi-select'
 import {
   sideDrawerContentClassName,
   sideDrawerFormClassName,
   sideDrawerHeaderClassName,
 } from '@/components/drawer-layout'
+import { cn } from '@/lib/utils'
 import { getChannels } from '@/features/channels/api'
 import { CHANNEL_TYPE_OPTIONS } from '@/features/channels/constants'
 import type { Channel } from '@/features/channels/types'
@@ -216,6 +229,15 @@ const asyncTaskSetFieldsExample = {
   model: '{upstream_model}',
 }
 
+const asyncTaskParameterMappingsExample = [
+  {
+    name: '1:1 2K to 2048x2048',
+    when: { size: '1:1', resolution: '2k' },
+    strip_fields: ['resolution'],
+    set_fields: { size: '2048x2048' },
+  },
+]
+
 const asyncTaskBodyExample = {
   model: '{upstream_model}',
   prompt: '{body:prompt}',
@@ -252,6 +274,7 @@ const asyncTaskUpstreamTemplatesExample = JSON.stringify(
       headers: asyncTaskHeadersExample,
       strip_fields: asyncTaskStripFieldsExample,
       set_fields: asyncTaskSetFieldsExample,
+      parameter_mappings: asyncTaskParameterMappingsExample,
       body: asyncTaskBodyExample,
       response_mapping: defaultAsyncTaskResponseMapping,
       submit_response_example: asyncTaskSubmitResponseExample,
@@ -365,10 +388,18 @@ type AsyncTaskUpstreamTemplateConfig = {
   headers?: Record<string, string>
   strip_fields?: string[]
   set_fields?: Record<string, unknown>
+  parameter_mappings?: AsyncTaskParameterMappingConfig[]
   body?: Record<string, unknown>
   response_mapping?: AsyncTaskResponseMappingConfig
   submit_response_example?: Record<string, unknown>
   fetch_response_example?: Record<string, unknown>
+}
+
+type AsyncTaskParameterMappingConfig = {
+  name?: string
+  when?: Record<string, unknown>
+  strip_fields?: string[]
+  set_fields?: Record<string, unknown>
 }
 
 type AsyncTaskResponseMappingConfig = {
@@ -424,6 +455,7 @@ type AsyncTaskUpstreamTemplateDraft = {
   headers: string
   stripFields: string
   setFields: string
+  parameterMappings: string
   body: string
   responseMapping: string
   submitResponseExample: string
@@ -564,6 +596,10 @@ function parseAsyncTaskTemplateDrafts(value: string) {
         headers: stringifyTemplatePart(template.headers, {}),
         stripFields: stringifyTemplatePart(template.strip_fields, []),
         setFields: stringifyTemplatePart(template.set_fields, {}),
+        parameterMappings: stringifyTemplatePart(
+          template.parameter_mappings,
+          []
+        ),
         body: stringifyTemplatePart(template.body, {}),
         responseMapping: stringifyTemplatePart(template.response_mapping, {}),
         submitResponseExample: stringifyTemplatePart(
@@ -633,6 +669,13 @@ function serializeAsyncTaskTemplateDrafts(
     )
     if (Object.keys(setFields).length > 0) template.set_fields = setFields
 
+    const parameterMappings = parseTemplateJsonPart<
+      AsyncTaskParameterMappingConfig[]
+    >(draft.parameterMappings, [])
+    if (parameterMappings.length > 0) {
+      template.parameter_mappings = parameterMappings
+    }
+
     const body = parseTemplateJsonPart<Record<string, unknown>>(draft.body, {})
     if (Object.keys(body).length > 0) template.body = body
 
@@ -683,6 +726,10 @@ function createEmptyAsyncTaskTemplateDraft(): AsyncTaskUpstreamTemplateDraft {
     headers: stringifyTemplatePart(asyncTaskHeadersExample, {}),
     stripFields: stringifyTemplatePart(asyncTaskStripFieldsExample, []),
     setFields: stringifyTemplatePart(asyncTaskSetFieldsExample, {}),
+    parameterMappings: stringifyTemplatePart(
+      asyncTaskParameterMappingsExample,
+      []
+    ),
     body: stringifyTemplatePart(asyncTaskBodyExample, {}),
     responseMapping: JSON.stringify(
       defaultAsyncTaskResponseMapping,
@@ -717,11 +764,55 @@ function isTemplateJsonArray(value: string) {
   }
 }
 
+function isAsyncTaskParameterMappingsJson(value: string) {
+  try {
+    const parsed = JSON.parse(value.trim() || '[]')
+    if (!Array.isArray(parsed)) return false
+    return parsed.every((item) => {
+      if (item === null || Array.isArray(item) || typeof item !== 'object') {
+        return false
+      }
+      const mapping = item as AsyncTaskParameterMappingConfig
+      const when = mapping.when
+      if (
+        when === null ||
+        Array.isArray(when) ||
+        typeof when !== 'object' ||
+        Object.keys(when).length === 0
+      ) {
+        return false
+      }
+      if (
+        mapping.strip_fields !== undefined &&
+        (!Array.isArray(mapping.strip_fields) ||
+          !mapping.strip_fields.every((field) => typeof field === 'string'))
+      ) {
+        return false
+      }
+      if (
+        mapping.set_fields !== undefined &&
+        (mapping.set_fields === null ||
+          Array.isArray(mapping.set_fields) ||
+          typeof mapping.set_fields !== 'object')
+      ) {
+        return false
+      }
+      return (
+        (mapping.strip_fields?.length ?? 0) > 0 ||
+        Object.keys(mapping.set_fields ?? {}).length > 0
+      )
+    })
+  } catch {
+    return false
+  }
+}
+
 function isAsyncTaskTemplateDraftValid(draft: AsyncTaskUpstreamTemplateDraft) {
   return (
     isTemplateJsonObject(draft.headers) &&
     isTemplateJsonArray(draft.stripFields) &&
     isTemplateJsonObject(draft.setFields) &&
+    isAsyncTaskParameterMappingsJson(draft.parameterMappings) &&
     isTemplateJsonObject(draft.body) &&
     isTemplateJsonObject(draft.responseMapping) &&
     isTemplateJsonObject(draft.submitResponseExample) &&
@@ -1300,6 +1391,39 @@ function EndpointTemplateGuide({
               </AccordionContent>
             </AccordionItem>
 
+            <AccordionItem value='parameter-mapping'>
+              <AccordionTrigger>
+                {t('Request parameter mapping')}
+              </AccordionTrigger>
+              <AccordionContent className='flex flex-col gap-3'>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Parameter mappings inspect the original client JSON request and conditionally remove, add, or override fields sent upstream.'
+                  )}
+                </p>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Rules are checked from top to bottom and stop after the first match. Every field in when must match exactly, including its JSON type and letter case.'
+                  )}
+                </p>
+                <p className='text-muted-foreground text-sm leading-6'>
+                  {t(
+                    'Field paths support nested objects such as metadata.resolution and parameters.size. This mapping currently applies to JSON async requests only.'
+                  )}
+                </p>
+                <EndpointTemplateGuideCodeBlock>
+                  {`[
+  {
+    "name": "1:1 2K to 2048x2048",
+    "when": { "size": "1:1", "resolution": "2k" },
+    "strip_fields": ["resolution"],
+    "set_fields": { "size": "2048x2048" }
+  }
+]`}
+                </EndpointTemplateGuideCodeBlock>
+              </AccordionContent>
+            </AccordionItem>
+
             <AccordionItem value='mapping'>
               <AccordionTrigger>{t('Response mapping')}</AccordionTrigger>
               <AccordionContent className='flex flex-col gap-3'>
@@ -1614,6 +1738,13 @@ function formatChannelOptionLabel(channel: Channel) {
   return `#${channel.id} ${channel.name || '-'}`
 }
 
+function parseTemplateModelList(value: string) {
+  return value
+    .split(',')
+    .map((model) => model.trim())
+    .filter(Boolean)
+}
+
 function AsyncTaskUpstreamTemplateVisualEditor({
   value,
   onChange,
@@ -1738,6 +1869,17 @@ function AsyncTaskUpstreamTemplateVisualEditor({
           {drafts.map((draft) => {
             const expanded = expandedIds.has(draft.id)
             const mappingPreview = buildMappingPreview(draft)
+            const selectedChannel = channelsById.get(Number(draft.channelId))
+            const selectedModels = parseTemplateModelList(draft.model)
+            const modelOptions = Array.from(
+              new Set([
+                ...parseTemplateModelList(selectedChannel?.models ?? ''),
+                ...selectedModels,
+              ])
+            ).map<MultiSelectOption>((model) => ({
+              label: model,
+              value: model,
+            }))
             return (
               <div key={draft.id} className='rounded-lg border bg-background'>
                 <div className='flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center'>
@@ -1786,7 +1928,12 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                   </Button>
                 </div>
 
-                <div className='grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
+                <div
+                  hidden={!expanded}
+                  className='flex flex-col gap-3 bg-muted/20 p-3'
+                >
+                  <TemplateSection title={t('Channel and path configuration')}>
+                    <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
                   <TemplateInlineField label={t('Channel ID')}>
                     <NativeSelect
                       className='w-full'
@@ -1881,12 +2028,15 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                     </NativeSelect>
                   </TemplateInlineField>
                   <TemplateInlineField label={t('Model')}>
-                    <Input
-                      value={draft.model}
-                      placeholder={t('Leave empty to match all models')}
-                      onChange={(event) =>
-                        updateDraft(draft.id, 'model', event.target.value)
+                    <MultiSelect
+                      options={modelOptions}
+                      selected={selectedModels}
+                      onChange={(models) =>
+                        updateDraft(draft.id, 'model', models.join(','))
                       }
+                      placeholder={t('Select models')}
+                      emptyText={t('No models available')}
+                      maxVisibleChips={4}
                     />
                   </TemplateInlineField>
                   <TemplateInlineField label={t('Match rule')}>
@@ -1941,12 +2091,15 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                       <NativeSelectOption value='GET'>GET</NativeSelectOption>
                     </NativeSelect>
                   </TemplateInlineField>
+                    </div>
+                  </TemplateSection>
                 </div>
 
                 {expanded && (
                   <div className='border-t bg-muted/20 p-3'>
-                    <div className='flex flex-col gap-3 rounded-lg border bg-background p-3'>
-                      <div className='grid gap-3 md:grid-cols-2'>
+                    <div className='flex flex-col gap-3'>
+                      <TemplateSection title={t('Request configuration')}>
+                        <div className='flex flex-col gap-3'>
                         <TemplateJsonField
                           label={t('Headers JSON')}
                           value={draft.headers}
@@ -1979,13 +2132,27 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                             updateDraft(draft.id, 'body', nextValue)
                           }
                         />
-                      </div>
-                      <div className='flex flex-col gap-3 rounded-lg border bg-muted/20 p-3'>
-                        <div className='flex flex-col gap-1'>
-                          <span className='text-sm font-medium'>
-                            {t('Response mapping')}
-                          </span>
+                          <TemplateJsonField
+                            label={t('Request parameter mappings JSON')}
+                            value={draft.parameterMappings}
+                            rows={10}
+                            invalid={
+                              !isAsyncTaskParameterMappingsJson(
+                                draft.parameterMappings
+                              )
+                            }
+                            onChange={(nextValue) =>
+                              updateDraft(
+                                draft.id,
+                                'parameterMappings',
+                                nextValue
+                              )
+                            }
+                          />
                         </div>
+                      </TemplateSection>
+                      <TemplateSection title={t('Response mapping')}>
+                        <div className='flex flex-col gap-3'>
                         <TemplateJsonField
                           label={t('Response mapping JSON')}
                           value={draft.responseMapping}
@@ -1998,7 +2165,7 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                             )
                           }
                         />
-                        <div className='grid gap-3 md:grid-cols-2'>
+                        <div className='flex flex-col gap-3'>
                           <TemplateJsonField
                             label={t('Submit response example JSON')}
                             value={draft.submitResponseExample}
@@ -2056,7 +2223,8 @@ function AsyncTaskUpstreamTemplateVisualEditor({
                             value={mappingPreview.errorMessage}
                           />
                         </div>
-                      </div>
+                        </div>
+                      </TemplateSection>
                     </div>
                   </div>
                 )}
@@ -2072,6 +2240,67 @@ function AsyncTaskUpstreamTemplateVisualEditor({
 type MappingPreviewItemProps = {
   label: string
   value: string
+}
+
+type TemplateSectionProps = {
+  title: string
+  children: ReactNode
+}
+
+type TemplateSectionContextValue = {
+  expandVersion: number
+}
+
+const TemplateSectionContext = createContext<TemplateSectionContextValue | null>(
+  null
+)
+
+function TemplateSection({ title, children }: TemplateSectionProps) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(true)
+  const [expandVersion, setExpandVersion] = useState(1)
+
+  const handleOpenChange = (nextExpanded: boolean) => {
+    setExpanded(nextExpanded)
+    if (nextExpanded) setExpandVersion((version) => version + 1)
+  }
+
+  return (
+    <Collapsible
+      open={expanded}
+      onOpenChange={handleOpenChange}
+      className='rounded-lg border bg-background p-3'
+    >
+      <div className='flex items-center justify-between gap-2'>
+        <span className='text-sm font-medium'>{title}</span>
+        <CollapsibleTrigger
+          render={
+            <Button
+              type='button'
+              variant='secondary'
+              size='sm'
+              className='min-w-20 font-medium'
+            />
+          }
+        >
+          {expanded ? t('Collapse') : t('Expand')}
+          <ChevronRight
+            data-icon='inline-end'
+            aria-hidden='true'
+            className={cn(
+              'transition-transform duration-200',
+              expanded && 'rotate-90'
+            )}
+          />
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent className='mt-3'>
+        <TemplateSectionContext.Provider value={{ expandVersion }}>
+          {children}
+        </TemplateSectionContext.Provider>
+      </CollapsibleContent>
+    </Collapsible>
+  )
 }
 
 function MappingPreviewItem({ label, value }: MappingPreviewItemProps) {
@@ -2102,6 +2331,7 @@ type TemplateJsonFieldProps = {
   label: string
   value: string
   invalid: boolean
+  rows?: number
   onChange: (value: string) => void
 }
 
@@ -2109,24 +2339,60 @@ function TemplateJsonField({
   label,
   value,
   invalid,
+  rows = 4,
   onChange,
 }: TemplateJsonFieldProps) {
   const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(false)
+  const sectionContext = useContext(TemplateSectionContext)
+
+  useEffect(() => {
+    if (sectionContext?.expandVersion) setExpanded(true)
+  }, [sectionContext?.expandVersion])
+
   return (
-    <label className='flex flex-col gap-1.5'>
-      <span className='text-muted-foreground text-xs'>{label}</span>
-      <Textarea
-        rows={4}
-        className='font-mono text-xs'
-        aria-invalid={invalid}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className='flex min-w-0 flex-col gap-1.5'
+    >
+      <div className='flex items-center justify-between gap-2'>
+        <span className='text-muted-foreground text-xs'>{label}</span>
+        <CollapsibleTrigger
+          render={
+            <Button
+              type='button'
+              variant='ghost'
+              size='xs'
+              className='text-muted-foreground min-w-16 font-normal'
+            />
+          }
+        >
+          {expanded ? t('Collapse') : t('Expand')}
+          <ChevronRight
+            data-icon='inline-end'
+            aria-hidden='true'
+            className={cn(
+              'transition-transform duration-200',
+              expanded && 'rotate-90'
+            )}
+          />
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent className='flex flex-col gap-1.5'>
+        <Textarea
+          rows={rows}
+          className='font-mono text-xs'
+          aria-invalid={invalid}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </CollapsibleContent>
       {invalid && (
         <span className='text-destructive text-xs'>
           {t('Invalid JSON format')}
         </span>
       )}
-    </label>
+    </Collapsible>
   )
 }

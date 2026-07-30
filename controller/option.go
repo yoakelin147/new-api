@@ -113,8 +113,44 @@ func validateAsyncTaskUpstreamTemplates(raw string) error {
 		if template.NameRule < 0 || template.NameRule > 3 {
 			return fmt.Errorf("第 %d 条异步上游模板 name_rule 必须是 0-3", i+1)
 		}
+		for j, mapping := range template.ParameterMappings {
+			if len(mapping.When) == 0 {
+				return fmt.Errorf("第 %d 条异步上游模板的第 %d 条参数映射 when 不能为空", i+1, j+1)
+			}
+			if len(mapping.StripFields) == 0 && len(mapping.SetFields) == 0 {
+				return fmt.Errorf("第 %d 条异步上游模板的第 %d 条参数映射必须配置 strip_fields 或 set_fields", i+1, j+1)
+			}
+			for path := range mapping.When {
+				if !isValidAsyncTaskTemplateFieldPath(path) {
+					return fmt.Errorf("第 %d 条异步上游模板的第 %d 条参数映射 when 字段路径 %q 无效", i+1, j+1, path)
+				}
+			}
+			for _, path := range mapping.StripFields {
+				if !isValidAsyncTaskTemplateFieldPath(path) {
+					return fmt.Errorf("第 %d 条异步上游模板的第 %d 条参数映射 strip_fields 字段路径 %q 无效", i+1, j+1, path)
+				}
+			}
+			for path := range mapping.SetFields {
+				if !isValidAsyncTaskTemplateFieldPath(path) {
+					return fmt.Errorf("第 %d 条异步上游模板的第 %d 条参数映射 set_fields 字段路径 %q 无效", i+1, j+1, path)
+				}
+			}
+		}
 	}
 	return nil
+}
+
+func isValidAsyncTaskTemplateFieldPath(path string) bool {
+	parts := strings.Split(path, ".")
+	if len(parts) == 0 {
+		return false
+	}
+	for _, part := range parts {
+		if strings.TrimSpace(part) == "" || strings.TrimSpace(part) != part {
+			return false
+		}
+	}
+	return true
 }
 
 func GetOptions(c *gin.Context) {

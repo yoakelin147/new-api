@@ -218,9 +218,14 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		if err := common.Unmarshal(cachedBody, &bodyMap); err == nil {
 			if template := a.selectUpstreamTemplate(info); template != nil {
 				ctx := a.templateContext(info, bodyMap, "")
-				bodyMap = relaycommon.ApplyAsyncTaskTemplateToBody(bodyMap, *template, ctx)
+				applyResult := relaycommon.ApplyAsyncTaskTemplateToBodyWithResult(bodyMap, *template, ctx)
+				bodyMap = applyResult.Body
 				if _, explicitlySetType := template.SetFields["type"]; !explicitlySetType {
-					if _, explicitlyTemplatedType := template.Body["type"]; !explicitlyTemplatedType {
+					mappingSetType := false
+					if applyResult.MatchedParameterMapping != nil {
+						_, mappingSetType = applyResult.MatchedParameterMapping.SetFields["type"]
+					}
+					if _, explicitlyTemplatedType := template.Body["type"]; !explicitlyTemplatedType && !mappingSetType {
 						delete(bodyMap, "type")
 					}
 				}

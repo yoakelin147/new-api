@@ -103,6 +103,77 @@ func TestExtractTaskResultURLSupportsNestedImageURL(t *testing.T) {
 	require.Equal(t, "https://example.com/image.png", extractTaskResultURL(body))
 }
 
+func TestBuildRequestBodyAppliesConfiguredParameterMappingAndPreservesType(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	templatesJSON, err := common.Marshal([]dto.AsyncTaskUpstreamTemplate{
+		{
+			Enabled:     true,
+			ChannelID:   19,
+			RequestPath: "/v1/images/generations/async",
+			Model:       "gpt-image-2",
+			ParameterMappings: []dto.AsyncTaskParameterMapping{
+				{
+					When: map[string]any{
+						"size":       "1:1",
+						"resolution": "2k",
+					},
+					StripFields: []string{"resolution"},
+					SetFields: map[string]any{
+						"size": "2048x2048",
+						"type": "image",
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	common.OptionMapRWMutex.Lock()
+	if common.OptionMap == nil {
+		common.OptionMap = make(map[string]string)
+	}
+	previousTemplates := common.OptionMap[setting.AsyncTaskUpstreamTemplatesOptionKey]
+	common.OptionMap[setting.AsyncTaskUpstreamTemplatesOptionKey] = string(templatesJSON)
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap[setting.AsyncTaskUpstreamTemplatesOptionKey] = previousTemplates
+		common.OptionMapRWMutex.Unlock()
+	})
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	requestBody := `{"model":"gpt-image-2","prompt":"draw a fox","size":"1:1","resolution":"2k"}`
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", bytes.NewBufferString(requestBody))
+	context.Request.Header.Set("Content-Type", "application/json")
+	t.Cleanup(func() {
+		common.CleanupBodyStorage(context)
+	})
+
+	adaptor := &TaskAdaptor{}
+	info := &relaycommon.RelayInfo{
+		RequestURLPath:  "/v1/images/generations/async",
+		OriginModelName: "gpt-image-2",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelId:         19,
+			ChannelType:       1,
+			UpstreamModelName: "gpt-image-2-upstream",
+		},
+	}
+
+	reader, err := adaptor.BuildRequestBody(context, info)
+	require.NoError(t, err)
+	actualBody, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(actualBody, &got))
+	require.Equal(t, map[string]any{
+		"model":  "gpt-image-2",
+		"prompt": "draw a fox",
+		"size":   "2048x2048",
+		"type":   "image",
+	}, got)
+}
+
 func TestDoResponseUsesConfiguredSubmitTaskIDMapping(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	templatesJSON, err := common.Marshal([]dto.AsyncTaskUpstreamTemplate{

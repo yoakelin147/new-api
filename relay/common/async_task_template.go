@@ -3,10 +3,16 @@ package common
 import (
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
 
 	"github.com/QuantumNous/new-api/dto"
 )
+
+type AsyncTaskTemplateApplyResult struct {
+	Body                    map[string]any
+	MatchedParameterMapping *dto.AsyncTaskParameterMapping
+}
 
 type AsyncTaskTemplateContext struct {
 	RequestPath   string
@@ -114,6 +120,14 @@ func ApplyAsyncTaskTemplateToBody(
 	template dto.AsyncTaskUpstreamTemplate,
 	ctx AsyncTaskTemplateContext,
 ) map[string]any {
+	return ApplyAsyncTaskTemplateToBodyWithResult(source, template, ctx).Body
+}
+
+func ApplyAsyncTaskTemplateToBodyWithResult(
+	source map[string]any,
+	template dto.AsyncTaskUpstreamTemplate,
+	ctx AsyncTaskTemplateContext,
+) AsyncTaskTemplateApplyResult {
 	var out map[string]any
 	if len(template.Body) > 0 {
 		if resolved, ok := ResolveAsyncTaskTemplateValue(template.Body, ctx).(map[string]any); ok {
@@ -131,10 +145,49 @@ func ApplyAsyncTaskTemplateToBody(
 	for field, value := range template.SetFields {
 		setTemplateBodyField(out, field, ResolveAsyncTaskTemplateValue(value, ctx))
 	}
+
+	matchedMapping := selectAsyncTaskParameterMapping(source, template.ParameterMappings)
+	if matchedMapping != nil {
+		for _, field := range matchedMapping.StripFields {
+			deleteTemplateBodyField(out, field)
+		}
+		for field, value := range matchedMapping.SetFields {
+			setTemplateBodyField(out, field, ResolveAsyncTaskTemplateValue(value, ctx))
+		}
+	}
 	if _, ok := out["model"]; !ok && ctx.UpstreamModel != "" {
 		out["model"] = ctx.UpstreamModel
 	}
-	return out
+	return AsyncTaskTemplateApplyResult{
+		Body:                    out,
+		MatchedParameterMapping: matchedMapping,
+	}
+}
+
+func selectAsyncTaskParameterMapping(
+	source map[string]any,
+	mappings []dto.AsyncTaskParameterMapping,
+) *dto.AsyncTaskParameterMapping {
+	for i := range mappings {
+		mapping := &mappings[i]
+		if matchAsyncTaskParameterConditions(source, mapping.When) {
+			return mapping
+		}
+	}
+	return nil
+}
+
+func matchAsyncTaskParameterConditions(source map[string]any, conditions map[string]any) bool {
+	if len(conditions) == 0 {
+		return false
+	}
+	for path, expected := range conditions {
+		actual, ok := getTemplateBodyValueFound(source, path)
+		if !ok || !reflect.DeepEqual(actual, expected) {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeTemplateRequestPath(value string) string {
@@ -158,7 +211,20 @@ func matchTemplateChannel(ruleValue int, actualValue int) bool {
 }
 
 func matchTemplateModel(ruleModel string, nameRule int, modelName string) bool {
-	ruleModel = strings.TrimSpace(ruleModel)
+	ruleModels := strings.Split(ruleModel, ",")
+	for _, candidate := range ruleModels {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if matchTemplateModelValue(candidate, nameRule, modelName) {
+			return true
+		}
+	}
+	return strings.TrimSpace(ruleModel) == ""
+}
+
+func matchTemplateModelValue(ruleModel string, nameRule int, modelName string) bool {
 	if ruleModel == "" {
 		return true
 	}
@@ -202,21 +268,29 @@ func exactBodyTemplatePath(value string) (string, bool) {
 }
 
 func getTemplateBodyValue(body map[string]any, path string) any {
-	if body == nil {
+	value, ok := getTemplateBodyValueFound(body, path)
+	if !ok {
 		return ""
+	}
+	return value
+}
+
+func getTemplateBodyValueFound(body map[string]any, path string) (any, bool) {
+	if body == nil {
+		return nil, false
 	}
 	current := any(body)
 	for _, part := range strings.Split(path, ".") {
 		m, ok := current.(map[string]any)
 		if !ok {
-			return ""
+			return nil, false
 		}
 		current, ok = m[part]
 		if !ok {
-			return ""
+			return nil, false
 		}
 	}
-	return current
+	return current, true
 }
 
 func cloneTemplateValue(value any) any {
