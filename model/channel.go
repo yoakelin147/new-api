@@ -75,6 +75,24 @@ type ChannelSortOptions struct {
 	IDSort    bool
 }
 
+func GetChannelNamesByIds(ids []int) (map[int]string, error) {
+	names := make(map[int]string, len(ids))
+	if len(ids) == 0 {
+		return names, nil
+	}
+	var channels []struct {
+		Id   int
+		Name string
+	}
+	if err := DB.Model(&Channel{}).Select("id", "name").Where("id IN ?", ids).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	for _, channel := range channels {
+		names[channel.Id] = channel.Name
+	}
+	return names, nil
+}
+
 var channelSortColumns = map[string]string{
 	"id":            "id",
 	"name":          "name",

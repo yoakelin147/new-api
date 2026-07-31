@@ -65,6 +65,7 @@ import { Route as AuthenticatedSystemSettingsBillingIndexRouteImport } from './r
 import { Route as AuthenticatedSystemSettingsAuthIndexRouteImport } from './routes/_authenticated/system-settings/auth/index'
 import { Route as AuthenticatedSystemSettingsSiteSectionRouteImport } from './routes/_authenticated/system-settings/site/$section'
 import { Route as AuthenticatedSystemSettingsSecuritySectionRouteImport } from './routes/_authenticated/system-settings/security/$section'
+import { Route as AuthenticatedSystemSettingsPermissionsMonitoringRouteImport } from './routes/_authenticated/system-settings/permissions/monitoring'
 import { Route as AuthenticatedSystemSettingsOperationsSectionRouteImport } from './routes/_authenticated/system-settings/operations/$section'
 import { Route as AuthenticatedSystemSettingsModelsSectionRouteImport } from './routes/_authenticated/system-settings/models/$section'
 import { Route as AuthenticatedSystemSettingsContentSectionRouteImport } from './routes/_authenticated/system-settings/content/$section'
@@ -375,6 +376,12 @@ const AuthenticatedSystemSettingsSecuritySectionRoute =
     path: '/security/$section',
     getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
   } as any)
+const AuthenticatedSystemSettingsPermissionsMonitoringRoute =
+  AuthenticatedSystemSettingsPermissionsMonitoringRouteImport.update({
+    id: '/permissions/monitoring',
+    path: '/permissions/monitoring',
+    getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
+  } as any)
 const AuthenticatedSystemSettingsOperationsSectionRoute =
   AuthenticatedSystemSettingsOperationsSectionRouteImport.update({
     id: '/operations/$section',
@@ -457,6 +464,7 @@ export interface FileRoutesByFullPath {
   '/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
   '/system-settings/models/$section': typeof AuthenticatedSystemSettingsModelsSectionRoute
   '/system-settings/operations/$section': typeof AuthenticatedSystemSettingsOperationsSectionRoute
+  '/system-settings/permissions/monitoring': typeof AuthenticatedSystemSettingsPermissionsMonitoringRoute
   '/system-settings/security/$section': typeof AuthenticatedSystemSettingsSecuritySectionRoute
   '/system-settings/site/$section': typeof AuthenticatedSystemSettingsSiteSectionRoute
   '/system-settings/auth/': typeof AuthenticatedSystemSettingsAuthIndexRoute
@@ -517,6 +525,7 @@ export interface FileRoutesByTo {
   '/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
   '/system-settings/models/$section': typeof AuthenticatedSystemSettingsModelsSectionRoute
   '/system-settings/operations/$section': typeof AuthenticatedSystemSettingsOperationsSectionRoute
+  '/system-settings/permissions/monitoring': typeof AuthenticatedSystemSettingsPermissionsMonitoringRoute
   '/system-settings/security/$section': typeof AuthenticatedSystemSettingsSecuritySectionRoute
   '/system-settings/site/$section': typeof AuthenticatedSystemSettingsSiteSectionRoute
   '/system-settings/auth': typeof AuthenticatedSystemSettingsAuthIndexRoute
@@ -581,6 +590,7 @@ export interface FileRoutesById {
   '/_authenticated/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
   '/_authenticated/system-settings/models/$section': typeof AuthenticatedSystemSettingsModelsSectionRoute
   '/_authenticated/system-settings/operations/$section': typeof AuthenticatedSystemSettingsOperationsSectionRoute
+  '/_authenticated/system-settings/permissions/monitoring': typeof AuthenticatedSystemSettingsPermissionsMonitoringRoute
   '/_authenticated/system-settings/security/$section': typeof AuthenticatedSystemSettingsSecuritySectionRoute
   '/_authenticated/system-settings/site/$section': typeof AuthenticatedSystemSettingsSiteSectionRoute
   '/_authenticated/system-settings/auth/': typeof AuthenticatedSystemSettingsAuthIndexRoute
@@ -644,6 +654,7 @@ export interface FileRouteTypes {
     | '/system-settings/content/$section'
     | '/system-settings/models/$section'
     | '/system-settings/operations/$section'
+    | '/system-settings/permissions/monitoring'
     | '/system-settings/security/$section'
     | '/system-settings/site/$section'
     | '/system-settings/auth/'
@@ -704,6 +715,7 @@ export interface FileRouteTypes {
     | '/system-settings/content/$section'
     | '/system-settings/models/$section'
     | '/system-settings/operations/$section'
+    | '/system-settings/permissions/monitoring'
     | '/system-settings/security/$section'
     | '/system-settings/site/$section'
     | '/system-settings/auth'
@@ -767,6 +779,7 @@ export interface FileRouteTypes {
     | '/_authenticated/system-settings/content/$section'
     | '/_authenticated/system-settings/models/$section'
     | '/_authenticated/system-settings/operations/$section'
+    | '/_authenticated/system-settings/permissions/monitoring'
     | '/_authenticated/system-settings/security/$section'
     | '/_authenticated/system-settings/site/$section'
     | '/_authenticated/system-settings/auth/'
@@ -1193,6 +1206,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemSettingsSecuritySectionRouteImport
       parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
     }
+    '/_authenticated/system-settings/permissions/monitoring': {
+      id: '/_authenticated/system-settings/permissions/monitoring'
+      path: '/permissions/monitoring'
+      fullPath: '/system-settings/permissions/monitoring'
+      preLoaderRoute: typeof AuthenticatedSystemSettingsPermissionsMonitoringRouteImport
+      parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
+    }
     '/_authenticated/system-settings/operations/$section': {
       id: '/_authenticated/system-settings/operations/$section'
       path: '/operations/$section'
@@ -1264,6 +1284,7 @@ interface AuthenticatedSystemSettingsRouteRouteChildren {
   AuthenticatedSystemSettingsContentSectionRoute: typeof AuthenticatedSystemSettingsContentSectionRoute
   AuthenticatedSystemSettingsModelsSectionRoute: typeof AuthenticatedSystemSettingsModelsSectionRoute
   AuthenticatedSystemSettingsOperationsSectionRoute: typeof AuthenticatedSystemSettingsOperationsSectionRoute
+  AuthenticatedSystemSettingsPermissionsMonitoringRoute: typeof AuthenticatedSystemSettingsPermissionsMonitoringRoute
   AuthenticatedSystemSettingsSecuritySectionRoute: typeof AuthenticatedSystemSettingsSecuritySectionRoute
   AuthenticatedSystemSettingsSiteSectionRoute: typeof AuthenticatedSystemSettingsSiteSectionRoute
   AuthenticatedSystemSettingsAuthIndexRoute: typeof AuthenticatedSystemSettingsAuthIndexRoute
@@ -1289,6 +1310,8 @@ const AuthenticatedSystemSettingsRouteRouteChildren: AuthenticatedSystemSettings
       AuthenticatedSystemSettingsModelsSectionRoute,
     AuthenticatedSystemSettingsOperationsSectionRoute:
       AuthenticatedSystemSettingsOperationsSectionRoute,
+    AuthenticatedSystemSettingsPermissionsMonitoringRoute:
+      AuthenticatedSystemSettingsPermissionsMonitoringRoute,
     AuthenticatedSystemSettingsSecuritySectionRoute:
       AuthenticatedSystemSettingsSecuritySectionRoute,
     AuthenticatedSystemSettingsSiteSectionRoute:

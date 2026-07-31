@@ -47,6 +47,7 @@ func TestMain(m *testing.M) {
 		&UserSubscription{},
 		&PerfMetric{},
 		&ChannelProfitRatio{},
+		&SystemAccessKey{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}

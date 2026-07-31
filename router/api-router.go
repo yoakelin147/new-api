@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 
@@ -32,6 +33,7 @@ func SetApiRouter(router *gin.Engine) {
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricing)
+		apiRouter.GET("/perf-metrics/channel-summary", middleware.SystemAccessKeyAuth(constant.SystemAccessKeyTypeMonitoring), controller.GetPerfMetricsChannelSummary)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
 		perfMetricsRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
 		{
@@ -208,6 +210,14 @@ func SetApiRouter(router *gin.Engine) {
 			customOAuthRoute.POST("/", controller.CreateCustomOAuthProvider)
 			customOAuthRoute.PUT("/:id", controller.UpdateCustomOAuthProvider)
 			customOAuthRoute.DELETE("/:id", controller.DeleteCustomOAuthProvider)
+		}
+		systemAccessKeyRoute := apiRouter.Group("/system-access-key")
+		systemAccessKeyRoute.Use(middleware.RootAuth())
+		{
+			systemAccessKeyRoute.GET("/monitoring", controller.ListMonitoringAccessKeys)
+			systemAccessKeyRoute.POST("/monitoring", controller.CreateMonitoringAccessKey)
+			systemAccessKeyRoute.PATCH("/monitoring/:id/status", controller.UpdateMonitoringAccessKeyStatus)
+			systemAccessKeyRoute.DELETE("/monitoring/:id", controller.DeleteMonitoringAccessKey)
 		}
 		performanceRoute := apiRouter.Group("/performance")
 		performanceRoute.Use(middleware.RootAuth())

@@ -210,6 +210,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
+		attemptStartedAt := time.Now()
+		relayInfo.ChannelAttemptStart = attemptStartedAt
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
 			newAPIError = relay.WssHelper(c, relayInfo)
@@ -225,6 +227,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			relayInfo.LastError = nil
 			return
 		}
+
+		perfmetrics.RecordChannelFailure(
+			relayInfo.OriginModelName,
+			channel.Id,
+			time.Since(attemptStartedAt).Milliseconds(),
+		)
 
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError

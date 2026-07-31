@@ -35,6 +35,38 @@ func GetPerfMetricsSummary(c *gin.Context) {
 	})
 }
 
+func GetPerfMetricsChannelSummary(c *gin.Context) {
+	minutes, ok := parseBoundedQueryInt(c, "minutes", 5, 5, 24*60)
+	if !ok {
+		return
+	}
+	if minutes%5 != 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "minutes must be a multiple of 5",
+		})
+		return
+	}
+	limit, ok := parseBoundedQueryInt(c, "limit", 20, 1, 100)
+	if !ok {
+		return
+	}
+
+	result, err := perfmetrics.QueryChannelSummary(minutes, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    result,
+	})
+}
+
 func GetPerfMetrics(c *gin.Context) {
 	modelName := c.Query("model")
 	if modelName == "" {
@@ -79,4 +111,20 @@ func filterActiveGroups(groups []perfmetrics.GroupResult) []perfmetrics.GroupRes
 		_, ok := activeRatios[g.Group]
 		return ok || g.Group == "auto"
 	})
+}
+
+func parseBoundedQueryInt(c *gin.Context, name string, defaultValue int, minValue int, maxValue int) (int, bool) {
+	rawValue := c.Query(name)
+	if rawValue == "" {
+		return defaultValue, true
+	}
+	value, err := strconv.Atoi(rawValue)
+	if err != nil || value < minValue || value > maxValue {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": name + " must be an integer between " + strconv.Itoa(minValue) + " and " + strconv.Itoa(maxValue),
+		})
+		return 0, false
+	}
+	return value, true
 }

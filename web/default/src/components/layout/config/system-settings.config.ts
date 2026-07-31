@@ -21,6 +21,7 @@ import {
   Box,
   CreditCard,
   Layout,
+  KeyRound,
   Settings,
   Shield,
   ShieldAlert,
@@ -82,6 +83,16 @@ function getSystemSettingsNavGroups(t: TFunction): NavGroup[] {
           title: t('Operations'),
           icon: Wrench,
           items: getOperationsSectionNavItems(t),
+        },
+        {
+          title: t('Permission Management'),
+          icon: KeyRound,
+          items: [
+            {
+              title: t('Monitoring Management'),
+              url: '/system-settings/permissions/monitoring',
+            },
+          ],
         },
       ],
     },

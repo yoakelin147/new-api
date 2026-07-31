@@ -40,6 +40,8 @@ export const STATIC_I18N_KEYS = [
   'Integrations',
   'Models',
   'Maintenance',
+  'Permission Management',
+  'Monitoring Management',
 
   // Pricing constants
   'Name',
