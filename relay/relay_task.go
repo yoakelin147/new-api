@@ -395,11 +395,33 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		return
 	}
 
-	isOpenAIVideoAPI := strings.HasPrefix(c.Request.RequestURI, "/v1/videos/")
+	isOpenAIVideoAPI := strings.HasPrefix(c.Request.URL.Path, "/v1/videos/")
+	isAsyncImageAPI := strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations/async/")
 
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
 	if realtimeResp := tryRealtimeFetch(originTask, isOpenAIVideoAPI); len(realtimeResp) > 0 {
+		if isAsyncImageAPI {
+			respBody, err = common.Marshal(dto.TaskResponse[any]{
+				Code: "success",
+				Data: TaskModel2PublicImageDto(originTask),
+			})
+			if err != nil {
+				taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+			}
+			return
+		}
 		respBody = realtimeResp
+		return
+	}
+
+	if isAsyncImageAPI {
+		respBody, err = common.Marshal(dto.TaskResponse[any]{
+			Code: "success",
+			Data: TaskModel2PublicImageDto(originTask),
+		})
+		if err != nil {
+			taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -423,10 +445,10 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		return
 	}
 
-	// 通用 TaskDto 格式
+	// 通用客户任务格式：保留功能字段，不暴露内部任务元数据。
 	respBody, err = common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
-		Data: TaskModel2Dto(originTask),
+		Data: TaskModel2PublicDto(originTask),
 	})
 	if err != nil {
 		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)

@@ -387,19 +387,30 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	snap := task.Snapshot()
 
 	taskResult := &relaycommon.TaskInfo{}
+	parsedNewAPIResponse := false
+	if task.Action == constant.TaskActionImageGenerate {
+		if parsedTaskResult, ok := parseNewAPIImageTaskResponse(responseBody); ok {
+			logger.LogDebug(ctx, "updateVideoSingleTask parsed as new api image response format: %+v", parsedTaskResult)
+			taskResult = parsedTaskResult
+			parsedNewAPIResponse = true
+		}
+	}
+
 	// try parse as New API response format
-	var responseItems dto.TaskResponse[model.Task]
-	if err = common.Unmarshal(responseBody, &responseItems); err == nil && responseItems.IsSuccess() {
-		logger.LogDebug(ctx, "updateVideoSingleTask parsed as new api response format: %+v", responseItems)
-		t := responseItems.Data
-		taskResult.TaskID = t.TaskID
-		taskResult.Status = string(t.Status)
-		taskResult.Url = t.GetResultURL()
-		taskResult.Progress = t.Progress
-		taskResult.Reason = t.FailReason
-		task.Data = t.Data
-	} else if taskResult, err = adaptor.ParseTaskResult(responseBody); err != nil {
-		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
+	if !parsedNewAPIResponse {
+		var responseItems dto.TaskResponse[model.Task]
+		if err = common.Unmarshal(responseBody, &responseItems); err == nil && responseItems.IsSuccess() {
+			logger.LogDebug(ctx, "updateVideoSingleTask parsed as new api response format: %+v", responseItems)
+			t := responseItems.Data
+			taskResult.TaskID = t.TaskID
+			taskResult.Status = string(t.Status)
+			taskResult.Url = t.GetResultURL()
+			taskResult.Progress = t.Progress
+			taskResult.Reason = t.FailReason
+			task.Data = t.Data
+		} else if taskResult, err = adaptor.ParseTaskResult(responseBody); err != nil {
+			return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
+		}
 	}
 
 	task.Data = redactVideoResponseBody(responseBody)
@@ -509,6 +520,22 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	return nil
+}
+
+func parseNewAPIImageTaskResponse(responseBody []byte) (*relaycommon.TaskInfo, bool) {
+	var responseItems dto.TaskResponse[dto.PublicImageTaskDto]
+	if err := common.Unmarshal(responseBody, &responseItems); err != nil || !responseItems.IsSuccess() {
+		return nil, false
+	}
+
+	task := responseItems.Data
+	return &relaycommon.TaskInfo{
+		TaskID:   task.TaskID,
+		Status:   task.Status,
+		Url:      task.ResultURL,
+		Progress: task.Progress,
+		Reason:   task.FailReason,
+	}, true
 }
 
 func taskRequestPath(task *model.Task) string {
