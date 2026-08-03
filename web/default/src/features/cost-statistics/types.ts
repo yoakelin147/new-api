@@ -62,6 +62,11 @@ export interface CostStatisticsRow {
   cache_write_5m_ratio: number
   cache_write_1h_tokens: number
   cache_write_1h_ratio: number
+  input_unit_price: number
+  output_unit_price: number
+  cache_read_unit_price: number
+  cache_write_unit_price: number
+  cache_write_1h_unit_price: number
   model_price: number
   billing_mode: string
   matched_tier: string

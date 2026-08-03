@@ -1,11 +1,13 @@
 package model
 
 import (
+	"encoding/base64"
 	"errors"
 	"sort"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 
 	"gorm.io/gorm"
 )
@@ -32,34 +34,39 @@ type CostStatisticsSummary struct {
 }
 
 type CostStatisticsRow struct {
-	Date             string  `json:"date"`
-	Type             int     `json:"type"`
-	TokenId          int     `json:"token_id"`
-	TokenName        string  `json:"token_name"`
-	ModelName        string  `json:"model_name"`
-	Group            string  `json:"group"`
-	Username         string  `json:"username"`
-	ChannelId        int     `json:"channel_id"`
-	ChannelName      string  `json:"channel_name"`
-	PromptTokens     int     `json:"prompt_tokens"`
-	InputTokens      int     `json:"input_tokens"`
-	CompletionTokens int     `json:"completion_tokens"`
-	TotalTokens      int     `json:"total_tokens"`
-	RequestCount     int     `json:"request_count"`
-	Quota            int     `json:"quota"`
-	GroupRatio       float64 `json:"group_ratio"`
-	ModelRatio       float64 `json:"model_ratio"`
-	CompletionRatio  float64 `json:"completion_ratio"`
-	CacheTokens      int     `json:"cache_tokens"`
-	CacheRatio       float64 `json:"cache_ratio"`
-	CacheWrite5m     int     `json:"cache_write_5m_tokens"`
-	CacheWrite5mRate float64 `json:"cache_write_5m_ratio"`
-	CacheWrite1h     int     `json:"cache_write_1h_tokens"`
-	CacheWrite1hRate float64 `json:"cache_write_1h_ratio"`
-	ModelPrice       float64 `json:"model_price"`
-	BillingMode      string  `json:"billing_mode"`
-	MatchedTier      string  `json:"matched_tier"`
-	UseTimeSeconds   int     `json:"use_time_seconds"`
+	Date              string  `json:"date"`
+	Type              int     `json:"type"`
+	TokenId           int     `json:"token_id"`
+	TokenName         string  `json:"token_name"`
+	ModelName         string  `json:"model_name"`
+	Group             string  `json:"group"`
+	Username          string  `json:"username"`
+	ChannelId         int     `json:"channel_id"`
+	ChannelName       string  `json:"channel_name"`
+	PromptTokens      int     `json:"prompt_tokens"`
+	InputTokens       int     `json:"input_tokens"`
+	CompletionTokens  int     `json:"completion_tokens"`
+	TotalTokens       int     `json:"total_tokens"`
+	RequestCount      int     `json:"request_count"`
+	Quota             int     `json:"quota"`
+	GroupRatio        float64 `json:"group_ratio"`
+	ModelRatio        float64 `json:"model_ratio"`
+	CompletionRatio   float64 `json:"completion_ratio"`
+	CacheTokens       int     `json:"cache_tokens"`
+	CacheRatio        float64 `json:"cache_ratio"`
+	CacheWrite5m      int     `json:"cache_write_5m_tokens"`
+	CacheWrite5mRate  float64 `json:"cache_write_5m_ratio"`
+	CacheWrite1h      int     `json:"cache_write_1h_tokens"`
+	CacheWrite1hRate  float64 `json:"cache_write_1h_ratio"`
+	InputUnitPrice    float64 `json:"input_unit_price"`
+	OutputUnitPrice   float64 `json:"output_unit_price"`
+	CacheReadPrice    float64 `json:"cache_read_unit_price"`
+	CacheWritePrice   float64 `json:"cache_write_unit_price"`
+	CacheWrite1hPrice float64 `json:"cache_write_1h_unit_price"`
+	ModelPrice        float64 `json:"model_price"`
+	BillingMode       string  `json:"billing_mode"`
+	MatchedTier       string  `json:"matched_tier"`
+	UseTimeSeconds    int     `json:"use_time_seconds"`
 }
 
 type costStatisticsKey struct {
@@ -72,6 +79,25 @@ type costStatisticsKey struct {
 	Username    string
 	ChannelId   int
 	ChannelName string
+	Pricing     costStatisticsPricing
+}
+
+type costStatisticsPricing struct {
+	GroupRatio          float64
+	ModelRatio          float64
+	CompletionRatio     float64
+	CacheRatio          float64
+	CacheWriteRate      float64
+	CacheWrite1hRate    float64
+	ModelPrice          float64
+	BillingMode         string
+	MatchedTier         string
+	DynamicExprIdentity string
+	InputUnitPrice      float64
+	OutputUnitPrice     float64
+	CacheReadPrice      float64
+	CacheWritePrice     float64
+	CacheWrite1hPrice   float64
 }
 
 type costStatisticsLogOther struct {
@@ -89,6 +115,13 @@ type costStatisticsLogOther struct {
 	ModelPrice            float64 `json:"model_price"`
 	BillingMode           string  `json:"billing_mode"`
 	MatchedTier           string  `json:"matched_tier"`
+	ExprB64               string  `json:"expr_b64"`
+	UnitPricesResolved    bool    `json:"unit_prices_resolved"`
+	InputUnitPrice        float64 `json:"input_unit_price"`
+	OutputUnitPrice       float64 `json:"output_unit_price"`
+	CacheReadUnitPrice    float64 `json:"cache_read_unit_price"`
+	CacheWriteUnitPrice   float64 `json:"cache_write_unit_price"`
+	CacheWrite1hUnitPrice float64 `json:"cache_write_1h_unit_price"`
 	UsageSemantic         string  `json:"usage_semantic"`
 	Claude                bool    `json:"claude"`
 }
@@ -136,6 +169,8 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 	err := tx.FindInBatches(&batch, 1000, func(_tx *gorm.DB, _batch int) error {
 		for _, log := range batch {
 			date := time.Unix(log.CreatedAt, 0).Local().Format("20060102")
+			other := parseCostStatisticsLogOther(log.Other)
+			pricing := resolveCostStatisticsPricing(other)
 			channelId := 0
 			if query.IsAdmin {
 				channelId = log.ChannelId
@@ -149,23 +184,36 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 				Group:     log.Group,
 				Username:  log.Username,
 				ChannelId: channelId,
+				Pricing:   pricing,
 			}
 			row := rowsByKey[key]
 			if row == nil {
 				row = &CostStatisticsRow{
-					Date:       date,
-					Type:       log.Type,
-					TokenId:    log.TokenId,
-					TokenName:  log.TokenName,
-					ModelName:  log.ModelName,
-					Group:      log.Group,
-					Username:   log.Username,
-					ChannelId:  channelId,
-					GroupRatio: 0,
+					Date:              date,
+					Type:              log.Type,
+					TokenId:           log.TokenId,
+					TokenName:         log.TokenName,
+					ModelName:         log.ModelName,
+					Group:             log.Group,
+					Username:          log.Username,
+					ChannelId:         channelId,
+					GroupRatio:        pricing.GroupRatio,
+					ModelRatio:        pricing.ModelRatio,
+					CompletionRatio:   pricing.CompletionRatio,
+					CacheRatio:        pricing.CacheRatio,
+					CacheWrite5mRate:  pricing.CacheWriteRate,
+					CacheWrite1hRate:  pricing.CacheWrite1hRate,
+					InputUnitPrice:    pricing.InputUnitPrice,
+					OutputUnitPrice:   pricing.OutputUnitPrice,
+					CacheReadPrice:    pricing.CacheReadPrice,
+					CacheWritePrice:   pricing.CacheWritePrice,
+					CacheWrite1hPrice: pricing.CacheWrite1hPrice,
+					ModelPrice:        pricing.ModelPrice,
+					BillingMode:       pricing.BillingMode,
+					MatchedTier:       pricing.MatchedTier,
 				}
 				rowsByKey[key] = row
 			}
-			other := parseCostStatisticsLogOther(log.Other)
 			quota := costStatisticsSignedQuota(log)
 			row.PromptTokens += log.PromptTokens
 			row.InputTokens += costStatisticsInputTokens(log.PromptTokens, other)
@@ -177,8 +225,6 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 			row.CacheTokens += other.CacheTokens
 			row.CacheWrite5m += costStatisticsCacheWrite5mTokens(other)
 			row.CacheWrite1h += other.CacheCreationTokens1h
-			applyCostStatisticsOther(row, other)
-
 			summary.PromptTokens += log.PromptTokens
 			summary.CompletionTokens += log.CompletionTokens
 			summary.TotalTokens += log.PromptTokens + log.CompletionTokens
@@ -278,38 +324,63 @@ func costStatisticsCacheWrite5mTokens(other costStatisticsLogOther) int {
 	return other.CacheCreationTokens
 }
 
-func applyCostStatisticsOther(row *CostStatisticsRow, other costStatisticsLogOther) {
-	if row.GroupRatio == 0 && other.GroupRatio != 0 {
-		row.GroupRatio = other.GroupRatio
+func resolveCostStatisticsPricing(other costStatisticsLogOther) costStatisticsPricing {
+	cacheWriteRate := other.CacheCreationRatio5m
+	if cacheWriteRate == 0 {
+		cacheWriteRate = other.CacheCreationRatio
 	}
-	if row.ModelRatio == 0 && other.ModelRatio != 0 {
-		row.ModelRatio = other.ModelRatio
+	cacheWrite1hRate := other.CacheCreationRatio1h
+	if cacheWrite1hRate == 0 && (other.UsageSemantic == "anthropic" || other.Claude) && cacheWriteRate != 0 {
+		cacheWrite1hRate = cacheWriteRate * 1.6
 	}
-	if row.CompletionRatio == 0 && other.CompletionRatio != 0 {
-		row.CompletionRatio = other.CompletionRatio
+	inputPrice, outputPrice, cacheReadPrice, cacheWritePrice, cacheWrite1hPrice := costStatisticsUnitPrices(other, cacheWriteRate, cacheWrite1hRate)
+	dynamicExprIdentity := ""
+	if other.BillingMode == "tiered_expr" {
+		dynamicExprIdentity = other.ExprB64
 	}
-	if row.CacheRatio == 0 && other.CacheRatio != 0 {
-		row.CacheRatio = other.CacheRatio
+	return costStatisticsPricing{
+		GroupRatio:          other.GroupRatio,
+		ModelRatio:          other.ModelRatio,
+		CompletionRatio:     other.CompletionRatio,
+		CacheRatio:          other.CacheRatio,
+		CacheWriteRate:      cacheWriteRate,
+		CacheWrite1hRate:    cacheWrite1hRate,
+		ModelPrice:          other.ModelPrice,
+		BillingMode:         costStatisticsBillingMode(other),
+		MatchedTier:         other.MatchedTier,
+		DynamicExprIdentity: dynamicExprIdentity,
+		InputUnitPrice:      inputPrice,
+		OutputUnitPrice:     outputPrice,
+		CacheReadPrice:      cacheReadPrice,
+		CacheWritePrice:     cacheWritePrice,
+		CacheWrite1hPrice:   cacheWrite1hPrice,
 	}
-	if row.CacheWrite5mRate == 0 {
-		if other.CacheCreationRatio5m != 0 {
-			row.CacheWrite5mRate = other.CacheCreationRatio5m
-		} else if other.CacheCreationRatio != 0 {
-			row.CacheWrite5mRate = other.CacheCreationRatio
+}
+
+func costStatisticsUnitPrices(other costStatisticsLogOther, cacheWriteRate float64, cacheWrite1hRate float64) (float64, float64, float64, float64, float64) {
+	if other.BillingMode == "tiered_expr" {
+		if other.UnitPricesResolved {
+			return other.InputUnitPrice, other.OutputUnitPrice, other.CacheReadUnitPrice, other.CacheWriteUnitPrice, other.CacheWrite1hUnitPrice
 		}
+		exprBytes, err := base64.StdEncoding.DecodeString(other.ExprB64)
+		if err != nil {
+			return 0, 0, 0, 0, 0
+		}
+		prices, ok := billingexpr.ExtractTierUnitPrices(string(exprBytes), other.MatchedTier)
+		if !ok {
+			return 0, 0, 0, 0, 0
+		}
+		return prices.Input, prices.Output, prices.CacheRead, prices.CacheWrite, prices.CacheWrite1h
 	}
-	if row.CacheWrite1hRate == 0 && other.CacheCreationRatio1h != 0 {
-		row.CacheWrite1hRate = other.CacheCreationRatio1h
+	if other.ModelPrice > 0 {
+		return 0, 0, 0, 0, 0
 	}
-	if row.ModelPrice == 0 && other.ModelPrice > 0 {
-		row.ModelPrice = other.ModelPrice
-	}
-	if other.BillingMode == "tiered_expr" || row.BillingMode == "" {
-		row.BillingMode = costStatisticsBillingMode(other)
-	}
-	if row.MatchedTier == "" && other.MatchedTier != "" {
-		row.MatchedTier = other.MatchedTier
-	}
+	inputPrice := other.ModelRatio * 2
+	return inputPrice,
+		inputPrice * other.CompletionRatio,
+		inputPrice * other.CacheRatio,
+		inputPrice * cacheWriteRate,
+		inputPrice * cacheWrite1hRate
 }
 
 func costStatisticsBillingMode(other costStatisticsLogOther) string {

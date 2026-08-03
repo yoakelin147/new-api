@@ -27,9 +27,10 @@ func ParseExprVersion(exprStr string) (version int, body string) {
 }
 
 type cachedEntry struct {
-	prog     *vm.Program
-	usedVars map[string]bool
-	version  int
+	prog       *vm.Program
+	usedVars   map[string]bool
+	unitPrices map[string]cachedUnitPrices
+	version    int
 }
 
 var (
@@ -104,7 +105,12 @@ func compileFromCacheByHash(exprStr, hash string) (*vm.Program, error) {
 	if len(cache) >= maxCacheSize {
 		cache = make(map[string]*cachedEntry, 64)
 	}
-	cache[hash] = &cachedEntry{prog: prog, usedVars: vars, version: version}
+	cache[hash] = &cachedEntry{
+		prog:       prog,
+		usedVars:   vars,
+		unitPrices: make(map[string]cachedUnitPrices),
+		version:    version,
+	}
 	cacheMu.Unlock()
 
 	return prog, nil
