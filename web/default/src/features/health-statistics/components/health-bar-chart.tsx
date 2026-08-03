@@ -30,30 +30,74 @@ export type HealthChartRow = {
   value: number
 }
 
+const HEALTH_BAR_COLORS = [
+  '#ef4444',
+  '#f97316',
+  '#eab308',
+  '#84cc16',
+  '#10b981',
+  '#14b8a6',
+  '#06b6d4',
+  '#3b82f6',
+  '#6366f1',
+  '#8b5cf6',
+  '#a855f7',
+  '#d946ef',
+  '#ec4899',
+  '#f43f5e',
+] as const
+
 type HealthBarChartProps = {
   title: string
   data: HealthChartRow[]
   loading: boolean
-  color: string
   suffix: string
   max?: number
+}
+
+function formatChartValue(value: number, suffix: string) {
+  const digits = suffix === 'ms' ? 0 : 2
+  return `${value.toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: Number.isInteger(value) ? 0 : digits,
+  })}${suffix}`
 }
 
 export function HealthBarChart(props: HealthBarChartProps) {
   const { t } = useTranslation()
   const { resolvedTheme, themeReady } = useChartTheme()
+  const chartData = useMemo(
+    () =>
+      props.data.map((row, index) => ({
+        ...row,
+        color: HEALTH_BAR_COLORS[index % HEALTH_BAR_COLORS.length],
+      })),
+    [props.data]
+  )
   const spec = useMemo(
     () => ({
       type: 'bar' as const,
       direction: 'horizontal' as const,
-      data: [{ id: 'health', values: props.data }],
+      data: [{ id: 'health', values: chartData }],
       xField: 'value',
       yField: 'name',
-      padding: { top: 8, right: 22, bottom: 24, left: 8 },
+      padding: { top: 8, right: 82, bottom: 24, left: 8 },
       bar: {
         style: {
-          fill: props.color,
+          fill: (datum: HealthChartRow & { color: string }) => datum.color,
           cornerRadius: 4,
+        },
+      },
+      label: {
+        visible: true,
+        position: 'right' as const,
+        offset: 6,
+        overlap: false,
+        formatMethod: (_value: number, datum: HealthChartRow) =>
+          formatChartValue(datum.value, props.suffix),
+        style: {
+          fontSize: 11,
+          fontWeight: 600,
         },
       },
       axes: [
@@ -74,7 +118,7 @@ export function HealthBarChart(props: HealthBarChartProps) {
             {
               key: (datum: HealthChartRow) => datum.name,
               value: (datum: HealthChartRow) =>
-                `${Number(datum.value).toFixed(2)}${props.suffix}`,
+                formatChartValue(datum.value, props.suffix),
             },
           ],
         },
@@ -83,7 +127,7 @@ export function HealthBarChart(props: HealthBarChartProps) {
       background: 'transparent',
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
     }),
-    [props.color, props.data, props.max, props.suffix, resolvedTheme]
+    [chartData, props.max, props.suffix, resolvedTheme]
   )
 
   return (

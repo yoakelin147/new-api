@@ -28,6 +28,7 @@ import {
   HeartPulse,
   RefreshCw,
   Search,
+  Settings2,
   Timer,
   TriangleAlert,
   XCircle,
@@ -62,8 +63,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import {
+  sideDrawerContentClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+  SideDrawerSection,
+  SideDrawerSectionHeader,
+} from '@/components/drawer-layout'
 import { Main } from '@/components/layout'
 import {
   getAdminPerfChannelSummary,
@@ -90,7 +105,8 @@ import {
 
 const MODEL_WINDOWS = [1, 6, 24]
 const CHANNEL_WINDOWS = [5, 10, 15, 30, 60]
-const TOP_LIMITS = [10, 20]
+const TOP_LIMITS = [10, 20, 50, 100]
+const ANOMALY_PAGE_SIZES = [10, 20, 50, 100]
 const MATRIX_CHANNELS_PER_PAGE = 6
 const AUTO_REFRESH_OPTIONS = [
   { value: 0, label: 'Off' },
@@ -112,13 +128,14 @@ type AnomalyRow = {
 export function HealthStatistics() {
   const { t, i18n } = useTranslation()
   const [modelHours, setModelHours] = useState(1)
-  const [channelMinutes, setChannelMinutes] = useState(10)
-  const [topLimit, setTopLimit] = useState(20)
+  const [channelMinutes, setChannelMinutes] = useState(60)
+  const [topLimit, setTopLimit] = useState(10)
   const [autoRefreshMs, setAutoRefreshMs] = useState(60_000)
   const [modelSearch, setModelSearch] = useState('')
   const [channelSearch, setChannelSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<HealthStatusFilter>('all')
   const [onlyAnomalies, setOnlyAnomalies] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState<string | null>(null)
 
   const modelQuery = useQuery({
@@ -186,11 +203,6 @@ export function HealthStatistics() {
     for (const row of models) counts[getHealthStatus(row)]++
     return counts
   }, [models])
-  const abnormalChannelCount = useMemo(
-    () =>
-      channelModels.filter((row) => getHealthStatus(row) !== 'healthy').length,
-    [channelModels]
-  )
   const modelAverages = useMemo(
     () => ({
       successRate: averageMetric(models, (row) => row.success_rate),
@@ -273,7 +285,7 @@ export function HealthStatistics() {
             <div className='flex items-center gap-2'>
               <HeartPulse className='text-primary size-6' aria-hidden='true' />
               <h1 className='text-2xl font-semibold tracking-tight'>
-                {t('Health Statistics')}
+                {t('Health Monitoring')}
               </h1>
             </div>
             <p className='text-muted-foreground mt-1 text-sm'>
@@ -292,6 +304,10 @@ export function HealthStatistics() {
                   })
                 : t('Not updated yet')}
             </span>
+            <Button variant='outline' onClick={() => setSettingsOpen(true)}>
+              <Settings2 data-icon='inline-start' />
+              {t('Monitoring settings')}
+            </Button>
             <Button variant='outline' onClick={refresh} disabled={refreshing}>
               <RefreshCw
                 data-icon='inline-start'
@@ -301,25 +317,6 @@ export function HealthStatistics() {
             </Button>
           </div>
         </div>
-
-        <HealthFilters
-          modelHours={modelHours}
-          channelMinutes={channelMinutes}
-          topLimit={topLimit}
-          autoRefreshMs={autoRefreshMs}
-          modelSearch={modelSearch}
-          channelSearch={channelSearch}
-          statusFilter={statusFilter}
-          onlyAnomalies={onlyAnomalies}
-          onModelHoursChange={setModelHours}
-          onChannelMinutesChange={setChannelMinutes}
-          onTopLimitChange={setTopLimit}
-          onAutoRefreshChange={setAutoRefreshMs}
-          onModelSearchChange={setModelSearch}
-          onChannelSearchChange={setChannelSearch}
-          onStatusFilterChange={setStatusFilter}
-          onOnlyAnomaliesChange={setOnlyAnomalies}
-        />
 
         {(modelQuery.isError || channelQuery.isError) && (
           <Alert variant='destructive'>
@@ -333,74 +330,96 @@ export function HealthStatistics() {
           </Alert>
         )}
 
-        <Alert>
-          <Activity />
-          <AlertTitle>{t('How these statistics are calculated')}</AlertTitle>
-          <AlertDescription>
-            <p>
-              {t(
-                'Only models and model-channel combinations called during the selected window are shown. Summary averages are equal-weight averages because the summary API does not expose request counts. No data is not treated as unhealthy.'
-              )}
-            </p>
-            <p>
-              {t(
-                'Thresholds: healthy means success rate ≥ 99% and latency ≤ 15s; warning means success rate 95–99% or latency 15–30s; worse values are critical. TPS is for comparison only.'
-              )}
-            </p>
-          </AlertDescription>
-        </Alert>
+        <section className='flex flex-col gap-4'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <h2 className='text-lg font-semibold tracking-tight'>
+              {t('Model health')}
+            </h2>
+            <Badge variant='outline'>
+              {t('{{count}} hours', { count: modelHours })}
+            </Badge>
+          </div>
 
-        <OverviewCards
-          loading={modelQuery.isLoading && channelQuery.isLoading}
-          activeModels={models.length}
-          statusCounts={modelStatusCounts}
-          averages={modelAverages}
-          abnormalChannelCount={abnormalChannelCount}
-        />
-
-        <AnomaliesTable
-          rows={anomalies}
-          loading={modelQuery.isLoading || channelQuery.isLoading}
-          onSelectModel={setSelectedModel}
-        />
-
-        <div className='grid gap-4 xl:grid-cols-3'>
-          <HealthBarChart
-            title={t('Highest model failure rates')}
-            data={failureRanking}
+          <ModelOverviewCards
             loading={modelQuery.isLoading}
-            color='#ef4444'
-            suffix='%'
-            max={100}
+            activeModels={models.length}
+            statusCounts={modelStatusCounts}
+            averages={modelAverages}
           />
-          <HealthBarChart
-            title={t('Highest model latency')}
-            data={latencyRanking}
-            loading={modelQuery.isLoading}
-            color='#ef4444'
-            suffix='ms'
-          />
-          <HealthBarChart
-            title={t('Highest model TPS')}
-            data={tpsRanking}
-            loading={modelQuery.isLoading}
-            color='#10b981'
-            suffix=''
-          />
-        </div>
 
-        <ChannelHealthMatrix
-          rows={filteredChannelModels}
-          loading={channelQuery.isLoading}
-          onSelectModel={setSelectedModel}
-        />
+          <div className='grid gap-4 xl:grid-cols-3'>
+            <HealthBarChart
+              title={t('Highest model failure rates')}
+              data={failureRanking}
+              loading={modelQuery.isLoading}
+              suffix='%'
+              max={100}
+            />
+            <HealthBarChart
+              title={t('Highest model latency')}
+              data={latencyRanking}
+              loading={modelQuery.isLoading}
+              suffix='ms'
+            />
+            <HealthBarChart
+              title={t('Highest model TPS')}
+              data={tpsRanking}
+              loading={modelQuery.isLoading}
+              suffix=''
+            />
+          </div>
+        </section>
 
-        <ChannelRankings
-          rows={filteredChannelModels}
-          loading={channelQuery.isLoading}
-          onSelectModel={setSelectedModel}
-        />
+        <section className='flex flex-col gap-4'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <h2 className='text-lg font-semibold tracking-tight'>
+              {t('Channel health')}
+            </h2>
+            <Badge variant='outline'>
+              {t('{{count}} minutes', { count: channelMinutes })}
+            </Badge>
+          </div>
+
+          <AnomaliesTable
+            rows={anomalies}
+            loading={channelQuery.isLoading}
+            onSelectModel={setSelectedModel}
+          />
+
+          <ChannelHealthMatrix
+            rows={filteredChannelModels}
+            loading={channelQuery.isLoading}
+            onSelectModel={setSelectedModel}
+          />
+
+          <ChannelRankings
+            rows={filteredChannelModels}
+            loading={channelQuery.isLoading}
+            onSelectModel={setSelectedModel}
+          />
+        </section>
       </div>
+
+      <HealthSettingsSheet
+        open={settingsOpen}
+        topLimit={topLimit}
+        autoRefreshMs={autoRefreshMs}
+        modelSearch={modelSearch}
+        statusFilter={statusFilter}
+        onlyAnomalies={onlyAnomalies}
+        modelHours={modelHours}
+        channelMinutes={channelMinutes}
+        channelSearch={channelSearch}
+        onOpenChange={setSettingsOpen}
+        onTopLimitChange={setTopLimit}
+        onAutoRefreshChange={setAutoRefreshMs}
+        onModelSearchChange={setModelSearch}
+        onStatusFilterChange={setStatusFilter}
+        onOnlyAnomaliesChange={setOnlyAnomalies}
+        onModelHoursChange={setModelHours}
+        onChannelMinutesChange={setChannelMinutes}
+        onChannelSearchChange={setChannelSearch}
+      />
 
       <ModelHealthSheet
         modelName={selectedModel}
@@ -413,207 +432,269 @@ export function HealthStatistics() {
   )
 }
 
-type HealthFiltersProps = {
-  modelHours: number
-  channelMinutes: number
+type HealthSettingsSheetProps = {
+  open: boolean
   topLimit: number
   autoRefreshMs: number
   modelSearch: string
-  channelSearch: string
   statusFilter: HealthStatusFilter
   onlyAnomalies: boolean
-  onModelHoursChange: (value: number) => void
-  onChannelMinutesChange: (value: number) => void
+  modelHours: number
+  channelMinutes: number
+  channelSearch: string
+  onOpenChange: (open: boolean) => void
   onTopLimitChange: (value: number) => void
   onAutoRefreshChange: (value: number) => void
   onModelSearchChange: (value: string) => void
-  onChannelSearchChange: (value: string) => void
   onStatusFilterChange: (value: HealthStatusFilter) => void
   onOnlyAnomaliesChange: (value: boolean) => void
+  onModelHoursChange: (value: number) => void
+  onChannelMinutesChange: (value: number) => void
+  onChannelSearchChange: (value: string) => void
 }
 
-function HealthFilters(props: HealthFiltersProps) {
+function HealthSettingsSheet(props: HealthSettingsSheetProps) {
   const { t } = useTranslation()
   return (
-    <Card>
-      <CardHeader className='border-b'>
-        <CardTitle>{t('Health filters')}</CardTitle>
-        <CardDescription>
-          {t(
-            'Model metrics and channel metrics can use different time windows'
-          )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <FieldGroup className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8'>
-          <Field>
-            <FieldLabel>{t('Model window')}</FieldLabel>
-            <Select
-              value={String(props.modelHours)}
-              onValueChange={(value) =>
-                value && props.onModelHoursChange(Number(value))
-              }
-            >
-              <SelectTrigger className='w-full'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {MODEL_WINDOWS.map((hours) => (
-                    <SelectItem key={hours} value={String(hours)}>
-                      {t('{{count}} hours', { count: hours })}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel>{t('Channel window')}</FieldLabel>
-            <Select
-              value={String(props.channelMinutes)}
-              onValueChange={(value) =>
-                value && props.onChannelMinutesChange(Number(value))
-              }
-            >
-              <SelectTrigger className='w-full'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {CHANNEL_WINDOWS.map((minutes) => (
-                    <SelectItem key={minutes} value={String(minutes)}>
-                      {t('{{count}} minutes', { count: minutes })}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel>{t('Status')}</FieldLabel>
-            <Select
-              value={props.statusFilter}
-              onValueChange={(value) =>
-                value && props.onStatusFilterChange(value as HealthStatusFilter)
-              }
-            >
-              <SelectTrigger className='w-full'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {(['all', 'healthy', 'warning', 'critical'] as const).map(
-                    (status) => (
-                      <SelectItem key={status} value={status}>
-                        {status === 'all'
-                          ? t('All')
-                          : t(healthStatusLabel(status))}
+    <Sheet open={props.open} onOpenChange={props.onOpenChange}>
+      <SheetContent className={sideDrawerContentClassName('sm:max-w-lg')}>
+        <SheetHeader className={sideDrawerHeaderClassName()}>
+          <SheetTitle>{t('Monitoring settings')}</SheetTitle>
+          <SheetDescription>
+            {t('Configure filters, time periods, and refresh behavior')}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className={sideDrawerFormClassName()}>
+          <SideDrawerSection>
+            <SideDrawerSectionHeader
+              title={t('Global filters')}
+              description={t(
+                'These filters apply to both model and channel health sections'
+              )}
+              icon={<Settings2 className='size-4' aria-hidden='true' />}
+            />
+            <FieldGroup className='grid gap-4 sm:grid-cols-2'>
+              <Field>
+                <FieldLabel>{t('Status')}</FieldLabel>
+                <Select
+                  value={props.statusFilter}
+                  onValueChange={(value) =>
+                    value &&
+                    props.onStatusFilterChange(value as HealthStatusFilter)
+                  }
+                >
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {(['all', 'healthy', 'warning', 'critical'] as const).map(
+                        (status) => (
+                          <SelectItem key={status} value={status}>
+                            {status === 'all'
+                              ? t('All')
+                              : t(healthStatusLabel(status))}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel>{t('Display limit')}</FieldLabel>
+                <Select
+                  value={String(props.topLimit)}
+                  onValueChange={(value) =>
+                    value && props.onTopLimitChange(Number(value))
+                  }
+                >
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {TOP_LIMITS.map((limit) => (
+                        <SelectItem key={limit} value={String(limit)}>
+                          Top {limit}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel>{t('Auto refresh')}</FieldLabel>
+                <Select
+                  value={String(props.autoRefreshMs)}
+                  onValueChange={(value) =>
+                    value != null && props.onAutoRefreshChange(Number(value))
+                  }
+                >
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {AUTO_REFRESH_OPTIONS.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={String(option.value)}
+                        >
+                          {t(option.label)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel>{t('Search models')}</FieldLabel>
+                <div className='relative'>
+                  <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2' />
+                  <Input
+                    value={props.modelSearch}
+                    onChange={(event) =>
+                      props.onModelSearchChange(event.target.value)
+                    }
+                    placeholder={t('Model name')}
+                    className='pl-8'
+                  />
+                </div>
+              </Field>
+              <Field className='sm:col-span-2'>
+                <FieldLabel>{t('Anomaly focus')}</FieldLabel>
+                <label className='flex h-9 cursor-pointer items-center justify-between gap-3 rounded-lg border px-3'>
+                  <span className='text-sm'>{t('Only anomalies')}</span>
+                  <Switch
+                    checked={props.onlyAnomalies}
+                    onCheckedChange={props.onOnlyAnomaliesChange}
+                    size='sm'
+                  />
+                </label>
+              </Field>
+            </FieldGroup>
+          </SideDrawerSection>
+
+          <SideDrawerSection>
+            <SideDrawerSectionHeader
+              title={t('Model health')}
+              description={t(
+                'Overall model and group health for the selected model period'
+              )}
+            />
+            <Field>
+              <FieldLabel>{t('Model statistics period')}</FieldLabel>
+              <Select
+                value={String(props.modelHours)}
+                onValueChange={(value) =>
+                  value && props.onModelHoursChange(Number(value))
+                }
+              >
+                <SelectTrigger className='w-full'>
+                  <SelectValue>
+                    {t('{{count}} hours', { count: props.modelHours })}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {MODEL_WINDOWS.map((hours) => (
+                      <SelectItem key={hours} value={String(hours)}>
+                        {t('{{count}} hours', { count: hours })}
                       </SelectItem>
-                    )
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          </SideDrawerSection>
+
+          <SideDrawerSection>
+            <SideDrawerSectionHeader
+              title={t('Channel health')}
+              description={t(
+                'Current model-channel health for the selected channel period'
+              )}
+            />
+            <FieldGroup className='grid gap-4 sm:grid-cols-2'>
+              <Field>
+                <FieldLabel>{t('Channel statistics period')}</FieldLabel>
+                <Select
+                  value={String(props.channelMinutes)}
+                  onValueChange={(value) =>
+                    value && props.onChannelMinutesChange(Number(value))
+                  }
+                >
+                  <SelectTrigger className='w-full'>
+                    <SelectValue>
+                      {t('{{count}} minutes', {
+                        count: props.channelMinutes,
+                      })}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {CHANNEL_WINDOWS.map((minutes) => (
+                        <SelectItem key={minutes} value={String(minutes)}>
+                          {t('{{count}} minutes', { count: minutes })}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel>{t('Search channels')}</FieldLabel>
+                <div className='relative'>
+                  <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2' />
+                  <Input
+                    value={props.channelSearch}
+                    onChange={(event) =>
+                      props.onChannelSearchChange(event.target.value)
+                    }
+                    placeholder={t('Channel name or ID')}
+                    className='pl-8'
+                  />
+                </div>
+              </Field>
+            </FieldGroup>
+          </SideDrawerSection>
+
+          <SideDrawerSection>
+            <Alert>
+              <Activity />
+              <AlertTitle>
+                {t('How these statistics are calculated')}
+              </AlertTitle>
+              <AlertDescription>
+                <p>
+                  {t(
+                    'Only models and model-channel combinations called during the selected window are shown. Summary averages are equal-weight averages because the summary API does not expose request counts. No data is not treated as unhealthy.'
                   )}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel>{t('Display limit')}</FieldLabel>
-            <Select
-              value={String(props.topLimit)}
-              onValueChange={(value) =>
-                value && props.onTopLimitChange(Number(value))
-              }
-            >
-              <SelectTrigger className='w-full'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {TOP_LIMITS.map((limit) => (
-                    <SelectItem key={limit} value={String(limit)}>
-                      Top {limit}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel>{t('Auto refresh')}</FieldLabel>
-            <Select
-              value={String(props.autoRefreshMs)}
-              onValueChange={(value) =>
-                value != null && props.onAutoRefreshChange(Number(value))
-              }
-            >
-              <SelectTrigger className='w-full'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {AUTO_REFRESH_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={String(option.value)}>
-                      {t(option.label)}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel>{t('Search models')}</FieldLabel>
-            <div className='relative'>
-              <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2' />
-              <Input
-                value={props.modelSearch}
-                onChange={(event) =>
-                  props.onModelSearchChange(event.target.value)
-                }
-                placeholder={t('Model name')}
-                className='pl-8'
-              />
-            </div>
-          </Field>
-          <Field>
-            <FieldLabel>{t('Search channels')}</FieldLabel>
-            <div className='relative'>
-              <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2' />
-              <Input
-                value={props.channelSearch}
-                onChange={(event) =>
-                  props.onChannelSearchChange(event.target.value)
-                }
-                placeholder={t('Channel name or ID')}
-                className='pl-8'
-              />
-            </div>
-          </Field>
-          <Field>
-            <FieldLabel>{t('Anomaly focus')}</FieldLabel>
-            <label className='flex h-8 cursor-pointer items-center justify-between gap-3 rounded-lg border px-2.5'>
-              <span className='text-sm'>{t('Only anomalies')}</span>
-              <Switch
-                checked={props.onlyAnomalies}
-                onCheckedChange={props.onOnlyAnomaliesChange}
-                size='sm'
-              />
-            </label>
-          </Field>
-        </FieldGroup>
-      </CardContent>
-    </Card>
+                </p>
+                <p>
+                  {t(
+                    'Thresholds: healthy means success rate ≥ 99% and latency ≤ 15s; warning means success rate 95–99% or latency 15–30s; worse values are critical. TPS is for comparison only.'
+                  )}
+                </p>
+              </AlertDescription>
+            </Alert>
+          </SideDrawerSection>
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
-type OverviewCardsProps = {
+type ModelOverviewCardsProps = {
   loading: boolean
   activeModels: number
   statusCounts: Record<HealthStatus, number>
   averages: { successRate: number; latency: number; tps: number }
-  abnormalChannelCount: number
 }
 
-function OverviewCards(props: OverviewCardsProps) {
+function ModelOverviewCards(props: ModelOverviewCardsProps) {
   const { t } = useTranslation()
   const cards = [
     {
@@ -654,16 +735,9 @@ function OverviewCards(props: OverviewCardsProps) {
       value: formatThroughput(props.averages.tps),
       icon: Gauge,
     },
-    {
-      label: 'Abnormal model-channel pairs',
-      value: String(props.abnormalChannelCount),
-      icon: AlertCircle,
-      className:
-        props.abnormalChannelCount > 0 ? 'text-destructive' : 'text-success',
-    },
   ]
   return (
-    <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8'>
+    <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7'>
       {cards.map((card) => {
         const Icon = card.icon
         return (
@@ -708,6 +782,21 @@ function AnomaliesTable(props: {
   onSelectModel: (model: string) => void
 }) {
   const { t } = useTranslation()
+  const [pageSize, setPageSize] = useState(10)
+  const [pageIndex, setPageIndex] = useState(0)
+  const pageCount = Math.max(1, Math.ceil(props.rows.length / pageSize))
+  const activePageIndex = Math.min(pageIndex, pageCount - 1)
+  const visibleRows = props.rows.slice(
+    activePageIndex * pageSize,
+    (activePageIndex + 1) * pageSize
+  )
+  const firstVisibleRow =
+    props.rows.length === 0 ? 0 : activePageIndex * pageSize + 1
+  const lastVisibleRow = Math.min(
+    props.rows.length,
+    (activePageIndex + 1) * pageSize
+  )
+
   return (
     <Card>
       <CardHeader className='border-b'>
@@ -715,6 +804,36 @@ function AnomaliesTable(props: {
         <CardDescription>
           {t('Model-channel issues in the selected channel window')}
         </CardDescription>
+        <CardAction className='flex items-center gap-2'>
+          <span className='text-muted-foreground hidden text-xs sm:inline'>
+            {t('Rows per page')}
+          </span>
+          <Select
+            items={ANOMALY_PAGE_SIZES.map((size) => ({
+              value: String(size),
+              label: size,
+            }))}
+            value={String(pageSize)}
+            onValueChange={(value) => {
+              if (!value) return
+              setPageSize(Number(value))
+              setPageIndex(0)
+            }}
+          >
+            <SelectTrigger size='sm' className='w-[76px]'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {ANOMALY_PAGE_SIZES.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </CardAction>
       </CardHeader>
       <CardContent className='px-0'>
         {props.loading ? (
@@ -761,7 +880,7 @@ function AnomaliesTable(props: {
                 </tr>
               </thead>
               <tbody className='divide-y'>
-                {props.rows.map((row) => (
+                {visibleRows.map((row) => (
                   <tr key={row.key} className='hover:bg-muted/30'>
                     <td className='px-4 py-2'>
                       <button
@@ -794,6 +913,37 @@ function AnomaliesTable(props: {
                 ))}
               </tbody>
             </table>
+            <div className='flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3'>
+              <span className='text-muted-foreground text-xs tabular-nums'>
+                {t('Showing')} {firstVisibleRow}–{lastVisibleRow} {t('of')}{' '}
+                {props.rows.length}
+              </span>
+              <div className='flex items-center gap-2'>
+                <Button
+                  variant='outline'
+                  size='icon-sm'
+                  onClick={() => setPageIndex(Math.max(0, activePageIndex - 1))}
+                  disabled={activePageIndex === 0}
+                  aria-label={t('Previous page')}
+                >
+                  <ChevronLeft />
+                </Button>
+                <span className='min-w-12 text-center font-mono text-xs tabular-nums'>
+                  {activePageIndex + 1}/{pageCount}
+                </span>
+                <Button
+                  variant='outline'
+                  size='icon-sm'
+                  onClick={() =>
+                    setPageIndex(Math.min(pageCount - 1, activePageIndex + 1))
+                  }
+                  disabled={activePageIndex >= pageCount - 1}
+                  aria-label={t('Next page')}
+                >
+                  <ChevronRight />
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </CardContent>

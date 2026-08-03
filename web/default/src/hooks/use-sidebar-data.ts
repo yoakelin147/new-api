@@ -135,7 +135,7 @@ export function useSidebarData(): SidebarData {
             icon: TrendingUp,
           },
           {
-            title: t('Health Statistics'),
+            title: t('Health Monitoring'),
             url: '/health-statistics',
             icon: HeartPulse,
           },

@@ -19,20 +19,8 @@ func flushLoop() {
 			continue
 		}
 		flushCompletedBuckets()
-		cleanupOldChannelBuckets()
 		cleanupExpiredMetrics(setting.RetentionDays)
 	}
-}
-
-func cleanupOldChannelBuckets() {
-	cutoff := channelBucketStart(time.Now().Add(-24 * time.Hour).Unix())
-	channelHotBuckets.Range(func(key, value any) bool {
-		k := key.(channelBucketKey)
-		if k.bucketTs < cutoff {
-			channelHotBuckets.Delete(key)
-		}
-		return true
-	})
 }
 
 func flushCompletedBuckets() {

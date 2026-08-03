@@ -1,9 +1,13 @@
 package perfmetrics
 
 import (
+	"context"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,4 +97,153 @@ func TestChannelBucketStartUsesFixedFiveMinuteBuckets(t *testing.T) {
 	require.Equal(t, int64(0), channelBucketStart(299))
 	require.Equal(t, int64(300), channelBucketStart(300))
 	require.Equal(t, int64(300), channelBucketStart(599))
+}
+
+func TestChannelMinuteWindowKeepsFiveRollingMinuteSlotsAcrossBucketBoundary(t *testing.T) {
+	firstMinute, lastMinute := channelMinuteWindow(12*60+42, 5)
+
+	require.Equal(t, int64(8*60), firstMinute)
+	require.Equal(t, int64(12*60), lastMinute)
+	require.Equal(t, []int64{5 * 60, 10 * 60}, channelRedisBucketStarts(firstMinute, lastMinute))
+}
+
+func TestChannelMinuteWindowAtFiveMinuteBoundaryIncludesPreviousFourMinutes(t *testing.T) {
+	firstMinute, lastMinute := channelMinuteWindow(10*60, 5)
+
+	require.Equal(t, int64(6*60), firstMinute)
+	require.Equal(t, int64(10*60), lastMinute)
+	require.Equal(t, []int64{5 * 60, 10 * 60}, channelRedisBucketStarts(firstMinute, lastMinute))
+}
+
+func TestChannelRedisFieldRoundTripSupportsArbitraryModelNames(t *testing.T) {
+	field := channelRedisFieldPrefix("供应商:model/name", 42, 3) + ":gen_ms"
+
+	key, minuteOffset, metric, ok := parseChannelRedisField(field)
+
+	require.True(t, ok)
+	require.Equal(t, channelModelKey{model: "供应商:model/name", channelId: 42}, key)
+	require.Equal(t, 3, minuteOffset)
+	require.Equal(t, "gen_ms", metric)
+}
+
+func TestMergeChannelRedisBucketExcludesMinuteSlotsOutsideWindow(t *testing.T) {
+	totals := make(map[channelModelKey]counters)
+	modelName := "model"
+	channelId := 7
+	values := map[string]string{
+		channelRedisFieldPrefix(modelName, channelId, 0) + ":req": "10",
+		channelRedisFieldPrefix(modelName, channelId, 1) + ":req": "2",
+		channelRedisFieldPrefix(modelName, channelId, 1) + ":ok":  "1",
+		channelRedisFieldPrefix(modelName, channelId, 1) + ":lat": "400",
+	}
+
+	mergeChannelRedisBucket(totals, 300, 360, 600, values)
+
+	require.Equal(t, map[channelModelKey]counters{
+		{model: modelName, channelId: channelId}: {
+			requestCount:   2,
+			successCount:   1,
+			totalLatencyMs: 400,
+		},
+	}, totals)
+}
+
+func TestMergeChannelRedisBucketIgnoresMalformedFieldsAndValues(t *testing.T) {
+	totals := make(map[channelModelKey]counters)
+	validPrefix := channelRedisFieldPrefix("model", 7, 2)
+	values := map[string]string{
+		validPrefix + ":req":                            "3",
+		validPrefix + ":ok":                             "2",
+		validPrefix + ":lat":                            "900",
+		validPrefix + ":out":                            "30",
+		validPrefix + ":gen_ms":                         "1000",
+		validPrefix + ":unknown":                        "123",
+		validPrefix + ":invalid_value":                  "not-a-number",
+		channelRedisFieldPrefix("model", 7, 3) + ":req": "-4",
+		"invalid-field":                                 "5",
+	}
+
+	mergeChannelRedisBucket(totals, 300, 300, 599, values)
+
+	require.Equal(t, map[channelModelKey]counters{
+		{model: "model", channelId: 7}: {
+			requestCount:   3,
+			successCount:   2,
+			totalLatencyMs: 900,
+			outputTokens:   30,
+			generationMs:   1000,
+		},
+	}, totals)
+}
+
+func TestQueryChannelSummaryRequiresRedis(t *testing.T) {
+	previousClient := common.RDB
+	previousEnabled := common.RedisEnabled
+	common.RDB = nil
+	common.RedisEnabled = false
+	t.Cleanup(func() {
+		common.RDB = previousClient
+		common.RedisEnabled = previousEnabled
+	})
+
+	result, err := QueryChannelSummary(5, 20)
+
+	require.ErrorIs(t, err, errChannelMetricsRedisUnavailable)
+	require.Empty(t, result.Models)
+}
+
+func TestChannelRedisReadWriteIntegration(t *testing.T) {
+	redisURL := os.Getenv("CHANNEL_METRICS_REDIS_TEST_URL")
+	if redisURL == "" {
+		t.Skip("CHANNEL_METRICS_REDIS_TEST_URL is not set")
+	}
+
+	options, err := redis.ParseURL(redisURL)
+	require.NoError(t, err)
+	client := redis.NewClient(options)
+	t.Cleanup(func() {
+		require.NoError(t, client.Close())
+	})
+	require.NoError(t, client.Ping(context.Background()).Err())
+
+	previousClient := common.RDB
+	previousEnabled := common.RedisEnabled
+	common.RDB = client
+	common.RedisEnabled = true
+	t.Cleanup(func() {
+		common.RDB = previousClient
+		common.RedisEnabled = previousEnabled
+	})
+
+	now := time.Now().Unix()
+	redisKey := channelRedisBucketKey(channelBucketStart(now))
+	require.NoError(t, client.Del(context.Background(), redisKey).Err())
+	t.Cleanup(func() {
+		require.NoError(t, client.Del(context.Background(), redisKey).Err())
+	})
+
+	modelName := "integration:model/渠道"
+	channelId := 987654321
+	RecordChannel(Sample{
+		Model:        modelName,
+		ChannelId:    channelId,
+		LatencyMs:    1200,
+		Success:      true,
+		OutputTokens: 24,
+		GenerationMs: 2000,
+	})
+
+	totals, err := queryChannelRedisTotals(now, 5)
+	require.NoError(t, err)
+	require.Equal(t, counters{
+		requestCount:   1,
+		successCount:   1,
+		totalLatencyMs: 1200,
+		outputTokens:   24,
+		generationMs:   2000,
+	}, totals[channelModelKey{model: modelName, channelId: channelId}])
+	ttl, err := client.TTL(context.Background(), redisKey).Result()
+	require.NoError(t, err)
+	require.Greater(t, ttl, 24*time.Hour)
+	require.LessOrEqual(t, ttl, channelRedisTTL)
 }

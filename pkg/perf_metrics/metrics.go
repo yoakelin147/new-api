@@ -15,9 +15,6 @@ import (
 )
 
 var hotBuckets sync.Map
-var channelHotBuckets sync.Map
-
-const channelBucketSeconds int64 = 300
 
 // seriesSchema is a stable client cache/schema marker. Do not change it when
 // hiding fields or making response-only privacy hardening changes.
@@ -65,14 +62,6 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 	}
 }
 
-func RecordChannelFailure(modelName string, channelId int, latencyMs int64) {
-	RecordChannel(Sample{
-		Model:     modelName,
-		ChannelId: channelId,
-		LatencyMs: latencyMs,
-	})
-}
-
 func Record(sample Sample) {
 	setting := perf_metrics_setting.GetSetting()
 	if !setting.Enabled || sample.Model == "" {
@@ -93,24 +82,6 @@ func Record(sample Sample) {
 	actual, _ := hotBuckets.LoadOrStore(key, &atomicBucket{})
 	actual.(*atomicBucket).add(sample)
 	recordRedis(key, sample)
-}
-
-func RecordChannel(sample Sample) {
-	setting := perf_metrics_setting.GetSetting()
-	if !setting.Enabled || sample.Model == "" || sample.ChannelId <= 0 {
-		return
-	}
-	if sample.LatencyMs < 0 {
-		sample.LatencyMs = 0
-	}
-
-	key := channelBucketKey{
-		model:     sample.Model,
-		channelId: sample.ChannelId,
-		bucketTs:  channelBucketStart(time.Now().Unix()),
-	}
-	actual, _ := channelHotBuckets.LoadOrStore(key, &atomicBucket{})
-	actual.(*atomicBucket).add(sample)
 }
 
 func Query(params QueryParams) (QueryResult, error) {
@@ -236,98 +207,6 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 	return SummaryAllResult{Models: models}, nil
 }
 
-func QueryChannelSummary(minutes int, limit int) (ChannelSummaryResult, error) {
-	if minutes <= 0 {
-		minutes = 5
-	}
-	if minutes > 60*24 {
-		minutes = 60 * 24
-	}
-	if limit <= 0 {
-		limit = 20
-	}
-	if limit > 100 {
-		limit = 100
-	}
-
-	endTs := time.Now().Unix()
-	startTs := endTs - int64(minutes)*60
-	totals := make(map[channelModelKey]counters)
-
-	channelHotBuckets.Range(func(key, value any) bool {
-		k := key.(channelBucketKey)
-		if k.bucketTs < startTs || k.bucketTs > endTs {
-			return true
-		}
-		snap := value.(*atomicBucket).snapshot()
-		if snap.requestCount == 0 {
-			return true
-		}
-		totalKey := channelModelKey{model: k.model, channelId: k.channelId}
-		current := totals[totalKey]
-		current.requestCount += snap.requestCount
-		current.successCount += snap.successCount
-		current.totalLatencyMs += snap.totalLatencyMs
-		current.outputTokens += snap.outputTokens
-		current.generationMs += snap.generationMs
-		totals[totalKey] = current
-		return true
-	})
-
-	result := buildChannelSummaryResult(totals, nil, limit)
-	channelIds := make([]int, 0, len(result.Models))
-	seenChannelIds := make(map[int]struct{}, len(result.Models))
-	for _, item := range result.Models {
-		if _, ok := seenChannelIds[item.ChannelId]; ok {
-			continue
-		}
-		seenChannelIds[item.ChannelId] = struct{}{}
-		channelIds = append(channelIds, item.ChannelId)
-	}
-	channelNames, err := model.GetChannelNamesByIds(channelIds)
-	if err != nil {
-		return ChannelSummaryResult{}, err
-	}
-	for index := range result.Models {
-		result.Models[index].ChannelName = channelNames[result.Models[index].ChannelId]
-	}
-
-	return result, nil
-}
-
-func buildChannelSummaryResult(totals map[channelModelKey]counters, channelNames map[int]string, limit int) ChannelSummaryResult {
-	models := make([]ChannelModelSummary, 0, len(totals))
-	for key, total := range totals {
-		if total.requestCount == 0 {
-			continue
-		}
-		models = append(models, ChannelModelSummary{
-			ModelName:    key.model,
-			ChannelId:    key.channelId,
-			ChannelName:  channelNames[key.channelId],
-			AvgLatencyMs: avg(total.totalLatencyMs, total.requestCount),
-			SuccessRate:  math.Round(successRate(total)*100) / 100,
-			AvgTps:       math.Round(avgTps(total)*100) / 100,
-			RequestCount: total.requestCount,
-		})
-	}
-
-	sort.Slice(models, func(i, j int) bool {
-		if models[i].RequestCount != models[j].RequestCount {
-			return models[i].RequestCount > models[j].RequestCount
-		}
-		if models[i].ModelName != models[j].ModelName {
-			return models[i].ModelName < models[j].ModelName
-		}
-		return models[i].ChannelId < models[j].ChannelId
-	})
-	if limit > 0 && len(models) > limit {
-		models = models[:limit]
-	}
-
-	return ChannelSummaryResult{Models: models}
-}
-
 func allowedGroupSet(groups []string) map[string]struct{} {
 	if groups == nil {
 		return nil
@@ -345,10 +224,6 @@ func bucketStart(ts int64) int64 {
 		bucketSeconds = 3600
 	}
 	return ts - (ts % bucketSeconds)
-}
-
-func channelBucketStart(ts int64) int64 {
-	return ts - (ts % channelBucketSeconds)
 }
 
 func mergeCounters(merged map[bucketKey]counters, key bucketKey, value counters) {

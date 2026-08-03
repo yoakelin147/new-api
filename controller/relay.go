@@ -228,11 +228,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			return
 		}
 
-		perfmetrics.RecordChannelFailure(
-			relayInfo.OriginModelName,
-			channel.Id,
-			time.Since(attemptStartedAt).Milliseconds(),
-		)
+		failedModelName := relayInfo.OriginModelName
+		failedChannelId := channel.Id
+		failedLatencyMs := time.Since(attemptStartedAt).Milliseconds()
+		gopool.Go(func() {
+			perfmetrics.RecordChannelFailure(failedModelName, failedChannelId, failedLatencyMs)
+		})
 
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError

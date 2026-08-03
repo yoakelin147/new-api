@@ -80,12 +80,6 @@ type bucketKey struct {
 	bucketTs int64
 }
 
-type channelBucketKey struct {
-	model     string
-	channelId int
-	bucketTs  int64
-}
-
 type channelModelKey struct {
 	model     string
 	channelId int
