@@ -23,6 +23,7 @@ import {
   CreditCard,
   FileText,
   FlaskConical,
+  HeartPulse,
   Key,
   LayoutDashboard,
   ListTodo,
@@ -132,6 +133,11 @@ export function useSidebarData(): SidebarData {
             title: t('Profit Statistics'),
             url: '/profit-statistics',
             icon: TrendingUp,
+          },
+          {
+            title: t('Health Statistics'),
+            url: '/health-statistics',
+            icon: HeartPulse,
           },
           {
             title: t('Models'),

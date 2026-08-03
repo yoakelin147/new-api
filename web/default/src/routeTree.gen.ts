@@ -47,6 +47,7 @@ import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_authenticated/playground/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
+import { Route as AuthenticatedHealthStatisticsIndexRouteImport } from './routes/_authenticated/health-statistics/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedCostStatisticsIndexRouteImport } from './routes/_authenticated/cost-statistics/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
@@ -270,6 +271,12 @@ const AuthenticatedKeysIndexRoute = AuthenticatedKeysIndexRouteImport.update({
   path: '/keys/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedHealthStatisticsIndexRoute =
+  AuthenticatedHealthStatisticsIndexRouteImport.update({
+    id: '/health-statistics/',
+    path: '/health-statistics/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardIndexRoute =
   AuthenticatedDashboardIndexRouteImport.update({
     id: '/dashboard/',
@@ -447,6 +454,7 @@ export interface FileRoutesByFullPath {
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/cost-statistics/': typeof AuthenticatedCostStatisticsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/health-statistics/': typeof AuthenticatedHealthStatisticsIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -508,6 +516,7 @@ export interface FileRoutesByTo {
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/cost-statistics': typeof AuthenticatedCostStatisticsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
+  '/health-statistics': typeof AuthenticatedHealthStatisticsIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
@@ -573,6 +582,7 @@ export interface FileRoutesById {
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/cost-statistics/': typeof AuthenticatedCostStatisticsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/_authenticated/health-statistics/': typeof AuthenticatedHealthStatisticsIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -637,6 +647,7 @@ export interface FileRouteTypes {
     | '/channels/'
     | '/cost-statistics/'
     | '/dashboard/'
+    | '/health-statistics/'
     | '/keys/'
     | '/models/'
     | '/playground/'
@@ -698,6 +709,7 @@ export interface FileRouteTypes {
     | '/channels'
     | '/cost-statistics'
     | '/dashboard'
+    | '/health-statistics'
     | '/keys'
     | '/models'
     | '/playground'
@@ -762,6 +774,7 @@ export interface FileRouteTypes {
     | '/_authenticated/channels/'
     | '/_authenticated/cost-statistics/'
     | '/_authenticated/dashboard/'
+    | '/_authenticated/health-statistics/'
     | '/_authenticated/keys/'
     | '/_authenticated/models/'
     | '/_authenticated/playground/'
@@ -1080,6 +1093,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedKeysIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/health-statistics/': {
+      id: '/_authenticated/health-statistics/'
+      path: '/health-statistics'
+      fullPath: '/health-statistics/'
+      preLoaderRoute: typeof AuthenticatedHealthStatisticsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard/': {
       id: '/_authenticated/dashboard/'
       path: '/dashboard'
@@ -1348,6 +1368,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedCostStatisticsIndexRoute: typeof AuthenticatedCostStatisticsIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
+  AuthenticatedHealthStatisticsIndexRoute: typeof AuthenticatedHealthStatisticsIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
@@ -1372,6 +1393,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedCostStatisticsIndexRoute: AuthenticatedCostStatisticsIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
+  AuthenticatedHealthStatisticsIndexRoute:
+    AuthenticatedHealthStatisticsIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
   AuthenticatedPlaygroundIndexRoute: AuthenticatedPlaygroundIndexRoute,
