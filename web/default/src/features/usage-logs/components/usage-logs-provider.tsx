@@ -18,7 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, type ReactNode } from 'react'
-import type { ChannelAffinityInfo } from '../types'
+import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
+import type { ChannelAffinityInfo, LogSubject } from '../types'
 
 interface UsageLogsContextValue {
   selectedUserId: number | null
@@ -31,6 +33,8 @@ interface UsageLogsContextValue {
   setAffinityDialogOpen: (open: boolean) => void
   sensitiveVisible: boolean
   setSensitiveVisible: (visible: boolean) => void
+  logSubject: LogSubject
+  setLogSubject: (subject: LogSubject) => void
 }
 
 const UsageLogsContext = createContext<UsageLogsContextValue | undefined>(
@@ -38,12 +42,16 @@ const UsageLogsContext = createContext<UsageLogsContextValue | undefined>(
 )
 
 export function UsageLogsProvider({ children }: { children: ReactNode }) {
+  const userRole = useAuthStore((state) => state.auth.user?.role)
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [userInfoDialogOpen, setUserInfoDialogOpen] = useState(false)
   const [affinityTarget, setAffinityTarget] =
     useState<ChannelAffinityInfo | null>(null)
   const [affinityDialogOpen, setAffinityDialogOpen] = useState(false)
   const [sensitiveVisible, setSensitiveVisible] = useState(true)
+  const [logSubject, setLogSubject] = useState<LogSubject>(
+    userRole !== undefined && userRole >= ROLE.ADMIN ? 'all' : 'self'
+  )
 
   return (
     <UsageLogsContext.Provider
@@ -58,6 +66,8 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
         setAffinityDialogOpen,
         sensitiveVisible,
         setSensitiveVisible,
+        logSubject,
+        setLogSubject,
       }}
     >
       {children}

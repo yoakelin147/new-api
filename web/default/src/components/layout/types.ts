@@ -119,7 +119,7 @@ export type SidebarView = {
   /** Back-navigation descriptor; required for nested views */
   parent: SidebarViewParent
   /** Nav group builder, called per render with the active translator */
-  getNavGroups: (t: TFunction) => NavGroup[]
+  getNavGroups: (t: TFunction, userRole?: number) => NavGroup[]
 }
 
 /**

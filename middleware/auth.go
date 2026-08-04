@@ -33,7 +33,7 @@ func validUserInfo(username string, role int) bool {
 	return true
 }
 
-func authHelper(c *gin.Context, minRole int) {
+func authHelper(c *gin.Context, minRole int, allowedRoles ...int) {
 	session := sessions.Default(c)
 	username := session.Get("username")
 	role := session.Get("role")
@@ -136,6 +136,35 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
+	if len(allowedRoles) > 0 {
+		currentUser, err := model.GetUserById(id.(int), false)
+		if err != nil || currentUser.Status != common.UserStatusEnabled {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
+			})
+			c.Abort()
+			return
+		}
+		username = currentUser.Username
+		role = currentUser.Role
+		status = currentUser.Status
+		roleAllowed := false
+		for _, allowedRole := range allowedRoles {
+			if role.(int) == allowedRole {
+				roleAllowed = true
+				break
+			}
+		}
+		if !roleAllowed {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
+			})
+			c.Abort()
+			return
+		}
+	}
 	if !validUserInfo(username.(string), role.(int)) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -185,13 +214,21 @@ func UserAuth() func(c *gin.Context) {
 
 func AdminAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		authHelper(c, common.RoleAdminUser)
+		authHelper(c, common.RoleAdminUser, common.RoleAdminUser, common.RoleRootUser)
+	}
+}
+
+// SalesAuth allows only the dedicated sales role. Sales users intentionally do
+// not pass AdminAuth and therefore cannot inherit any administrative endpoint.
+func SalesAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		authHelper(c, common.RoleCommonUser, common.RoleSalesUser)
 	}
 }
 
 func RootAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		authHelper(c, common.RoleRootUser)
+		authHelper(c, common.RoleRootUser, common.RoleRootUser)
 	}
 }
 

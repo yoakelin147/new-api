@@ -26,7 +26,7 @@ import { z } from 'zod'
 export const userStatusSchema = z.number()
 export type UserStatus = z.infer<typeof userStatusSchema>
 
-/** User role: 1 = common user, 10 = admin, 100 = root */
+/** User role: 1 = common user, 5 = sales, 10 = admin, 100 = root */
 export const userRoleSchema = z.number()
 export type UserRole = z.infer<typeof userRoleSchema>
 
@@ -102,7 +102,7 @@ export interface UserFormData {
   username: string
   display_name: string
   password?: string
-  role?: number // Only used when creating user
+  role?: number // Used when creating a user or switching common/sales roles
   quota?: number // Only used when updating user
   group?: string // Only used when updating user
   remark?: string // Only used when updating user

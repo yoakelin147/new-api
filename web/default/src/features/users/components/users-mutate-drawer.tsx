@@ -23,6 +23,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Pencil } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -63,7 +64,12 @@ import {
   sideDrawerHeaderClassName,
 } from '@/components/drawer-layout'
 import { createUser, updateUser, getUser, getGroups } from '../api'
-import { BINDING_FIELDS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
+import {
+  BINDING_FIELDS,
+  ERROR_MESSAGES,
+  SUCCESS_MESSAGES,
+  USER_ROLE,
+} from '../constants'
 import {
   userFormSchema,
   type UserFormValues,
@@ -88,6 +94,7 @@ export function UsersMutateDrawer({
 }: UsersMutateDrawerProps) {
   const { t } = useTranslation()
   const isUpdate = !!currentRow
+  const operatorRole = useAuthStore((state) => state.auth.user?.role)
   const { triggerRefresh } = useUsers()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
@@ -126,6 +133,17 @@ export function UsersMutateDrawer({
   const tokensOnly = currencyMeta.kind === 'tokens'
 
   const currentQuotaRaw = form.watch('quota_dollars') || 0
+  const roleOptions = [
+    { value: String(USER_ROLE.USER), label: t('Common User') },
+    { value: String(USER_ROLE.SALES), label: t('Sales') },
+    ...(operatorRole === USER_ROLE.ROOT
+      ? [{ value: String(USER_ROLE.ADMIN), label: t('Admin') }]
+      : []),
+  ]
+  const canEditRole =
+    !isUpdate ||
+    currentRow?.role === USER_ROLE.USER ||
+    currentRow?.role === USER_ROLE.SALES
 
   const onSubmit = async (data: UserFormValues) => {
     if (!isUpdate) {
@@ -232,7 +250,7 @@ export function UsersMutateDrawer({
                   )}
                 />
 
-                {!isUpdate && (
+                {canEditRole && (
                   <FormField
                     control={form.control}
                     name='role'
@@ -240,10 +258,7 @@ export function UsersMutateDrawer({
                       <FormItem>
                         <FormLabel>{t('Role')}</FormLabel>
                         <Select
-                          items={[
-                            { value: '1', label: t('Common User') },
-                            { value: '10', label: t('Admin') },
-                          ]}
+                          items={roleOptions}
                           onValueChange={(value) =>
                             value !== null && field.onChange(parseInt(value))
                           }
@@ -256,10 +271,14 @@ export function UsersMutateDrawer({
                           </FormControl>
                           <SelectContent alignItemWithTrigger={false}>
                             <SelectGroup>
-                              <SelectItem value='1'>
-                                {t('Common User')}
-                              </SelectItem>
-                              <SelectItem value='10'>{t('Admin')}</SelectItem>
+                              {roleOptions.map((option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ))}
                             </SelectGroup>
                           </SelectContent>
                         </Select>

@@ -19,11 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
 import { formatLogQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getLogStats, getUserLogStats } from '../api'
+import { getLogStats, getManagedLogStats, getUserLogStats } from '../api'
 import { DEFAULT_LOG_STATS } from '../constants'
 import { buildApiParams } from '../lib/utils'
 import { useUsageLogsContext } from './usage-logs-provider'
@@ -49,11 +50,18 @@ function StatBadge(props: {
 export function CommonLogsStats() {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
+  const currentUsername = useAuthStore((state) => state.auth.user?.username)
   const searchParams = route.useSearch()
-  const { sensitiveVisible } = useUsageLogsContext()
+  const { sensitiveVisible, logSubject } = useUsageLogsContext()
 
   const { data: stats, isLoading } = useQuery({
-    queryKey: ['usage-logs-stats', isAdmin, searchParams],
+    queryKey: [
+      'usage-logs-stats',
+      isAdmin,
+      logSubject,
+      currentUsername,
+      searchParams,
+    ],
     queryFn: async () => {
       const params = buildApiParams({
         page: 1,
@@ -61,11 +69,20 @@ export function CommonLogsStats() {
         searchParams,
         columnFilters: [],
         isAdmin,
+        usernameOverride:
+          isAdmin && logSubject === 'self' ? currentUsername : undefined,
       })
 
       const result = isAdmin
         ? await getLogStats(params)
-        : await getUserLogStats(params)
+        : logSubject === 'managed' || logSubject.startsWith('customer:')
+          ? await getManagedLogStats({
+              ...params,
+              user_id: logSubject.startsWith('customer:')
+                ? Number(logSubject.slice('customer:'.length))
+                : undefined,
+            })
+          : await getUserLogStats(params)
 
       return result.success
         ? result.data || DEFAULT_LOG_STATS

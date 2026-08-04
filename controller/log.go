@@ -55,6 +55,75 @@ func GetUserLogs(c *gin.Context) {
 	return
 }
 
+func GetManagedUserLogs(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	userIds, ok := getManagedLogUserIds(c)
+	if !ok {
+		return
+	}
+	logType, _ := strconv.Atoi(c.Query("type"))
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	logs, total, err := model.GetManagedUserLogs(
+		userIds,
+		logType,
+		startTimestamp,
+		endTimestamp,
+		c.Query("model_name"),
+		c.Query("token_name"),
+		pageInfo.GetStartIdx(),
+		pageInfo.GetPageSize(),
+		c.Query("group"),
+		c.Query("request_id"),
+		c.Query("upstream_request_id"),
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(logs)
+	common.ApiSuccess(c, pageInfo)
+}
+
+func getManagedLogUserIds(c *gin.Context) ([]int, bool) {
+	managerUserId := c.GetInt("id")
+	requestedUserIdText := c.Query("user_id")
+	if requestedUserIdText != "" {
+		requestedUserId, err := strconv.Atoi(requestedUserIdText)
+		if err != nil || requestedUserId <= 0 {
+			common.ApiError(c, errInvalidManagedUserId)
+			return nil, false
+		}
+		allowed, err := model.CanAccessManagedCustomer(managerUserId, requestedUserId)
+		if err != nil {
+			common.ApiError(c, err)
+			return nil, false
+		}
+		if !allowed {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权查看该客户数据"})
+			return nil, false
+		}
+		return []int{requestedUserId}, true
+	}
+	userIds, err := model.GetManagedCustomerIds(managerUserId)
+	if err != nil {
+		common.ApiError(c, err)
+		return nil, false
+	}
+	return userIds, true
+}
+
+var errInvalidManagedUserId = &managedLogRequestError{message: "客户用户 ID 无效"}
+
+type managedLogRequestError struct {
+	message string
+}
+
+func (e *managedLogRequestError) Error() string {
+	return e.message
+}
+
 // Deprecated: SearchAllLogs 已废弃，前端未使用该接口。
 func SearchAllLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
@@ -148,6 +217,28 @@ func GetLogsSelfStat(c *gin.Context) {
 		},
 	})
 	return
+}
+
+func GetManagedLogsStat(c *gin.Context) {
+	userIds, ok := getManagedLogUserIds(c)
+	if !ok {
+		return
+	}
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	stat, err := model.SumUsedQuotaByUserIds(
+		userIds,
+		startTimestamp,
+		endTimestamp,
+		c.Query("model_name"),
+		c.Query("token_name"),
+		c.Query("group"),
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": stat})
 }
 
 func DeleteHistoryLogs(c *gin.Context) {

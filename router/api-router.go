@@ -69,6 +69,7 @@ func SetApiRouter(router *gin.Engine) {
 
 		userRoute := apiRouter.Group("/user")
 		{
+			userRoute.GET("/managed", middleware.SalesAuth(), controller.GetManagedUsers)
 			userRoute.POST("/register", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, middleware.TurnstileCheck(), controller.Register)
 			userRoute.POST("/login", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, middleware.TurnstileCheck(), controller.Login)
 			userRoute.POST("/login/2fa", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.Verify2FALogin)
@@ -148,6 +149,16 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/2fa/stats", controller.Admin2FAStats)
 				adminRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
 			}
+		}
+
+		salesRoute := apiRouter.Group("/sales")
+		salesRoute.Use(middleware.AdminAuth())
+		{
+			salesRoute.GET("/", controller.GetSalesUsers)
+			salesRoute.GET("/available-customers", controller.GetAvailableSalesCustomers)
+			salesRoute.GET("/:id/customers", controller.GetSalesCustomers)
+			salesRoute.POST("/:id/customers", controller.AssignSalesCustomers)
+			salesRoute.DELETE("/:id/customers/:customer_id", controller.RemoveSalesCustomer)
 		}
 
 		// Subscription billing (plans, purchase, admin management)
@@ -333,6 +344,8 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
+		logRoute.GET("/managed", middleware.SalesAuth(), controller.GetManagedUserLogs)
+		logRoute.GET("/managed/stat", middleware.SalesAuth(), controller.GetManagedLogsStat)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
 		dataRoute := apiRouter.Group("/data")

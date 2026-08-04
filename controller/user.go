@@ -487,6 +487,8 @@ func GetSelf(c *gin.Context) {
 // 计算用户权限的辅助函数
 func calculateUserPermissions(userRole int) map[string]interface{} {
 	permissions := map[string]interface{}{}
+	permissions["managed_user_logs"] = userRole == common.RoleSalesUser
+	permissions["all_user_logs"] = userRole >= common.RoleAdminUser
 
 	// 根据用户角色计算权限
 	if userRole == common.RoleRootUser {
@@ -625,6 +627,21 @@ func UpdateUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
 	}
+	// Older clients do not send role when editing profile fields. Preserve the
+	// current role in that case, and only allow ordinary-user <-> sales changes
+	// through this endpoint. Administrator promotion/demotion keeps using the
+	// dedicated manage actions and their stricter authorization rules.
+	if updatedUser.Role == common.RoleGuestUser {
+		updatedUser.Role = originUser.Role
+	}
+	if updatedUser.Role != originUser.Role {
+		originIsCustomerRole := originUser.Role == common.RoleCommonUser || originUser.Role == common.RoleSalesUser
+		updatedIsCustomerRole := updatedUser.Role == common.RoleCommonUser || updatedUser.Role == common.RoleSalesUser
+		if !originIsCustomerRole || !updatedIsCustomerRole {
+			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+			return
+		}
+	}
 	if !canManageTargetRole(myRole, updatedUser.Role) {
 		common.ApiErrorI18n(c, i18n.MsgUserCannotCreateHigherLevel)
 		return
@@ -638,9 +655,16 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 	recordManageAuditFor(c, updatedUser.Id, "user.update", map[string]interface{}{
-		"username": originUser.Username,
-		"id":       updatedUser.Id,
+		"username":  originUser.Username,
+		"id":        updatedUser.Id,
+		"role_from": originUser.Role,
+		"role_to":   updatedUser.Role,
 	})
+	if updatedUser.Role != originUser.Role {
+		if err := model.InvalidateUserTokensCache(updatedUser.Id); err != nil {
+			common.SysLog(fmt.Sprintf("failed to invalidate tokens cache for user %d: %s", updatedUser.Id, err.Error()))
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -889,6 +913,13 @@ func CreateUser(c *gin.Context) {
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
+	if user.Role == common.RoleGuestUser {
+		user.Role = common.RoleCommonUser
+	}
+	if user.Role != common.RoleCommonUser && user.Role != common.RoleSalesUser && user.Role != common.RoleAdminUser {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
 	myRole := c.GetInt("role")
 	if user.Role >= myRole {
 		common.ApiErrorI18n(c, i18n.MsgUserCannotCreateHigherLevel)
@@ -947,6 +978,7 @@ func ManageUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
 	}
+	roleChanged := false
 	switch req.Action {
 	case "disable":
 		user.Status = common.UserStatusDisabled
@@ -983,6 +1015,7 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = common.RoleAdminUser
+		roleChanged = true
 	case "demote":
 		if user.Role == common.RoleRootUser {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDemoteRootUser)
@@ -993,6 +1026,7 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = common.RoleCommonUser
+		roleChanged = true
 	case "add_quota":
 		switch req.Mode {
 		case "add":
@@ -1040,9 +1074,16 @@ func ManageUser(c *gin.Context) {
 		return
 	}
 
-	if err := user.Update(false); err != nil {
-		common.ApiError(c, err)
-		return
+	if roleChanged {
+		if err := user.UpdateRole(user.Role); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else {
+		if err := user.Update(false); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	// 禁用 / 角色调整后，强制失效用户缓存与其全部令牌缓存，
 	// 避免在 Redis TTL 过期前仍使用旧状态（尤其是禁用后仍可发起请求的问题）。

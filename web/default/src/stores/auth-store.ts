@@ -21,6 +21,8 @@ import { create } from 'zustand'
 export type UserPermissions = {
   sidebar_settings?: boolean
   sidebar_modules?: Record<string, unknown>
+  managed_user_logs?: boolean
+  all_user_logs?: boolean
 }
 
 export interface AuthUser {

@@ -22,10 +22,16 @@ import { ROLE } from '@/lib/roles'
 import { SystemSettings } from '@/features/system-settings'
 
 export const Route = createFileRoute('/_authenticated/system-settings')({
-  beforeLoad: () => {
+  beforeLoad: ({ location }) => {
     const { auth } = useAuthStore.getState()
+    const isSalesManagement =
+      location.pathname === '/system-settings/permissions/sales'
 
-    if (auth.user?.role !== ROLE.SUPER_ADMIN) {
+    if (
+      auth.user?.role === undefined ||
+      auth.user.role < ROLE.ADMIN ||
+      (auth.user.role < ROLE.SUPER_ADMIN && !isSalesManagement)
+    ) {
       throw redirect({
         to: '/403',
       })

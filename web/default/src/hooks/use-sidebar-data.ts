@@ -37,6 +37,8 @@ import {
   Wallet,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 import { type SidebarData } from '@/components/layout/types'
 
 /**
@@ -47,6 +49,7 @@ import { type SidebarData } from '@/components/layout/types'
  */
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
+  const userRole = useAuthStore((state) => state.auth.user?.role)
 
   return {
     navGroups: [
@@ -161,7 +164,10 @@ export function useSidebarData(): SidebarData {
           },
           {
             title: t('System Settings'),
-            url: '/system-settings/site',
+            url:
+              userRole === ROLE.ADMIN
+                ? '/system-settings/permissions/sales'
+                : '/system-settings/site',
             activeUrls: ['/system-settings'],
             icon: Settings,
           },

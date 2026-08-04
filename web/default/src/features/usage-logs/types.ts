@@ -21,6 +21,12 @@ For commercial licensing, please contact support@quantumnous.com
  */
 import type { UsageLog } from './data/schema'
 
+export interface ApiResponse<T> {
+  success: boolean
+  message?: string
+  data?: T
+}
+
 // ============================================================================
 // Log Category Types
 // ============================================================================
@@ -29,6 +35,14 @@ import type { UsageLog } from './data/schema'
  * Log category for different log types
  */
 export type LogCategory = 'common' | 'drawing' | 'task'
+export type LogSubject = 'self' | 'all' | 'managed' | `customer:${number}`
+
+export interface ManagedLogUser {
+  id: number
+  username: string
+  display_name?: string
+  status: number
+}
 
 // ============================================================================
 // Filter Types
@@ -299,6 +313,7 @@ export interface GetLogsParams {
   group?: string
   request_id?: string
   upstream_request_id?: string
+  user_id?: number
 }
 
 export interface GetLogsResponse {
@@ -323,6 +338,7 @@ export interface GetLogStatsParams {
   group?: string
   request_id?: string
   upstream_request_id?: string
+  user_id?: number
 }
 
 export interface GetLogStatsResponse {
@@ -371,6 +387,8 @@ export interface FetchLogsConfig {
   pageSize: number
   searchParams: Record<string, unknown>
   columnFilters: Array<{ id: string; value: unknown }>
+  logSubject: LogSubject
+  currentUsername?: string
 }
 
 // ============================================================================

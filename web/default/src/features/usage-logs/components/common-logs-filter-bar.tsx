@@ -17,11 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useQueryClient, useIsFetching } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { type Table } from '@tanstack/react-table'
 import { Eye, EyeOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,6 +39,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { getManagedLogUsers } from '../api'
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
@@ -71,7 +74,15 @@ export function CommonLogsFilterBar<TData>(
   const queryClient = useQueryClient()
   const searchParams = route.useSearch()
   const isAdmin = useIsAdmin()
-  const { sensitiveVisible, setSensitiveVisible } = useUsageLogsContext()
+  const userRole = useAuthStore((state) => state.auth.user?.role)
+  const isSales = userRole === ROLE.SALES
+  const { sensitiveVisible, setSensitiveVisible, logSubject, setLogSubject } =
+    useUsageLogsContext()
+  const managedUsersQuery = useQuery({
+    queryKey: ['managed-log-users'],
+    queryFn: getManagedLogUsers,
+    enabled: isSales,
+  })
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
 
   const [filters, setFilters] = useState<CommonLogFilters>(() => {
@@ -195,6 +206,53 @@ export function CommonLogsFilterBar<TData>(
   )
   const logTypeLabel =
     logTypeItems.find((type) => type.value === logType)?.label ?? t('All Types')
+  const managedUsers = managedUsersQuery.data?.data ?? []
+  const subjectItems = isAdmin
+    ? [
+        { value: 'all', label: t('All users') },
+        { value: 'self', label: t('My logs') },
+      ]
+    : [
+        { value: 'self', label: t('My logs') },
+        { value: 'managed', label: t('All assigned customers') },
+        ...managedUsers.map((user) => ({
+          value: `customer:${user.id}`,
+          label: user.display_name
+            ? `${user.username} (${user.display_name})`
+            : user.username,
+        })),
+      ]
+  const subjectLabel =
+    subjectItems.find((item) => item.value === logSubject)?.label ??
+    t('View subject')
+  const subjectFilter = (isAdmin || isSales) && (
+    <LogsFilterField>
+      <Select
+        items={subjectItems}
+        value={logSubject}
+        onValueChange={(value) => {
+          if (value === null) return
+          setLogSubject(value as typeof logSubject)
+          props.table.setPageIndex(0)
+          queryClient.invalidateQueries({ queryKey: ['logs'] })
+          queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+        }}
+      >
+        <SelectTrigger aria-label={t('View subject')}>
+          <SelectValue>{subjectLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {subjectItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </LogsFilterField>
+  )
 
   const statsBar = (
     <div className='flex flex-wrap items-center gap-2'>
@@ -336,6 +394,7 @@ export function CommonLogsFilterBar<TData>(
       stats={statsBar}
       primaryFilters={
         <>
+          {subjectFilter}
           {dateRangeFilter}
           {modelFilter}
           {groupFilter}
@@ -343,7 +402,12 @@ export function CommonLogsFilterBar<TData>(
         </>
       }
       advancedFilters={advancedFilters}
-      mobilePinnedFilters={dateRangeFilter}
+      mobilePinnedFilters={
+        <>
+          {subjectFilter}
+          {dateRangeFilter}
+        </>
+      }
       mobileFilters={
         <>
           {modelFilter}

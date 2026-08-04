@@ -27,6 +27,7 @@ import {
   ShieldAlert,
   Wrench,
 } from 'lucide-react'
+import { ROLE } from '@/lib/roles'
 import { getAuthSectionNavItems } from '@/features/system-settings/auth/section-registry.tsx'
 import { getBillingSectionNavItems } from '@/features/system-settings/billing/section-registry.tsx'
 import { getContentSectionNavItems } from '@/features/system-settings/content/section-registry.tsx'
@@ -43,8 +44,11 @@ import type { NavGroup, SidebarView } from '../types'
  * header already provides top-level context — the inner group label
  * scopes the items as "administration" actions.
  */
-function getSystemSettingsNavGroups(t: TFunction): NavGroup[] {
-  return [
+function getSystemSettingsNavGroups(
+  t: TFunction,
+  userRole?: number
+): NavGroup[] {
+  const groups: NavGroup[] = [
     {
       id: 'system-administration',
       title: t('System Administration'),
@@ -92,11 +96,37 @@ function getSystemSettingsNavGroups(t: TFunction): NavGroup[] {
               title: t('Monitoring Management'),
               url: '/system-settings/permissions/monitoring',
             },
+            {
+              title: t('Sales Management'),
+              url: '/system-settings/permissions/sales',
+            },
           ],
         },
       ],
     },
   ]
+
+  if (userRole !== undefined && userRole < ROLE.SUPER_ADMIN) {
+    return [
+      {
+        ...groups[0],
+        items: [
+          {
+            title: t('Permission Management'),
+            icon: KeyRound,
+            items: [
+              {
+                title: t('Sales Management'),
+                url: '/system-settings/permissions/sales',
+              },
+            ],
+          },
+        ],
+      },
+    ]
+  }
+
+  return groups
 }
 
 /**

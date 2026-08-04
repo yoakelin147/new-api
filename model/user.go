@@ -328,8 +328,12 @@ func HardDeleteUserById(id int) error {
 	if id == 0 {
 		return errors.New("id 为空！")
 	}
-	err := DB.Unscoped().Delete(&User{}, "id = ?", id).Error
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := DeleteManagedUserRelations(tx, id); err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(&User{}, "id = ?", id).Error
+	})
 }
 
 func inviteUser(inviterId int) (err error) {
@@ -513,6 +517,22 @@ func (user *User) Update(updatePassword bool) error {
 	return updateUserCache(*user)
 }
 
+// UpdateRole changes a user's role and removes any sales/customer assignment
+// involving that user in the same transaction.
+func (user *User) UpdateRole(role int) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := DeleteManagedUserRelations(tx, user.Id); err != nil {
+			return err
+		}
+		return tx.Model(&User{}).Where("id = ?", user.Id).Update("role", role).Error
+	})
+	if err != nil {
+		return err
+	}
+	user.Role = role
+	return updateUserCache(*user)
+}
+
 func (user *User) Edit(updatePassword bool) error {
 	var err error
 	if updatePassword {
@@ -523,23 +543,41 @@ func (user *User) Edit(updatePassword bool) error {
 	}
 
 	newUser := *user
-	updates := map[string]interface{}{
-		"username":     newUser.Username,
-		"display_name": newUser.DisplayName,
-		"group":        newUser.Group,
-		"remark":       newUser.Remark,
-	}
-	if updatePassword {
-		updates["password"] = newUser.Password
-	}
+	var savedUser User
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		var currentUser User
+		if err := tx.First(&currentUser, newUser.Id).Error; err != nil {
+			return err
+		}
 
-	DB.First(&user, user.Id)
-	if err = DB.Model(user).Updates(updates).Error; err != nil {
+		updates := map[string]interface{}{
+			"username":     newUser.Username,
+			"display_name": newUser.DisplayName,
+			"group":        newUser.Group,
+			"remark":       newUser.Remark,
+			"role":         newUser.Role,
+		}
+		if updatePassword {
+			updates["password"] = newUser.Password
+		}
+
+		if currentUser.Role != newUser.Role {
+			if err := DeleteManagedUserRelations(tx, newUser.Id); err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&currentUser).Updates(updates).Error; err != nil {
+			return err
+		}
+		return tx.First(&savedUser, newUser.Id).Error
+	})
+	if err != nil {
 		return err
 	}
 
 	// Update cache
-	return updateUserCache(*user)
+	*user = savedUser
+	return updateUserCache(savedUser)
 }
 
 func (user *User) ClearBinding(bindingType string) error {
@@ -577,7 +615,12 @@ func (user *User) Delete() error {
 	if user.Id == 0 {
 		return errors.New("id 为空！")
 	}
-	if err := DB.Delete(user).Error; err != nil {
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := DeleteManagedUserRelations(tx, user.Id); err != nil {
+			return err
+		}
+		return tx.Delete(user).Error
+	}); err != nil {
 		return err
 	}
 

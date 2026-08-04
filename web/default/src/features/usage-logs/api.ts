@@ -26,6 +26,8 @@ import type {
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
   UserInfo,
+  ManagedLogUser,
+  ApiResponse,
 } from './types'
 
 // ============================================================================
@@ -82,6 +84,19 @@ export const getLogStats = (params: GetLogStatsParams = {}) =>
 export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
 ) => fetchLogStats('/api/log', params, false)
+
+export const getManagedLogs = (params: GetLogsParams = {}) =>
+  fetchLogs('/api/log/managed', params, true)
+
+export const getManagedLogStats = (params: GetLogStatsParams = {}) =>
+  fetchLogStats('/api/log/managed', params, true)
+
+export async function getManagedLogUsers(): Promise<
+  ApiResponse<ManagedLogUser[]>
+> {
+  const res = await api.get('/api/user/managed')
+  return res.data
+}
 
 export async function getUserInfo(
   userId: number
