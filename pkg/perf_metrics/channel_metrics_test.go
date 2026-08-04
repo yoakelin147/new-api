@@ -7,9 +7,39 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 )
+
+func TestShouldRecordChannelFailure(t *testing.T) {
+	tests := []struct {
+		name            string
+		statusCode      int
+		errorCode       types.ErrorCode
+		requestCanceled bool
+		want            bool
+	}{
+		{name: "bad request", statusCode: 400, errorCode: types.ErrorCodeBadResponseStatusCode},
+		{name: "unprocessable entity", statusCode: 422, errorCode: types.ErrorCodeBadResponseStatusCode},
+		{name: "unauthorized upstream", statusCode: 401, errorCode: types.ErrorCodeBadResponseStatusCode, want: true},
+		{name: "forbidden upstream", statusCode: 403, errorCode: types.ErrorCodeBadResponseStatusCode, want: true},
+		{name: "model not found", statusCode: 404, errorCode: types.ErrorCodeModelNotFound, want: true},
+		{name: "upstream timeout", statusCode: 408, errorCode: types.ErrorCodeChannelUpstreamTimeout, want: true},
+		{name: "rate limited", statusCode: 429, errorCode: types.ErrorCodeBadResponseStatusCode},
+		{name: "upstream server error", statusCode: 500, errorCode: types.ErrorCodeBadResponseStatusCode, want: true},
+		{name: "network error", statusCode: 500, errorCode: types.ErrorCodeDoRequestFailed, want: true},
+		{name: "request conversion error", statusCode: 500, errorCode: types.ErrorCodeConvertRequestFailed},
+		{name: "request body error", statusCode: 500, errorCode: types.ErrorCodeBadRequestBody},
+		{name: "client disconnected", statusCode: 500, errorCode: types.ErrorCodeDoRequestFailed, requestCanceled: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, ShouldRecordChannelFailure(test.statusCode, test.errorCode, test.requestCanceled))
+		})
+	}
+}
 
 func TestBuildChannelSummaryResultRanksByHiddenRequestCount(t *testing.T) {
 	totals := map[channelModelKey]counters{

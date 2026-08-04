@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/perf_metrics_setting"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -38,6 +39,31 @@ func RecordChannelFailure(modelName string, channelId int, latencyMs int64) {
 		ChannelId: channelId,
 		LatencyMs: latencyMs,
 	})
+}
+
+// ShouldRecordChannelFailure reports whether a failed relay attempt reflects
+// model-channel availability. Client request errors and rate limiting are
+// excluded so they do not lower the Zabbix channel health success rate.
+func ShouldRecordChannelFailure(statusCode int, errorCode types.ErrorCode, requestCanceled bool) bool {
+	if requestCanceled {
+		return false
+	}
+
+	switch errorCode {
+	case types.ErrorCodeReadRequestBodyFailed,
+		types.ErrorCodeConvertRequestFailed,
+		types.ErrorCodeBadRequestBody:
+		return false
+	}
+
+	switch statusCode {
+	case 401, 403, 404, 408:
+		return true
+	case 429:
+		return false
+	default:
+		return statusCode >= 500
+	}
 }
 
 // RecordChannel records model-channel metrics in Redis. Callers invoke this

@@ -332,13 +332,28 @@ export function HealthStatistics() {
 
         <section className='flex flex-col gap-4'>
           <div className='flex flex-wrap items-center justify-between gap-2'>
-            <h2 className='text-lg font-semibold tracking-tight'>
-              {t('Model health')}
-            </h2>
+            <div className='flex flex-wrap items-center gap-2'>
+              <h2 className='text-lg font-semibold tracking-tight'>
+                {t('Model health')}
+              </h2>
+              <Badge variant='secondary'>
+                {t('All enabled groups combined')}
+              </Badge>
+            </div>
             <Badge variant='outline'>
               {t('{{count}} hours', { count: modelHours })}
             </Badge>
           </div>
+
+          <Alert>
+            <Activity />
+            <AlertTitle>{t('Model and group statistics scope')}</AlertTitle>
+            <AlertDescription>
+              {t(
+                'Each model row combines calls from all enabled groups, including the auto group. Select a model in the charts to view its metrics by group.'
+              )}
+            </AlertDescription>
+          </Alert>
 
           <ModelOverviewCards
             loading={modelQuery.isLoading}
@@ -354,18 +369,21 @@ export function HealthStatistics() {
               loading={modelQuery.isLoading}
               suffix='%'
               max={100}
+              onSelect={setSelectedModel}
             />
             <HealthBarChart
               title={t('Highest model latency')}
               data={latencyRanking}
               loading={modelQuery.isLoading}
               suffix='ms'
+              onSelect={setSelectedModel}
             />
             <HealthBarChart
               title={t('Highest model TPS')}
               data={tpsRanking}
               loading={modelQuery.isLoading}
               suffix=''
+              onSelect={setSelectedModel}
             />
           </div>
         </section>

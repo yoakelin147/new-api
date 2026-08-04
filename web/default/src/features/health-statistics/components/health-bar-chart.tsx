@@ -53,6 +53,7 @@ type HealthBarChartProps = {
   loading: boolean
   suffix: string
   max?: number
+  onSelect?: (name: string) => void
 }
 
 function formatChartValue(value: number, suffix: string) {
@@ -86,6 +87,7 @@ export function HealthBarChart(props: HealthBarChartProps) {
         style: {
           fill: (datum: HealthChartRow & { color: string }) => datum.color,
           cornerRadius: 4,
+          cursor: props.onSelect ? 'pointer' : 'default',
         },
       },
       label: {
@@ -127,7 +129,7 @@ export function HealthBarChart(props: HealthBarChartProps) {
       background: 'transparent',
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
     }),
-    [chartData, props.max, props.suffix, resolvedTheme]
+    [chartData, props.max, props.onSelect, props.suffix, resolvedTheme]
   )
 
   return (
@@ -147,7 +149,17 @@ export function HealthBarChart(props: HealthBarChartProps) {
         ) : (
           <div className='h-72'>
             {themeReady && (
-              <VChart spec={spec} option={VCHART_OPTION} key={resolvedTheme} />
+              <VChart
+                spec={spec}
+                option={VCHART_OPTION}
+                key={resolvedTheme}
+                onClick={(event: { datum?: { name?: unknown } }) => {
+                  const name = event.datum?.name
+                  if (props.onSelect && typeof name === 'string') {
+                    props.onSelect(name)
+                  }
+                }}
+              />
             )}
           </div>
         )}
