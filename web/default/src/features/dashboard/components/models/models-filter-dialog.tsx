@@ -17,9 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Filter, RotateCcw, Calendar, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -36,6 +38,7 @@ import {
 } from '@/components/ui/select'
 import { DateTimePicker } from '@/components/datetime-picker'
 import { Dialog } from '@/components/dialog'
+import { SearchableSubjectSelect } from '@/components/searchable-subject-select'
 import {
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
@@ -48,9 +51,11 @@ import type {
   DashboardChartPreferences,
   DashboardFilters,
 } from '@/features/dashboard/types'
+import { getManagedLogUsers } from '@/features/usage-logs/api'
 
 interface ModelsFilterProps {
   preferences: DashboardChartPreferences
+  appliedFilters: DashboardFilters
   onFilterChange: (filters: DashboardFilters) => void
   onReset: () => void
 }
@@ -73,7 +78,13 @@ export function ModelsFilter(props: ModelsFilterProps) {
   const { t } = useTranslation()
   // 使用已缓存的用户数据，避免重复调用 API
   const user = useAuthStore((state) => state.auth.user)
-  const isAdmin = user?.role && user.role >= 10
+  const isAdmin = Boolean(user?.role && user.role >= ROLE.ADMIN)
+  const isSales = user?.role === ROLE.SALES
+  const managedUsersQuery = useQuery({
+    queryKey: ['managed-log-users'],
+    queryFn: getManagedLogUsers,
+    enabled: isSales,
+  })
 
   const [open, setOpen] = useState(false)
   const [filters, setFilters] = useState<DashboardFilters>(() =>
@@ -84,7 +95,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
   )
 
   const resetFiltersFromPreferences = () => {
-    setFilters(buildDefaultDashboardFilters(props.preferences))
+    setFilters(props.appliedFilters)
     setSelectedRange(props.preferences.defaultTimeRangeDays)
   }
 
@@ -135,6 +146,21 @@ export function ModelsFilter(props: ModelsFilterProps) {
     setSelectedRange(days)
   }
 
+  const managedUsers = managedUsersQuery.data?.data ?? []
+  const customerOptions = [
+    { value: 'managed', label: t('All assigned customers') },
+    ...managedUsers.map((managedUser) => ({
+      value: `customer:${managedUser.id}`,
+      label: managedUser.display_name
+        ? `${managedUser.username} (${managedUser.display_name})`
+        : managedUser.username,
+      keywords: `${managedUser.username} ${managedUser.display_name ?? ''} ${managedUser.id}`,
+    })),
+  ]
+  const selectedCustomer = filters.user_id
+    ? `customer:${filters.user_id}`
+    : 'managed'
+
   return (
     <Dialog
       open={open}
@@ -146,7 +172,13 @@ export function ModelsFilter(props: ModelsFilterProps) {
         </Button>
       }
       title={t('Model Analytics Filters')}
-      description={t('Filter the model analytics view by time range and user.')}
+      description={
+        isSales
+          ? t(
+              'Filter model analytics by time range and assigned customer. All assigned customers are included by default.'
+            )
+          : t('Filter the model analytics view by time range and user.')
+      }
       contentClassName='max-sm:h-dvh max-sm:w-screen max-sm:max-w-none max-sm:rounded-none max-sm:p-4 sm:max-w-lg'
       contentHeight='min(48vh, 460px)'
       footerClassName='grid grid-cols-2 gap-2 sm:flex'
@@ -261,6 +293,30 @@ export function ModelsFilter(props: ModelsFilterProps) {
                   placeholder={t('Filter by username')}
                   value={filters.username}
                   onChange={(e) => handleChange('username', e.target.value)}
+                />
+              </div>
+            </>
+          )}
+
+          {isSales && (
+            <>
+              <SectionDivider label={t('Customer Scope')} />
+
+              <div className='grid gap-2'>
+                <Label>{t('Assigned customer')}</Label>
+                <SearchableSubjectSelect
+                  value={selectedCustomer}
+                  options={customerOptions}
+                  onValueChange={(value) =>
+                    setFilters((current) => ({
+                      ...current,
+                      user_id: value.startsWith('customer:')
+                        ? Number(value.slice('customer:'.length))
+                        : undefined,
+                    }))
+                  }
+                  ariaLabel={t('Select assigned customer')}
+                  className='w-full justify-between font-normal'
                 />
               </div>
             </>

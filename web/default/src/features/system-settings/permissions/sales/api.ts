@@ -19,11 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import type { ApiResponse, ManagedCustomer, PageData, SalesUser } from './types'
 
-export async function getSalesUsers(keyword = '') {
+export async function getSalesUsers(keyword = '', page = 1, pageSize = 10) {
   const params = new URLSearchParams({
     keyword,
-    p: '1',
-    page_size: '100',
+    p: String(page),
+    page_size: String(pageSize),
   })
   const response = await api.get<ApiResponse<PageData<SalesUser>>>(
     `/api/sales/?${params}`
@@ -31,18 +31,30 @@ export async function getSalesUsers(keyword = '') {
   return response.data
 }
 
-export async function getSalesCustomers(salesUserId: number) {
-  const response = await api.get<ApiResponse<ManagedCustomer[]>>(
-    `/api/sales/${salesUserId}/customers`
+export async function getSalesCustomers(
+  salesUserId: number,
+  page = 1,
+  pageSize = 5
+) {
+  const params = new URLSearchParams({
+    p: String(page),
+    page_size: String(pageSize),
+  })
+  const response = await api.get<ApiResponse<PageData<ManagedCustomer>>>(
+    `/api/sales/${salesUserId}/customers?${params}`
   )
   return response.data
 }
 
-export async function getAvailableSalesCustomers(keyword = '') {
+export async function getAvailableSalesCustomers(
+  keyword = '',
+  page = 1,
+  pageSize = 5
+) {
   const params = new URLSearchParams({
     keyword,
-    p: '1',
-    page_size: '100',
+    p: String(page),
+    page_size: String(pageSize),
   })
   const response = await api.get<ApiResponse<PageData<ManagedCustomer>>>(
     `/api/sales/available-customers?${params}`
@@ -67,6 +79,17 @@ export async function removeSalesCustomer(
 ) {
   const response = await api.delete<ApiResponse>(
     `/api/sales/${salesUserId}/customers/${customerUserId}`
+  )
+  return response.data
+}
+
+export async function removeSalesCustomers(
+  salesUserId: number,
+  customerUserIds: number[]
+) {
+  const response = await api.post<ApiResponse>(
+    `/api/sales/${salesUserId}/customers/remove`,
+    { customer_user_ids: customerUserIds }
   )
   return response.data
 }

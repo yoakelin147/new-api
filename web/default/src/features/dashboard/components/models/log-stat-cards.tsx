@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { formatNumber, formatQuota, formatTokens } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
 import { computeTimeRange } from '@/lib/time'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserQuotaDates } from '@/features/dashboard/api'
@@ -41,7 +42,12 @@ interface LogStatCardsProps {
 export function LogStatCards(props: LogStatCardsProps) {
   const statCardsConfig = useModelStatCardsConfig()
   const user = useAuthStore((state) => state.auth.user)
-  const isAdmin = !!(user?.role && user.role >= 10)
+  const dataScope =
+    user?.role && user.role >= ROLE.ADMIN
+      ? 'admin'
+      : user?.role === ROLE.SALES
+        ? 'managed'
+        : 'self'
   const [stats, setStats] = useState<{
     totalQuota: number
     totalCount: number
@@ -70,7 +76,7 @@ export function LogStatCards(props: LogStatCardsProps) {
     const timeDiff = (timeRange.end_timestamp - timeRange.start_timestamp) / 60
     setTimeRangeMinutes(timeDiff)
 
-    getUserQuotaDates(buildQueryParams(timeRange, filters), isAdmin)
+    getUserQuotaDates(buildQueryParams(timeRange, filters), dataScope)
       .then((res) => {
         if (abortController.signal.aborted) return
         const data = res?.data || []
@@ -92,7 +98,7 @@ export function LogStatCards(props: LogStatCardsProps) {
     return () => {
       abortController.abort()
     }
-  }, [filters, isAdmin, onDataUpdate])
+  }, [dataScope, filters, onDataUpdate])
 
   const adaptedStats = {
     rpm: stats?.totalCount ?? 0,

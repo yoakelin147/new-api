@@ -18,17 +18,26 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 import { buildQueryParams } from '@/features/usage-logs/lib/utils'
-import type { CostStatisticsFilters, CostStatisticsResponse } from './types'
+import type {
+  CostStatisticsFilters,
+  CostStatisticsResponse,
+  CostStatisticsSubject,
+} from './types'
 
 export async function getCostStatistics(params: {
   isAdmin: boolean
   page: number
   pageSize: number
   filters: CostStatisticsFilters
+  subject?: CostStatisticsSubject
 }): Promise<CostStatisticsResponse> {
+  const isManaged =
+    !params.isAdmin && params.subject !== undefined && params.subject !== 'self'
   const endpoint = params.isAdmin
     ? '/api/cost_statistics/'
-    : '/api/cost_statistics/self'
+    : isManaged
+      ? '/api/cost_statistics/managed'
+      : '/api/cost_statistics/self'
   const query = buildQueryParams({
     p: params.page,
     page_size: params.pageSize,
@@ -47,6 +56,10 @@ export async function getCostStatistics(params: {
     group: params.filters.group?.trim(),
     username: params.isAdmin ? params.filters.username?.trim() : undefined,
     channel: params.isAdmin ? params.filters.channel?.trim() : undefined,
+    user_id:
+      params.subject?.startsWith('customer:') === true
+        ? Number(params.subject.slice('customer:'.length))
+        : undefined,
   })
   const res = await api.get(`${endpoint}?${query}`)
   return res.data

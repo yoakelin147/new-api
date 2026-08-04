@@ -257,3 +257,29 @@ func GetUserQuotaDates(c *gin.Context) {
 	})
 	return
 }
+
+func GetManagedQuotaDates(c *gin.Context) {
+	userIds, ok := getManagedLogUserIds(c)
+	if !ok {
+		return
+	}
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if endTimestamp-startTimestamp > maxDashboardChannelStatsRangeSeconds {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "时间跨度不能超过 1 个月",
+		})
+		return
+	}
+	dates, err := model.GetQuotaDataByUserIds(userIds, startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    dates,
+	})
+}

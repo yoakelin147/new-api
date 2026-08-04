@@ -144,6 +144,20 @@ func GetQuotaDataByUserId(userId int, startTime int64, endTime int64) (quotaData
 	return quotaDatas, err
 }
 
+func GetQuotaDataByUserIds(userIds []int, startTime int64, endTime int64) ([]*QuotaData, error) {
+	if len(userIds) == 0 {
+		return []*QuotaData{}, nil
+	}
+
+	var quotaDatas []*QuotaData
+	err := DB.Table("quota_data").
+		Select("model_name, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, created_at").
+		Where("user_id IN ? AND created_at >= ? AND created_at <= ?", userIds, startTime, endTime).
+		Group("model_name, created_at").
+		Find(&quotaDatas).Error
+	return quotaDatas, err
+}
+
 func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
 	err = DB.Table("quota_data").

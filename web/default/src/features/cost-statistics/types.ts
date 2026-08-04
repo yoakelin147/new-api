@@ -19,11 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 
 export type CostStatisticsPeriod =
   | 'today'
+  | 'yesterday'
   | 'week'
   | 'month'
   | 'last_month'
   | 'custom'
 export type CostStatisticsType = 'all' | 'consume' | 'refund'
+export type CostStatisticsSubject = 'self' | 'managed' | `customer:${number}`
 
 export interface CostStatisticsFilters {
   period: CostStatisticsPeriod

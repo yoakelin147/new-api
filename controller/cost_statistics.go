@@ -15,6 +15,7 @@ import (
 
 const (
 	costStatisticsPeriodToday     = "today"
+	costStatisticsPeriodYesterday = "yesterday"
 	costStatisticsPeriodWeek      = "week"
 	costStatisticsPeriodMonth     = "month"
 	costStatisticsPeriodLastMonth = "last_month"
@@ -29,7 +30,26 @@ func GetSelfCostStatistics(c *gin.Context) {
 	handleCostStatistics(c, false)
 }
 
+func GetManagedCostStatistics(c *gin.Context) {
+	userIds, ok := getManagedLogUserIds(c)
+	if !ok {
+		return
+	}
+	if userIds == nil {
+		userIds = []int{}
+	}
+	handleCostStatisticsForUsers(c, userIds)
+}
+
 func handleCostStatistics(c *gin.Context, isAdmin bool) {
+	handleCostStatisticsWithQuery(c, isAdmin, nil)
+}
+
+func handleCostStatisticsForUsers(c *gin.Context, userIds []int) {
+	handleCostStatisticsWithQuery(c, false, userIds)
+}
+
+func handleCostStatisticsWithQuery(c *gin.Context, isAdmin bool, userIds []int) {
 	pageInfo := common.GetPageQuery(c)
 	startTimestamp, endTimestamp, period, err := resolveCostStatisticsPeriod(
 		c.Query("period"),
@@ -51,6 +71,7 @@ func handleCostStatistics(c *gin.Context, isAdmin bool) {
 
 	query := model.CostStatisticsQuery{
 		UserId:         c.GetInt("id"),
+		UserIds:        userIds,
 		IsAdmin:        isAdmin,
 		LogType:        logType,
 		StartTimestamp: startTimestamp,
@@ -103,6 +124,10 @@ func resolveCostStatisticsPeriod(raw string, isAdmin bool, rawStart string, rawE
 	var start time.Time
 	var end time.Time
 	switch period {
+	case costStatisticsPeriodYesterday:
+		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		start = todayStart.AddDate(0, 0, -1)
+		end = todayStart.Add(-time.Second)
 	case costStatisticsPeriodWeek:
 		offset := (int(now.Weekday()) + 6) % 7
 		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -offset)

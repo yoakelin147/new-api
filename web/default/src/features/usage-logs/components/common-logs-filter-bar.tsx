@@ -39,6 +39,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { SearchableSubjectSelect } from '@/components/searchable-subject-select'
 import { getManagedLogUsers } from '../api'
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
 import { buildSearchParams } from '../lib/filter'
@@ -220,37 +221,50 @@ export function CommonLogsFilterBar<TData>(
           label: user.display_name
             ? `${user.username} (${user.display_name})`
             : user.username,
+          keywords: `${user.username} ${user.display_name ?? ''} ${user.id}`,
         })),
       ]
   const subjectLabel =
     subjectItems.find((item) => item.value === logSubject)?.label ??
     t('View subject')
+  const handleSubjectChange = (value: string) => {
+    setLogSubject(value as typeof logSubject)
+    props.table.setPageIndex(0)
+    queryClient.invalidateQueries({ queryKey: ['logs'] })
+    queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+  }
   const subjectFilter = (isAdmin || isSales) && (
     <LogsFilterField>
-      <Select
-        items={subjectItems}
-        value={logSubject}
-        onValueChange={(value) => {
-          if (value === null) return
-          setLogSubject(value as typeof logSubject)
-          props.table.setPageIndex(0)
-          queryClient.invalidateQueries({ queryKey: ['logs'] })
-          queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-        }}
-      >
-        <SelectTrigger aria-label={t('View subject')}>
-          <SelectValue>{subjectLabel}</SelectValue>
-        </SelectTrigger>
-        <SelectContent alignItemWithTrigger={false}>
-          <SelectGroup>
-            {subjectItems.map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+      {isSales ? (
+        <SearchableSubjectSelect
+          value={logSubject}
+          options={subjectItems}
+          onValueChange={handleSubjectChange}
+          ariaLabel={t('View subject')}
+          className='h-9 w-full justify-between px-3 font-normal'
+        />
+      ) : (
+        <Select
+          items={subjectItems}
+          value={logSubject}
+          onValueChange={(value) =>
+            value !== null && handleSubjectChange(value)
+          }
+        >
+          <SelectTrigger aria-label={t('View subject')}>
+            <SelectValue>{subjectLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {subjectItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      )}
     </LogsFilterField>
   )
 

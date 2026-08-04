@@ -65,15 +65,36 @@ func ListSalesUsers(keyword string, startIdx int, num int) ([]SalesUserSummary, 
 
 func ListManagedCustomers(managerUserId int) ([]ManagedCustomerSummary, error) {
 	var customers []ManagedCustomerSummary
-	err := DB.Table("users").
+	err := managedCustomersQuery(managerUserId).
 		Select("users.id, users.username, users.display_name, users.status").
-		Joins("JOIN managed_user_relations ON managed_user_relations.customer_user_id = users.id").
-		Where("managed_user_relations.manager_user_id = ?", managerUserId).
-		Where("users.deleted_at IS NULL").
-		Where("users.role = ?", common.RoleCommonUser).
 		Order("users.id DESC").
 		Scan(&customers).Error
 	return customers, err
+}
+
+func ListManagedCustomersPage(managerUserId int, startIdx int, num int) ([]ManagedCustomerSummary, int64, error) {
+	baseQuery := managedCustomersQuery(managerUserId)
+	var total int64
+	if err := baseQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var customers []ManagedCustomerSummary
+	err := baseQuery.
+		Select("users.id, users.username, users.display_name, users.status").
+		Order("users.id DESC").
+		Limit(num).
+		Offset(startIdx).
+		Scan(&customers).Error
+	return customers, total, err
+}
+
+func managedCustomersQuery(managerUserId int) *gorm.DB {
+	return DB.Table("users").
+		Joins("JOIN managed_user_relations ON managed_user_relations.customer_user_id = users.id").
+		Where("managed_user_relations.manager_user_id = ?", managerUserId).
+		Where("users.deleted_at IS NULL").
+		Where("users.role = ?", common.RoleCommonUser)
 }
 
 func SearchAvailableManagedCustomers(keyword string, startIdx int, num int) ([]ManagedCustomerSummary, int64, error) {
@@ -146,15 +167,36 @@ func AssignManagedCustomers(managerUserId int, customerUserIds []int, createdBy 
 }
 
 func RemoveManagedCustomer(managerUserId int, customerUserId int) error {
-	result := DB.Where("manager_user_id = ? AND customer_user_id = ?", managerUserId, customerUserId).
-		Delete(&ManagedUserRelation{})
-	if result.Error != nil {
-		return result.Error
+	return RemoveManagedCustomers(managerUserId, []int{customerUserId})
+}
+
+func RemoveManagedCustomers(managerUserId int, customerUserIds []int) error {
+	if len(customerUserIds) == 0 {
+		return errors.New("请选择至少一个客户")
 	}
-	if result.RowsAffected == 0 {
-		return errors.New("未找到该客户归属关系")
+	uniqueCustomerUserIds := make([]int, 0, len(customerUserIds))
+	seenCustomerUserIds := make(map[int]struct{}, len(customerUserIds))
+	for _, customerUserId := range customerUserIds {
+		if _, seen := seenCustomerUserIds[customerUserId]; seen {
+			continue
+		}
+		seenCustomerUserIds[customerUserId] = struct{}{}
+		uniqueCustomerUserIds = append(uniqueCustomerUserIds, customerUserId)
 	}
-	return nil
+
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var relationCount int64
+		if err := tx.Model(&ManagedUserRelation{}).
+			Where("manager_user_id = ? AND customer_user_id IN ?", managerUserId, uniqueCustomerUserIds).
+			Count(&relationCount).Error; err != nil {
+			return err
+		}
+		if relationCount != int64(len(uniqueCustomerUserIds)) {
+			return errors.New("未找到该客户归属关系")
+		}
+		return tx.Where("manager_user_id = ? AND customer_user_id IN ?", managerUserId, uniqueCustomerUserIds).
+			Delete(&ManagedUserRelation{}).Error
+	})
 }
 
 func GetManagedCustomerIds(managerUserId int) ([]int, error) {

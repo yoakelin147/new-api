@@ -77,6 +77,56 @@ func TestManagedUserRelationLifecycleAndExclusiveCustomer(t *testing.T) {
 	require.False(t, allowed)
 }
 
+func TestListManagedCustomersPage(t *testing.T) {
+	withManagedUserTestDatabases(t)
+
+	users := []User{
+		{Id: 1, Username: "sales", Password: "hash", AffCode: "s001", Role: common.RoleSalesUser, Status: common.UserStatusEnabled},
+		{Id: 10, Username: "customer-a", Password: "hash", AffCode: "c010", Role: common.RoleCommonUser, Status: common.UserStatusEnabled},
+		{Id: 11, Username: "customer-b", Password: "hash", AffCode: "c011", Role: common.RoleCommonUser, Status: common.UserStatusEnabled},
+		{Id: 12, Username: "customer-c", Password: "hash", AffCode: "c012", Role: common.RoleCommonUser, Status: common.UserStatusEnabled},
+	}
+	require.NoError(t, DB.Create(&users).Error)
+	require.NoError(t, AssignManagedCustomers(1, []int{10, 11, 12}, 99))
+
+	firstPage, total, err := ListManagedCustomersPage(1, 0, 2)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), total)
+	require.Equal(t, []ManagedCustomerSummary{
+		{Id: 12, Username: "customer-c", Status: common.UserStatusEnabled},
+		{Id: 11, Username: "customer-b", Status: common.UserStatusEnabled},
+	}, firstPage)
+
+	secondPage, total, err := ListManagedCustomersPage(1, 2, 2)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), total)
+	require.Equal(t, []ManagedCustomerSummary{
+		{Id: 10, Username: "customer-a", Status: common.UserStatusEnabled},
+	}, secondPage)
+}
+
+func TestRemoveManagedCustomersIsAtomic(t *testing.T) {
+	withManagedUserTestDatabases(t)
+
+	users := []User{
+		{Id: 1, Username: "sales", Password: "hash", AffCode: "s001", Role: common.RoleSalesUser, Status: common.UserStatusEnabled},
+		{Id: 10, Username: "customer-a", Password: "hash", AffCode: "c010", Role: common.RoleCommonUser, Status: common.UserStatusEnabled},
+		{Id: 11, Username: "customer-b", Password: "hash", AffCode: "c011", Role: common.RoleCommonUser, Status: common.UserStatusEnabled},
+	}
+	require.NoError(t, DB.Create(&users).Error)
+	require.NoError(t, AssignManagedCustomers(1, []int{10, 11}, 99))
+
+	require.NoError(t, RemoveManagedCustomers(1, []int{10, 11}))
+	var relationCount int64
+	require.NoError(t, DB.Model(&ManagedUserRelation{}).Count(&relationCount).Error)
+	require.Zero(t, relationCount)
+
+	require.NoError(t, AssignManagedCustomers(1, []int{10, 11}, 99))
+	require.Error(t, RemoveManagedCustomers(1, []int{10, 999}))
+	require.NoError(t, DB.Model(&ManagedUserRelation{}).Count(&relationCount).Error)
+	require.Equal(t, int64(2), relationCount)
+}
+
 func TestManagedUserLogsAreScopedAndRedacted(t *testing.T) {
 	withManagedUserTestDatabases(t)
 

@@ -159,6 +159,7 @@ func SetApiRouter(router *gin.Engine) {
 			salesRoute.GET("/:id/customers", controller.GetSalesCustomers)
 			salesRoute.POST("/:id/customers", controller.AssignSalesCustomers)
 			salesRoute.DELETE("/:id/customers/:customer_id", controller.RemoveSalesCustomer)
+			salesRoute.POST("/:id/customers/remove", controller.RemoveSalesCustomers)
 		}
 
 		// Subscription billing (plans, purchase, admin management)
@@ -314,6 +315,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			costStatisticsRoute.GET("/", middleware.AdminAuth(), controller.GetCostStatistics)
 			costStatisticsRoute.GET("/self", middleware.UserAuth(), controller.GetSelfCostStatistics)
+			costStatisticsRoute.GET("/managed", middleware.SalesAuth(), controller.GetManagedCostStatistics)
 		}
 
 		profitStatisticsRoute := apiRouter.Group("/profit_statistics")
@@ -357,6 +359,7 @@ func SetApiRouter(router *gin.Engine) {
 		dataRoute.GET("/token_cache_hits/trend", middleware.AdminAuth(), controller.GetTokenCacheHitTrendStats)
 		dataRoute.GET("/tokens/users", middleware.AdminAuth(), controller.GetQuotaDatesByUserToken)
 		dataRoute.GET("/tokens/self", middleware.UserAuth(), controller.GetQuotaDatesByToken)
+		dataRoute.GET("/managed", middleware.SalesAuth(), controller.GetManagedQuotaDates)
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)
 
 		logRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())

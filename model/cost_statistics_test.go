@@ -128,6 +128,39 @@ func TestGetCostStatisticsAggregatesConsumeLogs(t *testing.T) {
 	assert.Equal(t, 0.8, byToken["backup-key"].GroupRatio)
 }
 
+func TestGetCostStatisticsScopesExplicitUserIds(t *testing.T) {
+	truncateTables(t)
+
+	base := time.Date(2026, 8, 4, 9, 0, 0, 0, time.Local)
+	logs := []*Log{
+		{UserId: 10, Username: "customer-a", CreatedAt: base.Unix(), Type: LogTypeConsume, TokenId: 1, TokenName: "a", ModelName: "gpt-a", Quota: 100},
+		{UserId: 11, Username: "customer-b", CreatedAt: base.Unix(), Type: LogTypeConsume, TokenId: 2, TokenName: "b", ModelName: "gpt-b", Quota: 200},
+		{UserId: 12, Username: "outside", CreatedAt: base.Unix(), Type: LogTypeConsume, TokenId: 3, TokenName: "c", ModelName: "gpt-c", Quota: 900},
+	}
+	require.NoError(t, DB.Create(&logs).Error)
+
+	rows, total, summary, err := GetCostStatistics(CostStatisticsQuery{
+		UserIds:        []int{10, 11},
+		StartTimestamp: base.Add(-time.Hour).Unix(),
+		EndTimestamp:   base.Add(time.Hour).Unix(),
+	}, 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, 2, total)
+	require.Equal(t, 2, summary.RequestCount)
+	require.Equal(t, 300, summary.Quota)
+	require.ElementsMatch(t, []string{"customer-a", "customer-b"}, []string{rows[0].Username, rows[1].Username})
+
+	rows, total, summary, err = GetCostStatistics(CostStatisticsQuery{
+		UserIds:        []int{},
+		StartTimestamp: base.Add(-time.Hour).Unix(),
+		EndTimestamp:   base.Add(time.Hour).Unix(),
+	}, 0, 10)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	require.Zero(t, total)
+	require.Equal(t, CostStatisticsSummary{}, summary)
+}
+
 func TestGetCostStatisticsSubtractsRefundQuota(t *testing.T) {
 	truncateTables(t)
 

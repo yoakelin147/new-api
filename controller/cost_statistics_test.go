@@ -20,6 +20,18 @@ func TestResolveCostStatisticsPeriodLastMonth(t *testing.T) {
 	assert.Equal(t, thisMonthStart.Add(-time.Second).Unix(), end)
 }
 
+func TestResolveCostStatisticsPeriodYesterday(t *testing.T) {
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	start, end, period, err := resolveCostStatisticsPeriod(costStatisticsPeriodYesterday, false, "", "")
+	require.NoError(t, err)
+
+	assert.Equal(t, costStatisticsPeriodYesterday, period)
+	assert.Equal(t, todayStart.AddDate(0, 0, -1).Unix(), start)
+	assert.Equal(t, todayStart.Add(-time.Second).Unix(), end)
+}
+
 func TestResolveCostStatisticsPeriodCustomRequiresAdmin(t *testing.T) {
 	start, end, period, err := resolveCostStatisticsPeriod(costStatisticsPeriodCustom, false, "100", "200")
 	require.NoError(t, err)

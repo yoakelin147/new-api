@@ -25,16 +25,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import { FadeIn } from '@/components/page-transition'
-import { ModelsChartPreferences } from './components/models/models-chart-preferences'
-import { ModelsFilter } from './components/models/models-filter-dialog'
-import { OverviewDashboard } from './components/overview/overview-dashboard'
-import {
-  TokenCacheFilterDialog,
-} from './components/cache/token-cache-filter-dialog'
+import { TokenCacheFilterDialog } from './components/cache/token-cache-filter-dialog'
 import {
   buildDefaultTokenCacheFilters,
   type TokenCacheDashboardFilters,
 } from './components/cache/token-cache-filters'
+import { ModelsChartPreferences } from './components/models/models-chart-preferences'
+import { ModelsFilter } from './components/models/models-filter-dialog'
+import { OverviewDashboard } from './components/overview/overview-dashboard'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
@@ -251,6 +249,7 @@ export function Dashboard() {
         />
         <ModelsFilter
           preferences={chartPreferences}
+          appliedFilters={modelFilters}
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
         />

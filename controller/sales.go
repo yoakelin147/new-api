@@ -14,6 +14,10 @@ type assignManagedCustomersRequest struct {
 	CustomerUserIds []int `json:"customer_user_ids"`
 }
 
+type removeManagedCustomersRequest struct {
+	CustomerUserIds []int `json:"customer_user_ids"`
+}
+
 func GetSalesUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	salesUsers, total, err := model.ListSalesUsers(c.Query("keyword"), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
@@ -32,12 +36,15 @@ func GetSalesCustomers(c *gin.Context) {
 		common.ApiError(c, errInvalidSalesUserId)
 		return
 	}
-	customers, err := model.ListManagedCustomers(managerUserId)
+	pageInfo := common.GetPageQuery(c)
+	customers, total, err := model.ListManagedCustomersPage(managerUserId, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, customers)
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(customers)
+	common.ApiSuccess(c, pageInfo)
 }
 
 func GetAvailableSalesCustomers(c *gin.Context) {
@@ -78,6 +85,24 @@ func RemoveSalesCustomer(c *gin.Context) {
 		return
 	}
 	if err := model.RemoveManagedCustomer(managerUserId, customerUserId); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+func RemoveSalesCustomers(c *gin.Context) {
+	managerUserId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || managerUserId <= 0 {
+		common.ApiError(c, errInvalidSalesUserId)
+		return
+	}
+	var request removeManagedCustomersRequest
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.RemoveManagedCustomers(managerUserId, request.CustomerUserIds); err != nil {
 		common.ApiError(c, err)
 		return
 	}

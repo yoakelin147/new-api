@@ -41,10 +41,16 @@ export async function getUserQuotaDates(
     end_timestamp: number
     default_time?: string
     username?: string
+    user_id?: number
   },
-  isAdmin = false
+  scope: 'self' | 'admin' | 'managed' = 'self'
 ) {
-  const endpoint = isAdmin ? '/api/data' : '/api/data/self'
+  const endpoint =
+    scope === 'admin'
+      ? '/api/data'
+      : scope === 'managed'
+        ? '/api/data/managed'
+        : '/api/data/self'
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     endpoint,
     { params }

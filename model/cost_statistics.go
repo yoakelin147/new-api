@@ -13,7 +13,10 @@ import (
 )
 
 type CostStatisticsQuery struct {
-	UserId         int
+	UserId int
+	// UserIds scopes a non-admin query to an explicit set of users. Nil keeps
+	// the legacy single-user behavior; an empty non-nil slice matches no logs.
+	UserIds        []int
 	IsAdmin        bool
 	LogType        int
 	StartTimestamp int64
@@ -130,6 +133,9 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 	rowsByKey := make(map[costStatisticsKey]*CostStatisticsRow)
 	channelIds := make(map[int]struct{})
 	summary := CostStatisticsSummary{}
+	if !query.IsAdmin && query.UserIds != nil && len(query.UserIds) == 0 {
+		return []*CostStatisticsRow{}, 0, summary, nil
+	}
 
 	tx := LOG_DB.Model(&Log{}).Where("logs.created_at >= ? AND logs.created_at <= ?", query.StartTimestamp, query.EndTimestamp)
 	if query.LogType == LogTypeUnknown {
@@ -137,7 +143,9 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 	} else {
 		tx = tx.Where("logs.type = ?", query.LogType)
 	}
-	if !query.IsAdmin {
+	if !query.IsAdmin && query.UserIds != nil {
+		tx = tx.Where("logs.user_id IN ?", query.UserIds)
+	} else if !query.IsAdmin {
 		tx = tx.Where("logs.user_id = ?", query.UserId)
 	} else if query.Username != "" {
 		var err error

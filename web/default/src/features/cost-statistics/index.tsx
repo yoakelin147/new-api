@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   CalendarDays,
@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   formatLogQuota,
   formatNumber,
@@ -41,6 +42,7 @@ import {
   parseTimestampFromInput,
   quotaUnitsToDollars,
 } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Badge } from '@/components/ui/badge'
@@ -76,6 +78,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { StaticDataTable } from '@/components/data-table/static/static-data-table'
 import { Main } from '@/components/layout'
+import { SearchableSubjectSelect } from '@/components/searchable-subject-select'
+import { getManagedLogUsers } from '@/features/usage-logs/api'
 import { ModelBadge } from '@/features/usage-logs/components/model-badge'
 import { getCostStatistics } from './api'
 import type {
@@ -83,6 +87,7 @@ import type {
   CostStatisticsFilters,
   CostStatisticsPeriod,
   CostStatisticsRow,
+  CostStatisticsSubject,
   CostStatisticsType,
 } from './types'
 
@@ -110,6 +115,7 @@ const DEFAULT_DATA: CostStatisticsData = {
 
 const PERIOD_OPTIONS: Array<{ value: CostStatisticsPeriod; label: string }> = [
   { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
   { value: 'week', label: 'This Week Range' },
   { value: 'month', label: 'This Month Range' },
   { value: 'last_month', label: 'Last Month Range' },
@@ -123,6 +129,7 @@ const TYPE_OPTIONS: Array<{ value: CostStatisticsType; label: string }> = [
 
 type CostStatisticsColumnId =
   | 'date'
+  | 'user'
   | 'token'
   | 'model'
   | 'tokens'
@@ -146,6 +153,7 @@ type XlsxCell = string | number | null
 
 const DEFAULT_COLUMN_VISIBILITY: CostStatisticsColumnVisibility = {
   date: true,
+  user: true,
   token: true,
   model: true,
   tokens: true,
@@ -230,6 +238,11 @@ function getPeriodRange(period: CostStatisticsPeriod) {
   if (period === 'week') {
     const offset = (now.getDay() + 6) % 7
     start.setDate(now.getDate() - offset)
+  } else if (period === 'yesterday') {
+    start.setDate(now.getDate() - 1)
+    end = new Date(now)
+    end.setHours(0, 0, 0, 0)
+    end = new Date(end.getTime() - 1000)
   } else if (period === 'month') {
     start.setDate(1)
   } else if (period === 'last_month') {
@@ -442,7 +455,8 @@ function formatExportDay(timestamp: number) {
 
 function getCostExportInfoRows(
   data: CostStatisticsData,
-  filters: CostStatisticsFilters
+  filters: CostStatisticsFilters,
+  subjectLabel?: string
 ): XlsxCell[][] {
   return [
     ['费用导出说明'],
@@ -451,7 +465,7 @@ function getCostExportInfoRows(
       '时间范围',
       `${formatExportDay(data.start_timestamp)} ~ ${formatExportDay(data.end_timestamp)}`,
     ],
-    ['用户', filters.username || '全部'],
+    ['用户', subjectLabel || filters.username || '全部'],
     ['类型', getCostExportFilterTypeLabel(filters.type)],
     ['记录数', String(data.total)],
     [''],
@@ -565,13 +579,14 @@ function buildWorksheetXml(rows: XlsxCell[][]) {
 function buildXlsxContent(
   rows: CostStatisticsRow[],
   data: CostStatisticsData,
-  filters: CostStatisticsFilters
+  filters: CostStatisticsFilters,
+  subjectLabel?: string
 ) {
   const sheetRows: XlsxCell[][] = [
     Array.from(COST_EXPORT_HEADERS),
     ...getCostExportRows(rows),
   ]
-  const infoRows = getCostExportInfoRows(data, filters)
+  const infoRows = getCostExportInfoRows(data, filters, subjectLabel)
   return createZip([
     {
       path: '[Content_Types].xml',
@@ -979,6 +994,7 @@ function DateRangePicker(props: {
   start: number
   end: number
   allowCustom: boolean
+  showRangeInputs: boolean
   onPeriodChange: (period: CostStatisticsPeriod) => void
   onRangeChange: (start: number, end: number) => void
 }) {
@@ -1034,48 +1050,50 @@ function DateRangePicker(props: {
       </PopoverTrigger>
       <PopoverContent align='start' className='w-[min(420px,calc(100vw-2rem))]'>
         <div className='flex flex-col gap-3'>
-          <div className='grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-end'>
-            <div className='flex flex-col gap-1.5'>
-              <div className='text-muted-foreground text-xs'>
-                {t('Start Time')}
+          {props.showRangeInputs && (
+            <div className='grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-end'>
+              <div className='flex flex-col gap-1.5'>
+                <div className='text-muted-foreground text-xs'>
+                  {t('Start Time')}
+                </div>
+                <Input
+                  readOnly={!props.allowCustom}
+                  type={props.allowCustom ? 'datetime-local' : 'text'}
+                  value={
+                    props.allowCustom
+                      ? draftStart
+                      : props.start
+                        ? formatTimestampToDate(props.start).slice(0, 16)
+                        : ''
+                  }
+                  onChange={(event) => setDraftStart(event.target.value)}
+                  className='h-8 font-mono text-xs tabular-nums'
+                />
               </div>
-              <Input
-                readOnly={!props.allowCustom}
-                type={props.allowCustom ? 'datetime-local' : 'text'}
-                value={
-                  props.allowCustom
-                    ? draftStart
-                    : props.start
-                      ? formatTimestampToDate(props.start).slice(0, 16)
-                      : ''
-                }
-                onChange={(event) => setDraftStart(event.target.value)}
-                className='h-8 font-mono text-xs tabular-nums'
-              />
-            </div>
-            <span className='text-muted-foreground hidden pb-2 text-xs sm:block'>
-              ~
-            </span>
-            <div className='flex flex-col gap-1.5'>
-              <div className='text-muted-foreground text-xs'>
-                {t('End Time')}
+              <span className='text-muted-foreground hidden pb-2 text-xs sm:block'>
+                ~
+              </span>
+              <div className='flex flex-col gap-1.5'>
+                <div className='text-muted-foreground text-xs'>
+                  {t('End Time')}
+                </div>
+                <Input
+                  readOnly={!props.allowCustom}
+                  type={props.allowCustom ? 'datetime-local' : 'text'}
+                  value={
+                    props.allowCustom
+                      ? draftEnd
+                      : props.end
+                        ? formatTimestampToDate(props.end).slice(0, 16)
+                        : ''
+                  }
+                  onChange={(event) => setDraftEnd(event.target.value)}
+                  className='h-8 font-mono text-xs tabular-nums'
+                />
               </div>
-              <Input
-                readOnly={!props.allowCustom}
-                type={props.allowCustom ? 'datetime-local' : 'text'}
-                value={
-                  props.allowCustom
-                    ? draftEnd
-                    : props.end
-                      ? formatTimestampToDate(props.end).slice(0, 16)
-                      : ''
-                }
-                onChange={(event) => setDraftEnd(event.target.value)}
-                className='h-8 font-mono text-xs tabular-nums'
-              />
             </div>
-          </div>
-          <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+          )}
+          <div className='grid grid-cols-2 gap-2 sm:grid-cols-5'>
             {PERIOD_OPTIONS.map((option) => (
               <Button
                 key={option.value}
@@ -1196,6 +1214,7 @@ function CostStatisticsTable(props: {
   data: CostStatisticsRow[]
   loading: boolean
   columnVisibility: CostStatisticsColumnVisibility
+  showUserColumn: boolean
 }) {
   const { t } = useTranslation()
   const columns = useMemo(
@@ -1214,6 +1233,20 @@ function CostStatisticsTable(props: {
             </div>
           ),
         },
+        ...(props.showUserColumn
+          ? [
+              {
+                id: 'user',
+                header: <HeaderLabel>{t('User')}</HeaderLabel>,
+                className: 'min-w-[150px]',
+                cell: (row: CostStatisticsRow) => (
+                  <span className='block max-w-[180px] truncate'>
+                    {row.username || '-'}
+                  </span>
+                ),
+              },
+            ]
+          : []),
         {
           id: 'token',
           header: <HeaderLabel>{t('Token')}</HeaderLabel>,
@@ -1308,7 +1341,7 @@ function CostStatisticsTable(props: {
       ].filter(
         (column) => props.columnVisibility[column.id as CostStatisticsColumnId]
       ),
-    [props.columnVisibility, t]
+    [props.columnVisibility, props.showUserColumn, t]
   )
 
   if (props.loading) {
@@ -1336,6 +1369,7 @@ function CostStatisticsTable(props: {
           row.token_name,
           row.model_name,
           row.group,
+          row.username,
           row.channel_id,
         ].join(':')
       }
@@ -1357,6 +1391,8 @@ function CostStatisticsTable(props: {
 export function CostStatistics() {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
+  const userRole = useAuthStore((state) => state.auth.user?.role)
+  const isSales = userRole === ROLE.SALES
   const [page, setPage] = useState(1)
   const [searchVersion, setSearchVersion] = useState(0)
   const [expanded, setExpanded] = useState(false)
@@ -1365,25 +1401,39 @@ export function CostStatistics() {
   const [exporting, setExporting] = useState(false)
   const [columnVisibility, setColumnVisibility] =
     useState<CostStatisticsColumnVisibility>(DEFAULT_COLUMN_VISIBILITY)
-  const [exportRecords, setExportRecords] = useState<ExportRecord[]>([])
+  const [exportRecords, setExportRecords] = useState<ExportRecord[]>(
+    loadStoredExportRecords
+  )
+  const [subject, setSubject] = useState<CostStatisticsSubject>('self')
 
-  useEffect(() => {
-    setExportRecords(loadStoredExportRecords())
-  }, [])
+  const managedUsersQuery = useQuery({
+    queryKey: ['managed-log-users'],
+    queryFn: getManagedLogUsers,
+    enabled: isSales,
+  })
 
   const updateExportRecords = (records: ExportRecord[]) => {
     setExportRecords(records)
     storeExportRecords(records)
   }
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['cost-statistics', isAdmin, page, filters, searchVersion],
+  const { data, isLoading, isFetching, isPlaceholderData } = useQuery({
+    queryKey: [
+      'cost-statistics',
+      isAdmin,
+      subject,
+      page,
+      filters,
+      searchVersion,
+      t,
+    ],
     queryFn: async () => {
       const result = await getCostStatistics({
         isAdmin,
         page,
         pageSize: DEFAULT_PAGE_SIZE,
         filters,
+        subject,
       })
       if (!result.success) {
         toast.error(result.message || t('Failed to load cost statistics'))
@@ -1395,8 +1445,20 @@ export function CostStatistics() {
   })
 
   const stats = data || DEFAULT_DATA
-  const loadingContent = isLoading || (isFetching && !data)
+  const loadingContent = isLoading || isPlaceholderData
   const draftRange = getFilterRange(draftFilters)
+  const managedUsers = managedUsersQuery.data?.data ?? []
+  const subjectOptions = [
+    { value: 'self', label: t('My data') },
+    { value: 'managed', label: t('All assigned customers') },
+    ...managedUsers.map((user) => ({
+      value: `customer:${user.id}`,
+      label: user.display_name
+        ? `${user.username} (${user.display_name})`
+        : user.username,
+      keywords: `${user.username} ${user.display_name ?? ''} ${user.id}`,
+    })),
+  ]
 
   const applyFilters = () => {
     setPage(1)
@@ -1409,6 +1471,7 @@ export function CostStatistics() {
     setPage(1)
     setDraftFilters(next)
     setFilters(next)
+    if (isSales) setSubject('self')
     setSearchVersion((value) => value + 1)
   }
 
@@ -1439,6 +1502,7 @@ export function CostStatistics() {
   }
 
   const handleExportXlsx = async () => {
+    if (isFetching || isPlaceholderData) return
     if (stats.total === 0) {
       toast.warning(t('No data to export'))
       return
@@ -1453,6 +1517,7 @@ export function CostStatistics() {
           page: 1,
           pageSize: stats.total,
           filters,
+          subject,
         })
         if (!result.success) {
           toast.error(result.message || t('Failed to load cost statistics'))
@@ -1466,7 +1531,15 @@ export function CostStatistics() {
       }
 
       const filename = buildExportFilename()
-      const content = buildXlsxContent(rows, stats, filters)
+      const selectedSubjectLabel = isSales
+        ? subjectOptions.find((option) => option.value === subject)?.label
+        : undefined
+      const content = buildXlsxContent(
+        rows,
+        stats,
+        filters,
+        selectedSubjectLabel
+      )
       downloadBinaryFile(filename, content, XLSX_MIME)
       const record: ExportRecord = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -1497,11 +1570,24 @@ export function CostStatistics() {
         <div className='mt-5 rounded-2xl border p-3'>
           <div className='flex flex-col gap-3'>
             <div className='flex flex-col gap-2 lg:flex-row'>
+              {isSales && (
+                <SearchableSubjectSelect
+                  value={subject}
+                  options={subjectOptions}
+                  onValueChange={(value) => {
+                    setSubject(value as CostStatisticsSubject)
+                    setPage(1)
+                  }}
+                  ariaLabel={t('View subject')}
+                  className='h-9 min-w-0 flex-1 justify-between rounded-full px-3 font-normal lg:max-w-[320px]'
+                />
+              )}
               <DateRangePicker
                 period={draftFilters.period}
                 start={draftRange.start}
                 end={draftRange.end}
                 allowCustom={isAdmin}
+                showRangeInputs={!isSales}
                 onPeriodChange={handlePeriodChange}
                 onRangeChange={handleCustomRangeChange}
               />
@@ -1620,7 +1706,7 @@ export function CostStatistics() {
                   variant='outline'
                   size='sm'
                   className='rounded-full'
-                  disabled={exporting}
+                  disabled={exporting || isFetching || isPlaceholderData}
                   onClick={handleExportXlsx}
                 >
                   <Download data-icon='inline-start' />
@@ -1667,6 +1753,7 @@ export function CostStatistics() {
             data={stats.items}
             loading={loadingContent}
             columnVisibility={columnVisibility}
+            showUserColumn={isSales && subject !== 'self'}
           />
         </div>
 
