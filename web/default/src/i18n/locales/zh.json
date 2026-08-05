@@ -5004,7 +5004,7 @@
     "No available customers found.": "没有可分配的客户。",
     "No customers assigned yet.": "暂未分配客户。",
     "No sales accounts found.": "未找到销售账号。",
-    "Only unassigned regular users are listed.": "这里只显示尚未归属销售的普通用户。",
+    "Only regular users not yet assigned to this sales account are listed.": "这里只显示尚未分配给当前销售的普通用户。",
     "Remove customer": "解除客户归属",
     "Remove customer \"{{name}}\" from this sales account? Sales access to the customer logs will be revoked immediately.": "确定将客户“{{name}}”从该销售账号下移除吗？销售对该客户日志的访问权限将立即失效。",
     "Remove customer assignment": "解除客户归属",

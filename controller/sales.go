@@ -48,8 +48,13 @@ func GetSalesCustomers(c *gin.Context) {
 }
 
 func GetAvailableSalesCustomers(c *gin.Context) {
+	managerUserId, err := strconv.Atoi(c.Query("manager_user_id"))
+	if err != nil || managerUserId <= 0 {
+		common.ApiError(c, errInvalidSalesUserId)
+		return
+	}
 	pageInfo := common.GetPageQuery(c)
-	customers, total, err := model.SearchAvailableManagedCustomers(c.Query("keyword"), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	customers, total, err := model.SearchAvailableManagedCustomers(managerUserId, c.Query("keyword"), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return

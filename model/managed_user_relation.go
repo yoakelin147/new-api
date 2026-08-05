@@ -11,11 +11,11 @@ import (
 )
 
 // ManagedUserRelation records the customers whose read-only data scope is
-// assigned to a sales user. A customer can belong to at most one sales user.
+// assigned to a sales user. A customer can be assigned to multiple sales users.
 type ManagedUserRelation struct {
 	Id             int   `json:"id" gorm:"primaryKey"`
 	ManagerUserId  int   `json:"manager_user_id" gorm:"not null;index;uniqueIndex:idx_manager_customer"`
-	CustomerUserId int   `json:"customer_user_id" gorm:"not null;uniqueIndex;uniqueIndex:idx_manager_customer"`
+	CustomerUserId int   `json:"customer_user_id" gorm:"not null;index:idx_managed_customer_user;uniqueIndex:idx_manager_customer"`
 	CreatedBy      int   `json:"created_by" gorm:"not null;default:0"`
 	CreatedAt      int64 `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt      int64 `json:"updated_at" gorm:"autoUpdateTime"`
@@ -97,8 +97,10 @@ func managedCustomersQuery(managerUserId int) *gorm.DB {
 		Where("users.role = ?", common.RoleCommonUser)
 }
 
-func SearchAvailableManagedCustomers(keyword string, startIdx int, num int) ([]ManagedCustomerSummary, int64, error) {
-	assignedCustomers := DB.Model(&ManagedUserRelation{}).Select("customer_user_id")
+func SearchAvailableManagedCustomers(managerUserId int, keyword string, startIdx int, num int) ([]ManagedCustomerSummary, int64, error) {
+	assignedCustomers := DB.Model(&ManagedUserRelation{}).
+		Select("customer_user_id").
+		Where("manager_user_id = ?", managerUserId)
 	baseQuery := DB.Model(&User{}).
 		Where("role = ?", common.RoleCommonUser).
 		Where("deleted_at IS NULL").
@@ -146,12 +148,12 @@ func AssignManagedCustomers(managerUserId int, customerUserIds []int, createdBy 
 
 		var assignedCount int64
 		if err := tx.Model(&ManagedUserRelation{}).
-			Where("customer_user_id IN ?", customerUserIds).
+			Where("manager_user_id = ? AND customer_user_id IN ?", managerUserId, customerUserIds).
 			Count(&assignedCount).Error; err != nil {
 			return err
 		}
 		if assignedCount > 0 {
-			return errors.New("部分客户已归属其他销售，请先解除原归属")
+			return errors.New("部分客户已分配给当前销售，请勿重复分配")
 		}
 
 		relations := make([]ManagedUserRelation, 0, len(customerUserIds))

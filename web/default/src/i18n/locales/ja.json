@@ -5004,7 +5004,7 @@
     "No available customers found.": "割り当て可能な顧客が見つかりません。",
     "No customers assigned yet.": "顧客はまだ割り当てられていません。",
     "No sales accounts found.": "営業アカウントが見つかりません。",
-    "Only unassigned regular users are listed.": "未割り当ての一般ユーザーのみ表示されます。",
+    "Only regular users not yet assigned to this sales account are listed.": "この営業アカウントにまだ割り当てられていない一般ユーザーのみ表示されます。",
     "Remove customer": "顧客の割り当てを解除",
     "Remove customer \"{{name}}\" from this sales account? Sales access to the customer logs will be revoked immediately.": "顧客「{{name}}」をこの営業アカウントから解除しますか？顧客ログへのアクセスは直ちに無効になります。",
     "Remove customer assignment": "顧客の割り当てを解除",

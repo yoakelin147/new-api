@@ -142,11 +142,13 @@ export function SalesManagement() {
   const availableQuery = useQuery({
     queryKey: [
       'available-sales-customers',
+      selectedSales?.id,
       debouncedCustomerKeyword,
       availablePage,
     ],
     queryFn: () =>
       getAvailableSalesCustomers(
+        selectedSales!.id,
         debouncedCustomerKeyword,
         availablePage,
         CUSTOMER_PAGE_SIZE
@@ -593,7 +595,9 @@ export function SalesManagement() {
               <CardHeader>
                 <CardTitle>{t('Add customers')}</CardTitle>
                 <CardDescription>
-                  {t('Only unassigned regular users are listed.')}
+                  {t(
+                    'Only regular users not yet assigned to this sales account are listed.'
+                  )}
                 </CardDescription>
                 <CardAction>
                   <CompactPagination

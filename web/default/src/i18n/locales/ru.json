@@ -5004,7 +5004,7 @@
     "No available customers found.": "Доступные клиенты не найдены.",
     "No customers assigned yet.": "Клиенты пока не закреплены.",
     "No sales accounts found.": "Менеджеры по продажам не найдены.",
-    "Only unassigned regular users are listed.": "Показаны только незакреплённые обычные пользователи.",
+    "Only regular users not yet assigned to this sales account are listed.": "Показаны только обычные пользователи, ещё не закреплённые за этим менеджером по продажам.",
     "Remove customer": "Открепить клиента",
     "Remove customer \"{{name}}\" from this sales account? Sales access to the customer logs will be revoked immediately.": "Открепить клиента «{{name}}» от этого менеджера? Доступ к журналам клиента будет немедленно отозван.",
     "Remove customer assignment": "Открепить клиента",

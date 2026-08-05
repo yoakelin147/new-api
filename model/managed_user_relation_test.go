@@ -31,7 +31,7 @@ func withManagedUserTestDatabases(t *testing.T) {
 	})
 }
 
-func TestManagedUserRelationLifecycleAndExclusiveCustomer(t *testing.T) {
+func TestManagedUserRelationLifecycleAllowsSharedCustomer(t *testing.T) {
 	withManagedUserTestDatabases(t)
 
 	users := []User{
@@ -62,19 +62,65 @@ func TestManagedUserRelationLifecycleAndExclusiveCustomer(t *testing.T) {
 		Id: 10, Username: "customer-a", DisplayName: "", Status: common.UserStatusEnabled,
 	}}, customers)
 
-	available, total, err := SearchAvailableManagedCustomers("", 0, 100)
+	available, total, err := SearchAvailableManagedCustomers(1, "", 0, 100)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total)
 	require.Equal(t, []ManagedCustomerSummary{{
 		Id: 11, Username: "customer-b", DisplayName: "", Status: common.UserStatusEnabled,
 	}}, available)
 
-	require.Error(t, AssignManagedCustomers(2, []int{10}, 20))
+	available, total, err = SearchAvailableManagedCustomers(2, "", 0, 100)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Equal(t, []ManagedCustomerSummary{
+		{Id: 11, Username: "customer-b", DisplayName: "", Status: common.UserStatusEnabled},
+		{Id: 10, Username: "customer-a", DisplayName: "", Status: common.UserStatusEnabled},
+	}, available)
+
+	require.NoError(t, AssignManagedCustomers(2, []int{10}, 20))
+	require.Error(t, AssignManagedCustomers(1, []int{10}, 20))
+	allowed, err = CanAccessManagedCustomer(2, 10)
+	require.NoError(t, err)
+	require.True(t, allowed)
 	require.Error(t, AssignManagedCustomers(1, []int{20}, 20))
 	require.NoError(t, RemoveManagedCustomer(1, 10))
 	allowed, err = CanAccessManagedCustomer(1, 10)
 	require.NoError(t, err)
 	require.False(t, allowed)
+	allowed, err = CanAccessManagedCustomer(2, 10)
+	require.NoError(t, err)
+	require.True(t, allowed)
+}
+
+func TestMigrateManagedUserRelationIndexesAllowsSharedCustomer(t *testing.T) {
+	previousDB := DB
+	dsn := fmt.Sprintf("file:managed-users-migration-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	testDB, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+	DB = testDB
+	t.Cleanup(func() { DB = previousDB })
+
+	type legacyManagedUserRelation struct {
+		Id             int   `gorm:"primaryKey"`
+		ManagerUserId  int   `gorm:"not null;index;uniqueIndex:idx_manager_customer"`
+		CustomerUserId int   `gorm:"not null;uniqueIndex;uniqueIndex:idx_manager_customer"`
+		CreatedBy      int   `gorm:"not null;default:0"`
+		CreatedAt      int64 `gorm:"autoCreateTime"`
+		UpdatedAt      int64 `gorm:"autoUpdateTime"`
+	}
+	require.NoError(t, DB.Table("managed_user_relations").AutoMigrate(&legacyManagedUserRelation{}))
+	require.NoError(t, migrateManagedUserRelationIndexes())
+	require.NoError(t, migrateManagedUserRelationIndexes())
+
+	require.NoError(t, DB.Create(&ManagedUserRelation{ManagerUserId: 1, CustomerUserId: 10}).Error)
+	require.NoError(t, DB.Create(&ManagedUserRelation{ManagerUserId: 2, CustomerUserId: 10}).Error)
+	require.Error(t, DB.Create(&ManagedUserRelation{ManagerUserId: 1, CustomerUserId: 10}).Error)
+
+	indexes, err := listManagedUserRelationIndexes()
+	require.NoError(t, err)
+	for _, index := range indexes {
+		require.False(t, index.unique && len(index.columns) == 1 && index.columns[0] == "customer_user_id")
+	}
 }
 
 func TestListManagedCustomersPage(t *testing.T) {

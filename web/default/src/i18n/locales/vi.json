@@ -5004,7 +5004,7 @@
     "No available customers found.": "Không tìm thấy khách hàng khả dụng.",
     "No customers assigned yet.": "Chưa có khách hàng nào được giao.",
     "No sales accounts found.": "Không tìm thấy tài khoản kinh doanh.",
-    "Only unassigned regular users are listed.": "Chỉ hiển thị người dùng thông thường chưa được giao.",
+    "Only regular users not yet assigned to this sales account are listed.": "Chỉ hiển thị người dùng thông thường chưa được giao cho tài khoản kinh doanh này.",
     "Remove customer": "Gỡ khách hàng",
     "Remove customer \"{{name}}\" from this sales account? Sales access to the customer logs will be revoked immediately.": "Gỡ khách hàng “{{name}}” khỏi tài khoản kinh doanh này? Quyền truy cập nhật ký khách hàng sẽ bị thu hồi ngay lập tức.",
     "Remove customer assignment": "Gỡ phân công khách hàng",

@@ -78,7 +78,7 @@ func TestManagedLogsRejectUnassignedCustomer(t *testing.T) {
 	}
 	require.NoError(t, model.DB.Create(&users).Error)
 	require.NoError(t, model.AssignManagedCustomers(1, []int{10}, 99))
-	require.NoError(t, model.AssignManagedCustomers(2, []int{11}, 99))
+	require.NoError(t, model.AssignManagedCustomers(2, []int{10, 11}, 99))
 	require.NoError(t, model.LOG_DB.Create(&model.Log{
 		UserId: 11, Username: "customer-b", Type: model.LogTypeConsume, CreatedAt: time.Now().Unix(),
 	}).Error)
@@ -91,6 +91,10 @@ func TestManagedLogsRejectUnassignedCustomer(t *testing.T) {
 	require.Equal(t, http.StatusOK, allowed.Code)
 	require.Contains(t, allowed.Body.String(), `"success":true`)
 	require.NotContains(t, allowed.Body.String(), "customer-b")
+
+	sharedCustomer := performManagedLogControllerRequest(t, 2, 10)
+	require.Equal(t, http.StatusOK, sharedCustomer.Code)
+	require.Contains(t, sharedCustomer.Body.String(), `"success":true`)
 }
 
 func TestManagedCostStatisticsRejectUnassignedCustomer(t *testing.T) {
@@ -196,6 +200,40 @@ func TestGetSalesCustomersPaginatesAssignedCustomers(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `"username":"customer-a"`)
 	require.NotContains(t, recorder.Body.String(), "customer-b")
 	require.NotContains(t, recorder.Body.String(), "customer-c")
+}
+
+func TestGetAvailableSalesCustomersOnlyExcludesCurrentSalesAssignments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	withManagedLogControllerDatabase(t)
+
+	users := []model.User{
+		{Id: 1, Username: "sales-a", Password: "hash", AffCode: "s001", Role: common.RoleSalesUser, Status: common.UserStatusEnabled},
+		{Id: 2, Username: "sales-b", Password: "hash", AffCode: "s002", Role: common.RoleSalesUser, Status: common.UserStatusEnabled},
+		{Id: 10, Username: "customer-a", Password: "hash", AffCode: "c010", Role: common.RoleCommonUser, Status: common.UserStatusEnabled},
+		{Id: 11, Username: "customer-b", Password: "hash", AffCode: "c011", Role: common.RoleCommonUser, Status: common.UserStatusEnabled},
+	}
+	require.NoError(t, model.DB.Create(&users).Error)
+	require.NoError(t, model.AssignManagedCustomers(1, []int{10}, 99))
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/sales/available-customers?manager_user_id=2&p=1&page_size=20", nil)
+	GetAvailableSalesCustomers(context)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"total":2`)
+	require.Contains(t, recorder.Body.String(), `"username":"customer-a"`)
+	require.Contains(t, recorder.Body.String(), `"username":"customer-b"`)
+
+	recorder = httptest.NewRecorder()
+	context, _ = gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/sales/available-customers?manager_user_id=1&p=1&page_size=20", nil)
+	GetAvailableSalesCustomers(context)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"total":1`)
+	require.NotContains(t, recorder.Body.String(), `"username":"customer-a"`)
+	require.Contains(t, recorder.Body.String(), `"username":"customer-b"`)
 }
 
 func TestRemoveSalesCustomersRemovesBatchAtomically(t *testing.T) {

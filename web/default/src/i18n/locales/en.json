@@ -5004,7 +5004,7 @@
     "No available customers found.": "No available customers found.",
     "No customers assigned yet.": "No customers assigned yet.",
     "No sales accounts found.": "No sales accounts found.",
-    "Only unassigned regular users are listed.": "Only unassigned regular users are listed.",
+    "Only regular users not yet assigned to this sales account are listed.": "Only regular users not yet assigned to this sales account are listed.",
     "Remove customer": "Remove customer",
     "Remove customer \"{{name}}\" from this sales account? Sales access to the customer logs will be revoked immediately.": "Remove customer \"{{name}}\" from this sales account? Sales access to the customer logs will be revoked immediately.",
     "Remove customer assignment": "Remove customer assignment",

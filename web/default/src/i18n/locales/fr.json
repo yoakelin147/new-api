@@ -5004,7 +5004,7 @@
     "No available customers found.": "Aucun client disponible trouvé.",
     "No customers assigned yet.": "Aucun client attribué pour le moment.",
     "No sales accounts found.": "Aucun compte commercial trouvé.",
-    "Only unassigned regular users are listed.": "Seuls les utilisateurs standards non attribués sont affichés.",
+    "Only regular users not yet assigned to this sales account are listed.": "Seuls les utilisateurs standards qui ne sont pas encore attribués à ce compte commercial sont affichés.",
     "Remove customer": "Retirer le client",
     "Remove customer \"{{name}}\" from this sales account? Sales access to the customer logs will be revoked immediately.": "Retirer le client « {{name}} » de ce compte commercial ? L’accès à ses journaux sera immédiatement révoqué.",
     "Remove customer assignment": "Retirer l’attribution du client",

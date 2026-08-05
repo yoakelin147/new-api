@@ -47,11 +47,13 @@ export async function getSalesCustomers(
 }
 
 export async function getAvailableSalesCustomers(
+  salesUserId: number,
   keyword = '',
   page = 1,
   pageSize = 5
 ) {
   const params = new URLSearchParams({
+    manager_user_id: String(salesUserId),
     keyword,
     p: String(page),
     page_size: String(pageSize),
