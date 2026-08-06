@@ -198,6 +198,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		addUsedChannel(c, channel.Id)
+		if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
+			newAPIError = billingErr
+			break
+		}
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
 		if bodyErr != nil {
 			// Ensure consistent 413 for oversized bodies even when error occurs later (e.g., retry path)
@@ -560,6 +564,10 @@ func RelayTask(c *gin.Context) {
 		}
 
 		addUsedChannel(c, channel.Id)
+		if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
+			taskErr = service.TaskErrorFromAPIError(billingErr)
+			break
+		}
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
 		if bodyErr != nil {
 			if common.IsRequestBodyTooLargeError(bodyErr) || errors.Is(bodyErr, common.ErrRequestBodyTooLarge) {

@@ -205,6 +205,11 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == operation_setting.ToolPriceOptionKey {
+		if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
+			return err
+		}
+	}
 	// Save to database first
 	option := Option{
 		Key: key,
@@ -228,6 +233,13 @@ func UpdateOption(key string, value string) error {
 func UpdateOptionsBulk(values map[string]string) error {
 	if len(values) == 0 {
 		return nil
+	}
+	for key, value := range values {
+		if key == operation_setting.ToolPriceOptionKey {
+			if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
+				return err
+			}
+		}
 	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		for k, v := range values {
@@ -254,6 +266,16 @@ func UpdateOptionsBulk(values map[string]string) error {
 }
 
 func updateOptionMap(key string, value string) (err error) {
+	if key == operation_setting.ToolPriceOptionKey {
+		if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
+			return err
+		}
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap[key] = value
+		common.OptionMapRWMutex.Unlock()
+		operation_setting.LoadToolPricesFromJSONString(value)
+		return nil
+	}
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
 	common.OptionMap[key] = value

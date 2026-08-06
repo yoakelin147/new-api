@@ -30,6 +30,10 @@ import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 import { api, getSelf } from '@/lib/api'
 import { OAuthCallbackScreen } from '@/features/auth/components/oauth-callback-screen'
 import { OAUTH_BIND_STORAGE_KEY } from '@/features/auth/constants'
+import {
+  getOAuthSessionStorage,
+  resolveOAuthCallbackMode,
+} from '@/features/auth/lib/oauth-callback-mode'
 
 type OAuthRequestConfig = AxiosRequestConfig & {
   skipBusinessError?: boolean
@@ -45,16 +49,13 @@ function OAuthCallback() {
     state?: string
     redirect?: string
   }
-  const [mode, setMode] = useState<'login' | 'bind'>(() => {
+  const [mode] = useState<'login' | 'bind'>(() => {
     if (typeof window === 'undefined') return 'login'
-    return window.opener ? 'bind' : 'login'
+    return resolveOAuthCallbackMode(provider, search.state ?? '', {
+      opener: window.opener,
+      storage: getOAuthSessionStorage(window),
+    })
   })
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMode(window.opener ? 'bind' : 'login')
-  }, [])
 
   useEffect(() => {
     ;(async () => {
@@ -82,13 +83,7 @@ function OAuthCallback() {
         safeNavigate('/sign-in')
         return
       }
-      const isBindingFlow =
-        typeof window !== 'undefined' ? Boolean(window.opener) : mode === 'bind'
-      if (isBindingFlow && mode !== 'bind') {
-        setMode('bind')
-      } else if (!isBindingFlow && mode !== 'login') {
-        setMode('login')
-      }
+      const isBindingFlow = mode === 'bind'
       const notifyBindingResult = (status: 'success' | 'error') => {
         if (typeof window === 'undefined') return
         try {

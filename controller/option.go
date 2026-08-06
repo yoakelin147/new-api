@@ -228,6 +228,11 @@ func UpdateOption(c *gin.Context) {
 		}
 	}
 	switch option.Key {
+	case operation_setting.ToolPriceOptionKey:
+		if err := operation_setting.ValidateToolPricesJSON(option.Value.(string)); err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && common.GitHubClientId == "" {
 			c.JSON(http.StatusOK, gin.H{

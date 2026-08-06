@@ -16,6 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import {
+  getOAuthSessionStorage,
+  markOAuthBindPopup,
+} from '@/features/auth/lib/oauth-callback-mode'
+import type { CustomOAuthProviderInfo } from '@/features/auth/types'
 import { api } from './api'
 
 // ============================================================================
@@ -96,6 +101,17 @@ export async function getOAuthState(): Promise<string | null> {
   }
 }
 
+function openOAuthBindPopup(provider: string, state: string, url: string) {
+  const popup = window.open('', '_blank')
+  if (!popup) return false
+  if (!markOAuthBindPopup(getOAuthSessionStorage(popup), provider, state)) {
+    popup.close()
+    return false
+  }
+  popup.location.replace(url)
+  return true
+}
+
 /**
  * Handle GitHub OAuth binding/login
  */
@@ -104,7 +120,7 @@ export async function handleGitHubOAuth(clientId: string): Promise<void> {
   if (!state) return
 
   const url = buildGitHubOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+  openOAuthBindPopup('github', state, url)
 }
 
 /**
@@ -115,7 +131,7 @@ export async function handleDiscordOAuth(clientId: string): Promise<void> {
   if (!state) return
 
   const url = buildDiscordOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+  openOAuthBindPopup('discord', state, url)
 }
 
 /**
@@ -129,7 +145,7 @@ export async function handleOIDCOAuth(
   if (!state) return
 
   const url = buildOIDCOAuthUrl(authUrl, clientId, state)
-  window.open(url, '_blank')
+  openOAuthBindPopup('oidc', state, url)
 }
 
 /**
@@ -140,5 +156,23 @@ export async function handleLinuxDOOAuth(clientId: string): Promise<void> {
   if (!state) return
 
   const url = buildLinuxDOOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+  openOAuthBindPopup('linuxdo', state, url)
+}
+
+export async function handleCustomOAuthBinding(
+  provider: CustomOAuthProviderInfo
+): Promise<void> {
+  const state = await getOAuthState()
+  if (!state || !provider.authorization_endpoint || !provider.client_id) return
+
+  const url = new URL(provider.authorization_endpoint)
+  url.searchParams.set('client_id', provider.client_id)
+  url.searchParams.set(
+    'redirect_uri',
+    `${window.location.origin}/oauth/${provider.slug}`
+  )
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('state', state)
+  if (provider.scopes) url.searchParams.set('scope', provider.scopes)
+  openOAuthBindPopup(provider.slug, state, url.toString())
 }

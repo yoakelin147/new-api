@@ -9,8 +9,56 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 )
+
+type tieredBillingRecorder struct {
+	preConsumed int
+	reserved    []int
+}
+
+func (r *tieredBillingRecorder) Settle(int) error         { return nil }
+func (r *tieredBillingRecorder) Refund(*gin.Context)      {}
+func (r *tieredBillingRecorder) NeedsRefund() bool        { return false }
+func (r *tieredBillingRecorder) GetPreConsumedQuota() int { return r.preConsumed }
+func (r *tieredBillingRecorder) Reserve(quota int) error {
+	r.reserved = append(r.reserved, quota)
+	if quota > r.preConsumed {
+		r.preConsumed = quota
+	}
+	return nil
+}
+
+func TestPrepareTieredBillingForSelectedGroupRefreshesReservation(t *testing.T) {
+	expr := `tier("base", p)`
+	recorder := &tieredBillingRecorder{preConsumed: 50_000}
+	info := &relaycommon.RelayInfo{
+		Billing:               recorder,
+		FinalPreConsumedQuota: 50_000,
+		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
+			BillingMode:               "tiered_expr",
+			ExprString:                expr,
+			ExprHash:                  billingexpr.ExprHashString(expr),
+			GroupRatio:                0.1,
+			EstimatedQuotaBeforeGroup: 500_000,
+			EstimatedQuotaAfterGroup:  50_000,
+			QuotaPerUnit:              testQuotaPerUnit,
+		},
+		PriceData: types.PriceData{GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 0.2}},
+	}
+
+	if err := PrepareTieredBillingForSelectedGroup(nil, info); err != nil {
+		t.Fatalf("prepare tiered billing: %v", err)
+	}
+	if got := info.TieredBillingSnapshot.EstimatedQuotaAfterGroup; got != 100_000 {
+		t.Fatalf("estimated quota = %d, want 100000", got)
+	}
+	if got := recorder.reserved; len(got) != 1 || got[0] != 100_000 {
+		t.Fatalf("reserve calls = %v, want [100000]", got)
+	}
+}
 
 // Claude Sonnet-style tiered expression: standard vs long-context
 const sonnetTieredExpr = `p <= 200000 ? tier("standard", p * 1.5 + c * 7.5) : tier("long_context", p * 3 + c * 11.25)`

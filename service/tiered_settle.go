@@ -1,13 +1,75 @@
 package service
 
 import (
+	"fmt"
+	"math"
+	"net/http"
+
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 )
 
 // TieredResultWrapper wraps billingexpr.TieredResult for use at the service layer.
 type TieredResultWrapper = billingexpr.TieredResult
+
+func refreshTieredBillingGroup(relayInfo *relaycommon.RelayInfo) *billingexpr.BillingSnapshot {
+	if relayInfo == nil {
+		return nil
+	}
+	snapshot := relayInfo.TieredBillingSnapshot
+	if snapshot == nil || snapshot.BillingMode != "tiered_expr" {
+		return nil
+	}
+
+	groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
+	if snapshot.GroupRatio == groupRatio {
+		return snapshot
+	}
+
+	estimatedQuota, clamp := common.QuotaRoundChecked(snapshot.EstimatedQuotaBeforeGroup * groupRatio)
+	noteQuotaClamp(relayInfo, clamp)
+	snapshot.GroupRatio = groupRatio
+	snapshot.EstimatedQuotaAfterGroup = estimatedQuota
+	return snapshot
+}
+
+// PrepareTieredBillingForSelectedGroup refreshes the routing-dependent part
+// of a frozen tiered-billing snapshot before each upstream attempt. A switch
+// to a more expensive group reserves the difference before the request is
+// sent; a switch from an initially free group starts a billing session.
+func PrepareTieredBillingForSelectedGroup(c *gin.Context, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
+	if relayInfo != nil {
+		groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
+		if groupRatio < 0 || math.IsNaN(groupRatio) || math.IsInf(groupRatio, 0) {
+			return types.NewErrorWithStatusCode(
+				fmt.Errorf("invalid group ratio %v", groupRatio),
+				types.ErrorCodeModelPriceError,
+				http.StatusBadRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+	}
+	snapshot := refreshTieredBillingGroup(relayInfo)
+	if snapshot == nil || snapshot.GroupRatio == 0 {
+		return nil
+	}
+
+	// FreeModel only means that pre-consume was skipped for the initially
+	// selected group. It must not survive a later switch to a paid group.
+	relayInfo.PriceData.FreeModel = false
+	if relayInfo.Billing == nil {
+		return PreConsumeBilling(c, snapshot.EstimatedQuotaAfterGroup, relayInfo)
+	}
+	if err := relayInfo.Billing.Reserve(snapshot.EstimatedQuotaAfterGroup); err != nil {
+		return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+	}
+	relayInfo.FinalPreConsumedQuota = relayInfo.Billing.GetPreConsumedQuota()
+	return nil
+}
 
 // BuildTieredTokenParams constructs billingexpr.TokenParams from a dto.Usage,
 // normalizing P and C so they mean "tokens not separately priced by the
