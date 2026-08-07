@@ -76,6 +76,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DataFreshnessIndicator } from '@/components/data-freshness-indicator'
 import { StaticDataTable } from '@/components/data-table/static/static-data-table'
 import { Main } from '@/components/layout'
 import { SearchableSubjectSelect } from '@/components/searchable-subject-select'
@@ -1410,6 +1411,8 @@ export function CostStatistics() {
     queryKey: ['managed-log-users'],
     queryFn: getManagedLogUsers,
     enabled: isSales,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   })
 
   const updateExportRecords = (records: ExportRecord[]) => {
@@ -1417,32 +1420,38 @@ export function CostStatistics() {
     storeExportRecords(records)
   }
 
-  const { data, isLoading, isFetching, isPlaceholderData } = useQuery({
-    queryKey: [
-      'cost-statistics',
-      isAdmin,
-      subject,
-      page,
-      filters,
-      searchVersion,
-      t,
-    ],
-    queryFn: async () => {
-      const result = await getCostStatistics({
+  const { data, isLoading, isFetching, isPlaceholderData, dataUpdatedAt } =
+    useQuery({
+      queryKey: [
+        'cost-statistics',
         isAdmin,
-        page,
-        pageSize: DEFAULT_PAGE_SIZE,
-        filters,
         subject,
-      })
-      if (!result.success) {
-        toast.error(result.message || t('Failed to load cost statistics'))
-        return DEFAULT_DATA
-      }
-      return result.data || DEFAULT_DATA
-    },
-    placeholderData: (previousData) => previousData,
-  })
+        page,
+        filters,
+        searchVersion,
+        t,
+      ],
+      queryFn: async () => {
+        const result = await getCostStatistics({
+          isAdmin,
+          page,
+          pageSize: DEFAULT_PAGE_SIZE,
+          filters,
+          subject,
+        })
+        if (!result.success) {
+          toast.error(result.message || t('Failed to load cost statistics'))
+          return DEFAULT_DATA
+        }
+        return result.data || DEFAULT_DATA
+      },
+      placeholderData: (previousData) => previousData,
+      refetchOnMount: true,
+      refetchOnReconnect: false,
+      refetchOnWindowFocus: false,
+      gcTime: 2 * 60 * 1000,
+      staleTime: 2 * 60 * 1000,
+    })
 
   const stats = data || DEFAULT_DATA
   const loadingContent = isLoading || isPlaceholderData
@@ -1698,6 +1707,7 @@ export function CostStatistics() {
                     value={formatNumber(stats.summary.request_count)}
                     loading={loadingContent}
                   />
+                  <DataFreshnessIndicator updatedAt={dataUpdatedAt} />
                 </div>
               </div>
 

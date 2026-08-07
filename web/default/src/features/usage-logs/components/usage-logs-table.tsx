@@ -110,7 +110,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ],
   })
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, dataUpdatedAt } = useQuery({
     queryKey: [
       'logs',
       logCategory,
@@ -148,6 +148,11 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       return undefined
     },
+    refetchOnMount: true,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+    gcTime: 2 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
   })
 
   const logs = data?.items || []
@@ -200,7 +205,11 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         isCommon ? (
           <CommonLogsFilterBar table={table} />
         ) : (
-          <TaskLogsFilterBar table={table} logCategory={logCategory} />
+          <TaskLogsFilterBar
+            table={table}
+            logCategory={logCategory}
+            dataUpdatedAt={dataUpdatedAt}
+          />
         )
       }
       renderRow={(row) => {

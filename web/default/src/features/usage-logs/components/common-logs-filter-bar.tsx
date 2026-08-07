@@ -83,6 +83,8 @@ export function CommonLogsFilterBar<TData>(
     queryKey: ['managed-log-users'],
     queryFn: getManagedLogUsers,
     enabled: isSales,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   })
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
 
@@ -94,6 +96,8 @@ export function CommonLogsFilterBar<TData>(
 
   useEffect(() => {
     const { start, end } = getDefaultTimeRange()
+    // Route navigation is the source of truth for the applied filter state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFilters({
       startTime: searchParams.startTime
         ? new Date(searchParams.startTime)

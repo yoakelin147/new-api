@@ -81,6 +81,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DataFreshnessIndicator } from '@/components/data-freshness-indicator'
 import { StaticDataTable } from '@/components/data-table/static/static-data-table'
 import { Main } from '@/components/layout'
 import { getChannels, getGroups } from '@/features/channels/api'
@@ -1355,6 +1356,7 @@ function RatioSettingsDialog(props: {
 export function ProfitStatistics() {
   const { t } = useTranslation()
   const [page, setPage] = useState(1)
+  const [searchVersion, setSearchVersion] = useState(0)
   const [draftFilters, setDraftFilters] = useState(defaultFilters)
   const [filters, setFilters] = useState(defaultFilters)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -1366,20 +1368,26 @@ export function ProfitStatistics() {
     queryKey: ['profit-statistics', 'filter-channels'],
     queryFn: () => getChannels({ p: 0, page_size: 1000, id_sort: true }),
     staleTime: 300_000,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   })
   const { data: filterGroupsResponse } = useQuery({
     queryKey: ['profit-statistics', 'filter-groups'],
     queryFn: getGroups,
     staleTime: 300_000,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   })
   const { data: filterUsersResponse } = useQuery({
     queryKey: ['profit-statistics', 'filter-users'],
     queryFn: () => getUsers({ p: 1, page_size: 1000 }),
     staleTime: 300_000,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   })
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['profit-statistics', page, filters],
+  const { data, isLoading, isFetching, dataUpdatedAt } = useQuery({
+    queryKey: ['profit-statistics', page, filters, searchVersion, t],
     queryFn: async () => {
       const result = await getProfitStatistics({
         page,
@@ -1393,6 +1401,11 @@ export function ProfitStatistics() {
       return result.data || DEFAULT_DATA
     },
     placeholderData: (previousData) => previousData,
+    refetchOnMount: true,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+    gcTime: 2 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
   })
 
   const stats = data || DEFAULT_DATA
@@ -1493,6 +1506,7 @@ export function ProfitStatistics() {
   const applyFilters = () => {
     setPage(1)
     setFilters({ ...draftFilters })
+    setSearchVersion((value) => value + 1)
   }
 
   const resetFilters = () => {
@@ -1500,6 +1514,7 @@ export function ProfitStatistics() {
     setPage(1)
     setDraftFilters(next)
     setFilters(next)
+    setSearchVersion((value) => value + 1)
   }
 
   const handleExportXlsx = async () => {
@@ -1665,6 +1680,7 @@ export function ProfitStatistics() {
                   value={formatNumber(stats.summary.request_count)}
                   loading={loadingContent}
                 />
+                <DataFreshnessIndicator updatedAt={dataUpdatedAt} />
               </div>
               <div className='flex flex-wrap justify-start gap-2 lg:justify-end'>
                 <Button

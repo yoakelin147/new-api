@@ -24,6 +24,7 @@ import { formatLogQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DataFreshnessIndicator } from '@/components/data-freshness-indicator'
 import { getLogStats, getManagedLogStats, getUserLogStats } from '../api'
 import { DEFAULT_LOG_STATS } from '../constants'
 import { buildApiParams } from '../lib/utils'
@@ -54,7 +55,11 @@ export function CommonLogsStats() {
   const searchParams = route.useSearch()
   const { sensitiveVisible, logSubject } = useUsageLogsContext()
 
-  const { data: stats, isLoading } = useQuery({
+  const {
+    data: stats,
+    isLoading,
+    dataUpdatedAt,
+  } = useQuery({
     queryKey: [
       'usage-logs-stats',
       isAdmin,
@@ -89,6 +94,11 @@ export function CommonLogsStats() {
         : DEFAULT_LOG_STATS
     },
     placeholderData: (previousData) => previousData,
+    refetchOnMount: true,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+    gcTime: 2 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
   })
 
   if (isLoading) {
@@ -118,6 +128,7 @@ export function CommonLogsStats() {
         value={stats?.tpm || 0}
         accent='bg-slate-400/70'
       />
+      <DataFreshnessIndicator updatedAt={dataUpdatedAt} />
     </div>
   )
 }

@@ -22,6 +22,7 @@ import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { type Table } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 import { useIsAdmin } from '@/hooks/use-admin'
+import { DataFreshnessIndicator } from '@/components/data-freshness-indicator'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { DrawingLogFilters, LogCategory, TaskLogFilters } from '../types'
@@ -40,6 +41,7 @@ type TaskLogsFilters = DrawingLogFilters | TaskLogFilters
 interface TaskLogsFilterBarProps<TData> {
   table: Table<TData>
   logCategory: TaskLikeLogCategory
+  dataUpdatedAt?: number
 }
 
 function getFilterValue(
@@ -98,6 +100,8 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
             ...(searchParams.filter ? { taskId: searchParams.filter } : {}),
           }
 
+    // Route navigation is the source of truth for the applied filter state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFilters(next)
   }, [
     props.logCategory,
@@ -201,6 +205,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   return (
     <LogsFilterToolbar
       table={props.table}
+      stats={<DataFreshnessIndicator updatedAt={props.dataUpdatedAt} />}
       primaryFilters={
         <>
           {dateRangeFilter}
