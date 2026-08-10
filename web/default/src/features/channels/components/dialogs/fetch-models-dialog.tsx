@@ -40,6 +40,7 @@ import { Dialog } from '@/components/dialog'
 import { fetchUpstreamModels, updateChannel } from '../../api'
 import {
   channelsQueryKeys,
+  categorizeModels,
   categorizeModelsWithRedirect,
   normalizeModelName,
   parseModelsString,
@@ -200,45 +201,6 @@ export function FetchModelsDialog({
     onOpenChange(false)
   }
 
-  // Categorize models by common prefixes
-  const categorizeModels = (models: string[]) => {
-    const categories: Record<string, string[]> = {}
-
-    models.forEach((model) => {
-      let category = 'Other'
-
-      // Determine category based on model name
-      if (
-        model.toLowerCase().includes('gpt') ||
-        model.toLowerCase().includes('o1') ||
-        model.toLowerCase().includes('o3')
-      ) {
-        category = 'OpenAI'
-      } else if (model.toLowerCase().includes('claude')) {
-        category = 'Anthropic'
-      } else if (model.toLowerCase().includes('gemini')) {
-        category = 'Gemini'
-      } else if (model.toLowerCase().includes('qwen')) {
-        category = 'Qwen'
-      } else if (model.toLowerCase().includes('deepseek')) {
-        category = 'DeepSeek'
-      } else if (model.toLowerCase().includes('glm')) {
-        category = 'Zhipu'
-      } else if (model.toLowerCase().includes('llama')) {
-        category = 'Meta'
-      } else if (model.toLowerCase().includes('mistral')) {
-        category = 'Mistral'
-      }
-
-      if (!categories[category]) {
-        categories[category] = []
-      }
-      categories[category].push(model)
-    })
-
-    return categories
-  }
-
   // Filter models by search
   const filteredModels = useMemo(() => {
     if (!searchKeyword) return fetchedModels
@@ -257,8 +219,14 @@ export function FetchModelsDialog({
     isExistingModel(m)
   )
 
-  const newModelsByCategory = categorizeModels(newModels)
-  const existingModelsByCategory = categorizeModels(existingFilteredModels)
+  const newModelsByCategory = useMemo(
+    () => categorizeModels(newModels),
+    [newModels]
+  )
+  const existingModelsByCategory = useMemo(
+    () => categorizeModels(existingFilteredModels),
+    [existingFilteredModels]
+  )
 
   // 厂商分类按 a-z 排序，Other 放最后，便于查找
   const getSortedCategoryEntries = (

@@ -79,6 +79,22 @@ func (user *User) SetAccessToken(token string) {
 	user.AccessToken = &token
 }
 
+// UpdateUserAccessToken rotates only the personal access token so concurrent
+// quota or profile updates cannot be overwritten by a stale user snapshot.
+func UpdateUserAccessToken(id int, token string) error {
+	if id == 0 {
+		return errors.New("id 为空！")
+	}
+	result := DB.Model(&User{}).Where("id = ?", id).Update("access_token", token)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func (user *User) GetSetting() dto.UserSetting {
 	setting := dto.UserSetting{}
 	if user.Setting != "" {
@@ -368,15 +384,19 @@ func HardDeleteUserById(id int) error {
 	return nil
 }
 
-func inviteUser(inviterId int) (err error) {
-	user, err := GetUserById(inviterId, true)
-	if err != nil {
-		return err
+func inviteUser(inviterId int) error {
+	result := DB.Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
+		"aff_count":   gorm.Expr("aff_count + ?", 1),
+		"aff_quota":   gorm.Expr("aff_quota + ?", common.QuotaForInviter),
+		"aff_history": gorm.Expr("aff_history + ?", common.QuotaForInviter),
+	})
+	if result.Error != nil {
+		return result.Error
 	}
-	user.AffCount++
-	user.AffQuota += common.QuotaForInviter
-	user.AffHistoryQuota += common.QuotaForInviter
-	return DB.Save(user).Error
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (user *User) TransferAffQuotaToQuota(quota int) error {
@@ -540,8 +560,18 @@ func (user *User) Update(updatePassword bool) error {
 		}
 	}
 	newUser := *user
-	DB.First(&user, user.Id)
-	if err = DB.Model(user).Updates(newUser).Error; err != nil {
+	if err = DB.First(user, user.Id).Error; err != nil {
+		return err
+	}
+	if err = DB.Model(user).Omit(
+		"access_token",
+		"quota",
+		"used_quota",
+		"request_count",
+		"aff_count",
+		"aff_quota",
+		"aff_history",
+	).Updates(newUser).Error; err != nil {
 		return err
 	}
 

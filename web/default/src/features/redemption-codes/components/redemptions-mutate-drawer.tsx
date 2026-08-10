@@ -22,6 +22,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
+import { getEditableQuotaStep } from '@/lib/format'
 import { addTimeToDate } from '@/lib/time'
 import { Button } from '@/components/ui/button'
 import {
@@ -76,8 +77,13 @@ export function RedemptionsMutateDrawer({
 }: RedemptionsMutateDrawerProps) {
   const { t } = useTranslation()
   const isUpdate = !!currentRow
+  const redemptionId = currentRow?.id
   const { triggerRefresh } = useRedemptions()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loadedRedemption, setLoadedRedemption] = useState<Redemption | null>(
+    null
+  )
+  const [isLoadingRedemption, setIsLoadingRedemption] = useState(false)
 
   const form = useForm<RedemptionFormValues>({
     resolver: zodResolver(getRedemptionFormSchema(t)),
@@ -86,27 +92,60 @@ export function RedemptionsMutateDrawer({
 
   // Load existing data when updating
   useEffect(() => {
-    if (open && isUpdate && currentRow) {
-      // For update, fetch fresh data
-      getRedemption(currentRow.id).then((result) => {
-        if (result.success && result.data) {
-          form.reset(transformRedemptionToFormDefaults(result.data))
-        }
-      })
-    } else if (open && !isUpdate) {
-      // For create, reset to defaults
-      form.reset(REDEMPTION_FORM_DEFAULT_VALUES)
+    if (!open) {
+      setLoadedRedemption(null)
+      setIsLoadingRedemption(false)
+      return
     }
-  }, [open, isUpdate, currentRow, form])
+    if (!isUpdate || redemptionId === undefined) {
+      form.reset(REDEMPTION_FORM_DEFAULT_VALUES)
+      setLoadedRedemption(null)
+      setIsLoadingRedemption(false)
+      return
+    }
+
+    let ignoreResult = false
+    setLoadedRedemption(null)
+    setIsLoadingRedemption(true)
+    void getRedemption(redemptionId)
+      .then((result) => {
+        if (ignoreResult) return
+        if (result.success && result.data?.id === redemptionId) {
+          form.reset(transformRedemptionToFormDefaults(result.data))
+          setLoadedRedemption(result.data)
+        } else {
+          toast.error(t('Failed to load'))
+        }
+        setIsLoadingRedemption(false)
+      })
+      .catch(() => {
+        if (ignoreResult) return
+        setIsLoadingRedemption(false)
+        toast.error(t('Failed to load'))
+      })
+    return () => {
+      ignoreResult = true
+    }
+  }, [open, isUpdate, redemptionId, form, t])
+
+  const isUpdateReady =
+    !isUpdate || (!isLoadingRedemption && loadedRedemption?.id === redemptionId)
 
   const onSubmit = async (data: RedemptionFormValues) => {
+    if (isUpdate && (!currentRow || !loadedRedemption || !isUpdateReady)) {
+      return
+    }
     setIsSubmitting(true)
     try {
       const basePayload = transformFormDataToPayload(data)
 
       if (isUpdate && currentRow) {
+        const quota = form.getFieldState('quota_dollars').isDirty
+          ? basePayload.quota
+          : (loadedRedemption?.quota ?? basePayload.quota)
         const result = await updateRedemption({
           ...basePayload,
+          quota,
           id: currentRow.id,
         })
         if (result.success) {
@@ -143,6 +182,7 @@ export function RedemptionsMutateDrawer({
   const { meta: currencyMeta } = getCurrencyDisplay()
   const currencyLabel = getCurrencyLabel()
   const tokensOnly = currencyMeta.kind === 'tokens'
+  const quotaStep = getEditableQuotaStep()
   const quotaLabel = t('Quota ({{currency}})', { currency: currencyLabel })
   const quotaPlaceholder = tokensOnly
     ? t('Enter quota in tokens')
@@ -179,6 +219,7 @@ export function RedemptionsMutateDrawer({
             id='redemption-form'
             onSubmit={form.handleSubmit(onSubmit)}
             className={sideDrawerFormClassName()}
+            aria-busy={isLoadingRedemption}
           >
             <SideDrawerSection>
               <FormField
@@ -208,7 +249,7 @@ export function RedemptionsMutateDrawer({
                       <Input
                         {...field}
                         type='number'
-                        step={tokensOnly ? 1 : 0.01}
+                        step={quotaStep}
                         placeholder={quotaPlaceholder}
                         onChange={(e) =>
                           field.onChange(parseFloat(e.target.value) || 0)
@@ -318,8 +359,16 @@ export function RedemptionsMutateDrawer({
           <SheetClose render={<Button variant='outline' />}>
             {t('Close')}
           </SheetClose>
-          <Button form='redemption-form' type='submit' disabled={isSubmitting}>
-            {isSubmitting ? t('Saving...') : t('Save changes')}
+          <Button
+            form='redemption-form'
+            type='submit'
+            disabled={isSubmitting || !isUpdateReady}
+          >
+            {isLoadingRedemption
+              ? t('Loading...')
+              : isSubmitting
+                ? t('Saving...')
+                : t('Save changes')}
           </Button>
         </SheetFooter>
       </SheetContent>
