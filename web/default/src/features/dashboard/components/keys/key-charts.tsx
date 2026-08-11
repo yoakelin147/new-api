@@ -30,19 +30,16 @@ import {
   Coins,
   Check,
   ChevronsUpDown,
-  Filter,
   KeyRound,
   Loader2,
   MousePointerClick,
-  RotateCcw,
   Users,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { formatNumber, formatQuota, formatTokens } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
-import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
+import type { TimeGranularity } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
@@ -63,8 +60,6 @@ import {
 } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { DateTimePicker } from '@/components/datetime-picker'
-import { Dialog } from '@/components/dialog'
 import {
   getUserQuotaDataByTokens,
   getUserQuotaDataByUserTokens,
@@ -73,15 +68,13 @@ import {
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
 } from '@/features/dashboard/constants'
-import {
-  getDefaultDays,
-  getSavedGranularity,
-  saveGranularity,
-  processTokenChartData,
-} from '@/features/dashboard/lib'
+import { processTokenChartData } from '@/features/dashboard/lib'
 import type { ProcessedTokenChartData } from '@/features/dashboard/types'
 import { getUsers, searchUsers } from '@/features/users/api'
 import type { User } from '@/features/users/types'
+import { StatisticsTimeFilterDialog } from '../statistics-time-filter-dialog'
+import { CUSTOM_STATISTICS_RANGE_VALUE } from '../statistics-time-range'
+import { useStatisticsTimeRange } from '../use-statistics-time-range'
 
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
@@ -120,25 +113,6 @@ const TOKEN_CHARTS: {
 ]
 
 const TOP_TOKEN_LIMIT_OPTIONS = [5, 10, 20, 50]
-const MAX_ADMIN_CUSTOM_RANGE_SECONDS = 183 * 24 * 60 * 60
-const CUSTOM_RANGE_TAB_VALUE = 'custom'
-
-function getDefaultTokenTimeRange(granularity: TimeGranularity) {
-  const days = getDefaultDays(granularity)
-  const { start, end } = getRollingDateRange(days)
-  return {
-    start_timestamp: Math.floor(start.getTime() / 1000),
-    end_timestamp: Math.floor(end.getTime() / 1000),
-  }
-}
-
-function dateToTimestamp(date?: Date) {
-  return date ? Math.floor(date.getTime() / 1000) : undefined
-}
-
-function timestampToDate(timestamp?: number) {
-  return timestamp ? new Date(timestamp * 1000) : undefined
-}
 
 export function KeyCharts() {
   const { t } = useTranslation()
@@ -151,81 +125,12 @@ export function KeyCharts() {
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
   const [userSelectorOpen, setUserSelectorOpen] = useState(false)
-  const [filterOpen, setFilterOpen] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState('')
   const [userKeyword, setUserKeyword] = useState('')
   const deferredUserKeyword = useDeferredValue(userKeyword)
 
-  const [timeGranularity, setTimeGranularity] = useState<TimeGranularity>(() =>
-    getSavedGranularity()
-  )
-  const [selectedRange, setSelectedRange] = useState<number | null>(() =>
-    getDefaultDays(timeGranularity)
-  )
+  const statisticsTime = useStatisticsTimeRange()
   const [topTokenLimit, setTopTokenLimit] = useState(10)
-  const [timeRange, setTimeRange] = useState(() =>
-    getDefaultTokenTimeRange(timeGranularity)
-  )
-  const [draftRange, setDraftRange] = useState(() => timeRange)
-
-  const handleRangeChange = useCallback((days: number) => {
-    setSelectedRange(days)
-    const { start, end } = getRollingDateRange(days)
-    setTimeRange({
-      start_timestamp: Math.floor(start.getTime() / 1000),
-      end_timestamp: Math.floor(end.getTime() / 1000),
-    })
-  }, [])
-
-  const handleFilterOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (nextOpen) {
-        setDraftRange(timeRange)
-      }
-      setFilterOpen(nextOpen)
-    },
-    [timeRange]
-  )
-
-  const handleApplyFilter = useCallback(() => {
-    if (draftRange.end_timestamp < draftRange.start_timestamp) {
-      toast.error(t('End time must be later than start time'))
-      return
-    }
-    if (
-      draftRange.end_timestamp - draftRange.start_timestamp >
-      MAX_ADMIN_CUSTOM_RANGE_SECONDS
-    ) {
-      toast.error(t('Time range cannot exceed 183 days'))
-      return
-    }
-    setTimeRange(draftRange)
-    setSelectedRange(null)
-    setFilterOpen(false)
-  }, [draftRange, t])
-
-  const handleResetFilter = useCallback(() => {
-    const nextRange = getDefaultTokenTimeRange(timeGranularity)
-    setDraftRange(nextRange)
-    setTimeRange(nextRange)
-    setSelectedRange(getDefaultDays(timeGranularity))
-    setFilterOpen(false)
-  }, [timeGranularity])
-
-  const handleGranularityChange = useCallback(
-    (g: TimeGranularity) => {
-      setTimeGranularity(g)
-      saveGranularity(g)
-      if (selectedRange === null) {
-        return
-      }
-      const days = getDefaultDays(g)
-      if (days !== selectedRange) {
-        handleRangeChange(days)
-      }
-    },
-    [selectedRange, handleRangeChange]
-  )
 
   useEffect(() => {
     const updateTheme = async () => {
@@ -305,16 +210,16 @@ export function KeyCharts() {
     queryKey: [
       'dashboard',
       'token-quota',
-      timeRange,
+      statisticsTime.timeRange,
       isAdmin ? effectiveUserId : 'self',
     ],
     queryFn: () =>
       isAdmin
         ? getUserQuotaDataByUserTokens({
-            ...timeRange,
+            ...statisticsTime.timeRange,
             user_id: effectiveUserId,
           })
-        : getUserQuotaDataByTokens(timeRange),
+        : getUserQuotaDataByTokens(statisticsTime.timeRange),
     select: (res) => (res.success ? res.data : []),
     staleTime: 60_000,
     enabled: !isAdmin || effectiveUserId > 0,
@@ -324,7 +229,7 @@ export function KeyCharts() {
     () =>
       processTokenChartData(
         isLoading ? [] : (tokenData ?? []),
-        timeGranularity,
+        statisticsTime.timeGranularity,
         t,
         topTokenLimit,
         customization.preset
@@ -332,7 +237,7 @@ export function KeyCharts() {
     [
       tokenData,
       isLoading,
-      timeGranularity,
+      statisticsTime.timeGranularity,
       t,
       topTokenLimit,
       customization.preset,
@@ -379,20 +284,20 @@ export function KeyCharts() {
       <div className='flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2'>
         <Tabs
           value={
-            selectedRange === null
-              ? CUSTOM_RANGE_TAB_VALUE
-              : String(selectedRange)
+            statisticsTime.selectedRange === null
+              ? CUSTOM_STATISTICS_RANGE_VALUE
+              : String(statisticsTime.selectedRange)
           }
           onValueChange={(value) => {
-            if (value !== CUSTOM_RANGE_TAB_VALUE) {
-              handleRangeChange(Number(value))
+            if (value !== CUSTOM_STATISTICS_RANGE_VALUE) {
+              statisticsTime.handleRangeChange(Number(value))
             }
           }}
           className='shrink-0'
         >
           <TabsList>
             <TabsTrigger
-              value={CUSTOM_RANGE_TAB_VALUE}
+              value={CUSTOM_STATISTICS_RANGE_VALUE}
               className='hidden'
               tabIndex={-1}
               aria-hidden='true'
@@ -412,9 +317,9 @@ export function KeyCharts() {
         </Tabs>
 
         <Tabs
-          value={timeGranularity}
+          value={statisticsTime.timeGranularity}
           onValueChange={(value) =>
-            handleGranularityChange(value as TimeGranularity)
+            statisticsTime.handleGranularityChange(value as TimeGranularity)
           }
           className='shrink-0'
         >
@@ -453,73 +358,11 @@ export function KeyCharts() {
         </Tabs>
 
         {isAdmin && (
-          <Dialog
-            open={filterOpen}
-            onOpenChange={handleFilterOpenChange}
-            trigger={
-              <Button variant='outline' size='sm' className='shrink-0'>
-                <Filter data-icon='inline-start' />
-                {t('Filter')}
-              </Button>
-            }
+          <StatisticsTimeFilterDialog
+            state={statisticsTime}
             title={t('API Key Statistics Filters')}
             description={t('Filter API key statistics by custom time range.')}
-            contentClassName='sm:max-w-lg'
-            contentHeight='auto'
-            footerClassName='grid grid-cols-2 gap-2 sm:flex'
-            footer={
-              <>
-                <Button
-                  onClick={handleResetFilter}
-                  variant='outline'
-                  type='button'
-                >
-                  <RotateCcw data-icon='inline-start' />
-                  {t('Reset')}
-                </Button>
-                <Button onClick={handleApplyFilter} type='button'>
-                  <Filter data-icon='inline-start' />
-                  {t('Apply Filters')}
-                </Button>
-              </>
-            }
-          >
-            <div className='flex flex-col gap-3 py-1'>
-              <div className='grid gap-2'>
-                <div className='text-sm font-medium'>{t('Start Time')}</div>
-                <DateTimePicker
-                  value={timestampToDate(draftRange.start_timestamp)}
-                  onChange={(date) => {
-                    const timestamp = dateToTimestamp(date)
-                    if (timestamp !== undefined) {
-                      setDraftRange((prev) => ({
-                        ...prev,
-                        start_timestamp: timestamp,
-                      }))
-                    }
-                  }}
-                  placeholder={t('Select start time')}
-                />
-              </div>
-
-              <div className='grid gap-2'>
-                <div className='text-sm font-medium'>{t('End Time')}</div>
-                <DateTimePicker
-                  value={timestampToDate(draftRange.end_timestamp)}
-                  onChange={(date) => {
-                    const timestamp = dateToTimestamp(date)
-                    if (timestamp !== undefined) {
-                      setDraftRange((prev) => ({
-                        ...prev,
-                        end_timestamp: timestamp,
-                      }))
-                    }
-                  }}
-                  placeholder={t('Select end time')}
-                />
-              </div>
-            </div>
-          </Dialog>
+          />
         )}
 
         {isAdmin && (

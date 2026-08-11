@@ -16,12 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
 import { RadioTower, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
+import type { TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
@@ -32,13 +32,11 @@ import {
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
 } from '@/features/dashboard/constants'
-import {
-  getDefaultDays,
-  getSavedGranularity,
-  saveGranularity,
-  processChannelChartData,
-} from '@/features/dashboard/lib'
+import { processChannelChartData } from '@/features/dashboard/lib'
 import type { ProcessedChannelChartData } from '@/features/dashboard/types'
+import { StatisticsTimeFilterDialog } from '../statistics-time-filter-dialog'
+import { CUSTOM_STATISTICS_RANGE_VALUE } from '../statistics-time-range'
+import { useStatisticsTimeRange } from '../use-statistics-time-range'
 
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
@@ -72,42 +70,8 @@ export function ChannelCharts() {
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
 
-  const [timeGranularity, setTimeGranularity] = useState<TimeGranularity>(() =>
-    getSavedGranularity()
-  )
-  const [selectedRange, setSelectedRange] = useState<number>(() =>
-    getDefaultDays(timeGranularity)
-  )
+  const statisticsTime = useStatisticsTimeRange()
   const [topChannelLimit, setTopChannelLimit] = useState(10)
-  const [timeRange, setTimeRange] = useState(() => {
-    const days = getDefaultDays(timeGranularity)
-    const { start, end } = getRollingDateRange(days)
-    return {
-      start_timestamp: Math.floor(start.getTime() / 1000),
-      end_timestamp: Math.floor(end.getTime() / 1000),
-    }
-  })
-
-  const handleRangeChange = useCallback((days: number) => {
-    setSelectedRange(days)
-    const { start, end } = getRollingDateRange(days)
-    setTimeRange({
-      start_timestamp: Math.floor(start.getTime() / 1000),
-      end_timestamp: Math.floor(end.getTime() / 1000),
-    })
-  }, [])
-
-  const handleGranularityChange = useCallback(
-    (g: TimeGranularity) => {
-      setTimeGranularity(g)
-      saveGranularity(g)
-      const days = getDefaultDays(g)
-      if (days !== selectedRange) {
-        handleRangeChange(days)
-      }
-    },
-    [selectedRange, handleRangeChange]
-  )
 
   useEffect(() => {
     const updateTheme = async () => {
@@ -126,8 +90,8 @@ export function ChannelCharts() {
   }, [resolvedTheme])
 
   const { data: channelData, isLoading } = useQuery({
-    queryKey: ['dashboard', 'channel-quota', timeRange],
-    queryFn: () => getUserQuotaDataByChannels(timeRange),
+    queryKey: ['dashboard', 'channel-quota', statisticsTime.timeRange],
+    queryFn: () => getUserQuotaDataByChannels(statisticsTime.timeRange),
     select: (res) => (res.success ? res.data : []),
     staleTime: 60_000,
   })
@@ -136,7 +100,7 @@ export function ChannelCharts() {
     () =>
       processChannelChartData(
         isLoading ? [] : (channelData ?? []),
-        timeGranularity,
+        statisticsTime.timeGranularity,
         t,
         topChannelLimit,
         customization.preset
@@ -144,11 +108,10 @@ export function ChannelCharts() {
     [
       channelData,
       isLoading,
-      timeGranularity,
+      statisticsTime.timeGranularity,
       t,
       topChannelLimit,
       customization.preset,
-      customization.radius,
     ]
   )
 
@@ -156,11 +119,27 @@ export function ChannelCharts() {
     <div className='flex flex-col gap-3'>
       <div className='flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2'>
         <Tabs
-          value={String(selectedRange)}
-          onValueChange={(value) => handleRangeChange(Number(value))}
+          value={
+            statisticsTime.selectedRange === null
+              ? CUSTOM_STATISTICS_RANGE_VALUE
+              : String(statisticsTime.selectedRange)
+          }
+          onValueChange={(value) => {
+            if (value !== CUSTOM_STATISTICS_RANGE_VALUE) {
+              statisticsTime.handleRangeChange(Number(value))
+            }
+          }}
           className='shrink-0'
         >
           <TabsList>
+            <TabsTrigger
+              value={CUSTOM_STATISTICS_RANGE_VALUE}
+              className='hidden'
+              tabIndex={-1}
+              aria-hidden='true'
+            >
+              {t('Custom')}
+            </TabsTrigger>
             {TIME_RANGE_PRESETS.map((preset) => (
               <TabsTrigger
                 key={preset.days}
@@ -174,9 +153,9 @@ export function ChannelCharts() {
         </Tabs>
 
         <Tabs
-          value={timeGranularity}
+          value={statisticsTime.timeGranularity}
           onValueChange={(value) =>
-            handleGranularityChange(value as TimeGranularity)
+            statisticsTime.handleGranularityChange(value as TimeGranularity)
           }
           className='shrink-0'
         >
@@ -213,6 +192,12 @@ export function ChannelCharts() {
             ))}
           </TabsList>
         </Tabs>
+
+        <StatisticsTimeFilterDialog
+          state={statisticsTime}
+          title={t('Channel Statistics Filters')}
+          description={t('Filter channel statistics by custom time range.')}
+        />
 
         {isLoading && (
           <Loader2 className='text-muted-foreground size-4 animate-spin' />
