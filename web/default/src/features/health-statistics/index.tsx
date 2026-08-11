@@ -693,7 +693,7 @@ function HealthSettingsSheet(props: HealthSettingsSheetProps) {
                 </p>
                 <p>
                   {t(
-                    'Thresholds: healthy means success rate ≥ 99% and latency ≤ 15s; warning means success rate 95–99% or latency 15–30s; worse values are critical. TPS is for comparison only.'
+                    'The same thresholds apply to overall model, model-group, and model-channel health: healthy means success rate ≥ 90%; warning means success rate 60–<90%; success rates below 60% are critical. Latency and TPS are for reference only and do not affect health status.'
                   )}
                 </p>
               </AlertDescription>

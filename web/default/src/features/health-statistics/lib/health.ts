@@ -24,32 +24,16 @@ import type {
 export type HealthStatus = 'healthy' | 'warning' | 'critical'
 export type HealthStatusFilter = 'all' | HealthStatus
 
-const STATUS_WEIGHT: Record<HealthStatus, number> = {
-  healthy: 0,
-  warning: 1,
-  critical: 2,
-}
-
 export function successRateStatus(value: number): HealthStatus {
-  if (value >= 99) return 'healthy'
-  if (value >= 95) return 'warning'
-  return 'critical'
-}
-
-export function latencyStatus(value: number): HealthStatus {
-  if (!Number.isFinite(value) || value <= 0 || value <= 15_000) {
-    return 'healthy'
-  }
-  if (value <= 30_000) return 'warning'
+  if (value >= 90) return 'healthy'
+  if (value >= 60) return 'warning'
   return 'critical'
 }
 
 export function getHealthStatus(
-  row: Pick<PerfModelSummary, 'success_rate' | 'avg_latency_ms'>
+  row: Pick<PerfModelSummary, 'success_rate'>
 ): HealthStatus {
-  const success = successRateStatus(Number(row.success_rate))
-  const latency = latencyStatus(Number(row.avg_latency_ms))
-  return STATUS_WEIGHT[success] >= STATUS_WEIGHT[latency] ? success : latency
+  return successRateStatus(Number(row.success_rate))
 }
 
 export function averageMetric<T>(
