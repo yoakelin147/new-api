@@ -515,7 +515,8 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	if operation_setting.IsUpstreamCircuitBreakerEnabled() {
 		breakerTimeout = operation_setting.UpstreamCircuitBreakerTimeout()
 		if info.IsStream {
-			req = req.WithContext(c.Request.Context())
+			// 流式客户端断开由 StreamScannerHandler 在拿到响应后按官方逻辑清理，
+			// 这里不能提前绑定下游 Context，否则会跳过已收到流数据的 usage 结算。
 			var transport *http.Transport
 			if client.Transport == nil {
 				if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok {
@@ -536,7 +537,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 			cleanupAfterRequest = cancel
 			req = req.WithContext(ctx)
 		}
-	} else {
+	} else if !info.IsStream {
 		req = req.WithContext(c.Request.Context())
 	}
 
@@ -566,7 +567,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 			cleanupAfterRequest()
 		}
 		logger.LogError(c, "do request failed: "+err.Error())
-		if c.Request.Context().Err() != nil {
+		if !info.IsStream && c.Request.Context().Err() != nil {
 			return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry(), types.ErrOptionWithHideErrMsg("client disconnected during upstream request"))
 		}
 		var netErr net.Error

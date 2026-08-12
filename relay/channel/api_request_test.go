@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -324,6 +325,83 @@ func TestDoRequestCircuitBreakerDoesNotSetTotalStreamTimeout(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "data: ok\n\n", string(body))
+}
+
+func TestDoRequestStreamClientCancellationWaitsForUpstreamResponse(t *testing.T) {
+	originalSetting := *operation_setting.GetUpstreamCircuitBreakerSetting()
+	originalRelayTimeout := common.RelayTimeout
+	t.Cleanup(func() {
+		*operation_setting.GetUpstreamCircuitBreakerSetting() = originalSetting
+		common.RelayTimeout = originalRelayTimeout
+		service.InitHttpClient()
+	})
+	common.RelayTimeout = 0
+	service.InitHttpClient()
+
+	for _, breakerEnabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("breaker_enabled_%t", breakerEnabled), func(t *testing.T) {
+			setting := operation_setting.GetUpstreamCircuitBreakerSetting()
+			setting.Enabled = breakerEnabled
+			setting.TimeoutSeconds = 2
+			setting.RetryEnabled = true
+
+			releaseUpstream := make(chan struct{})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				<-releaseUpstream
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = fmt.Fprint(w, "data: ok\n\n")
+			}))
+			t.Cleanup(server.Close)
+
+			c := newDoRequestTestContext(t)
+			downstreamContext, cancelDownstream := context.WithCancel(c.Request.Context())
+			c.Request = c.Request.WithContext(downstreamContext)
+			cancelDownstream()
+
+			req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+			require.NoError(t, err)
+			info := &relaycommon.RelayInfo{
+				IsStream: true,
+				ChannelMeta: &relaycommon.ChannelMeta{
+					ApiType: constant.APITypeOpenAI,
+				},
+			}
+
+			type requestResult struct {
+				response *http.Response
+				err      error
+			}
+			resultCh := make(chan requestResult, 1)
+			go func() {
+				resp, requestErr := doRequest(c, req, info)
+				resultCh <- requestResult{response: resp, err: requestErr}
+			}()
+
+			var earlyResult *requestResult
+			select {
+			case result := <-resultCh:
+				earlyResult = &result
+			case <-time.After(150 * time.Millisecond):
+			}
+			close(releaseUpstream)
+
+			if earlyResult != nil {
+				require.Failf(t, "stream request returned before upstream response", "unexpected error: %v", earlyResult.err)
+			}
+
+			select {
+			case result := <-resultCh:
+				require.NoError(t, result.err)
+				require.NotNil(t, result.response)
+				defer result.response.Body.Close()
+				body, readErr := io.ReadAll(result.response.Body)
+				require.NoError(t, readErr)
+				require.Equal(t, "data: ok\n\n", string(body))
+			case <-time.After(3 * time.Second):
+				t.Fatal("timed out waiting for upstream stream response")
+			}
+		})
+	}
 }
 
 func newDoRequestTestContext(t *testing.T) *gin.Context {
