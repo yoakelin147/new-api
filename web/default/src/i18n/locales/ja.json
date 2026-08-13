@@ -5026,6 +5026,16 @@
     "Customer Scope": "顧客範囲",
     "Assigned customer": "担当顧客",
     "Select assigned customer": "担当顧客を選択",
+    "All Stream Errors": "すべてのストリームエラー",
+    "All Stream Statuses": "すべてのストリーム状態",
+    "Client Disconnected": "クライアント切断",
+    "Stream Handler Error": "ストリームハンドラーエラー",
+    "Stream Keepalive Error": "ストリームキープアライブエラー",
+    "Stream Processing Panic": "ストリーム処理パニック",
+    "Stream Status Filter": "ストリーム状態フィルター",
+    "Stream Timeout": "ストリームタイムアウト",
+    "Unknown Stream Error": "不明なストリームエラー",
+    "Upstream Stream Read Error": "アップストリーム読み取りエラー",
     "Filter model analytics by time range and assigned customer. All assigned customers are included by default.": "期間と担当顧客でモデル分析を絞り込みます。デフォルトではすべての担当顧客が対象です。"
   }
 }

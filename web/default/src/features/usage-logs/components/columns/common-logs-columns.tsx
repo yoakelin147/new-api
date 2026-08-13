@@ -43,6 +43,7 @@ import {
   getFirstResponseTimeColor,
   getResponseTimeColor,
   getTieredBillingSummary,
+  getStreamEndReasonLabel,
   hasAnyCacheTokens,
   parseLogOther,
   isViolationFeeLog,
@@ -643,20 +644,40 @@ export function useCommonLogsColumns(
                   </>
                 )}
               </span>
-              {log.is_stream &&
+              {isAdmin &&
+                log.is_stream &&
                 other?.stream_status &&
                 other.stream_status.status !== 'ok' && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger
-                        render={<CircleAlert className='size-3 text-red-500' />}
-                      ></TooltipTrigger>
+                        render={
+                          <StatusBadge
+                            label={getStreamEndReasonLabel(
+                              other.stream_status.end_reason,
+                              t
+                            )}
+                            icon={CircleAlert}
+                            variant='danger'
+                            size='sm'
+                            copyable={false}
+                            className='border-destructive/30 bg-destructive/8 h-5 max-w-[130px] rounded-md border px-1.5'
+                          />
+                        }
+                      />
                       <TooltipContent>
                         <div className='space-y-0.5 text-xs'>
                           <p>
                             {t('Stream Status')}: {t('Error')}
                           </p>
-                          <p>{other.stream_status.end_reason || 'unknown'}</p>
+                          <p>
+                            {getStreamEndReasonLabel(
+                              other.stream_status.end_reason,
+                              t
+                            )}
+                            {other.stream_status.end_reason &&
+                              ` (${other.stream_status.end_reason})`}
+                          </p>
                           {(other.stream_status.error_count ?? 0) > 0 && (
                             <p>
                               {t('Soft Errors')}:{' '}

@@ -239,6 +239,39 @@ func TestDoRequestCircuitBreakerTimeoutNonStream(t *testing.T) {
 	require.Equal(t, 599, newAPIError.StatusCode)
 }
 
+func TestDoRequestNonStreamClientCancellationRemainsRetryable(t *testing.T) {
+	originalSetting := *operation_setting.GetUpstreamCircuitBreakerSetting()
+	originalRelayTimeout := common.RelayTimeout
+	t.Cleanup(func() {
+		*operation_setting.GetUpstreamCircuitBreakerSetting() = originalSetting
+		common.RelayTimeout = originalRelayTimeout
+		service.InitHttpClient()
+	})
+	common.RelayTimeout = 0
+	service.InitHttpClient()
+
+	c := newDoRequestTestContext(t)
+	downstreamContext, cancelDownstream := context.WithCancel(c.Request.Context())
+	c.Request = c.Request.WithContext(downstreamContext)
+	cancelDownstream()
+
+	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:1", nil)
+	require.NoError(t, err)
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{},
+	}
+
+	resp, requestErr := doRequest(c, req, info)
+
+	require.Nil(t, resp)
+	var newAPIError *types.NewAPIError
+	require.ErrorAs(t, requestErr, &newAPIError)
+	require.Equal(t, types.ErrorCodeDoRequestFailed, newAPIError.GetErrorCode())
+	require.Equal(t, 500, newAPIError.StatusCode)
+	require.False(t, types.IsSkipRetryError(newAPIError))
+	require.Contains(t, newAPIError.Error(), "client disconnected during upstream request")
+}
+
 func TestDoRequestCircuitBreakerTimeoutBeforeStreamHeaders(t *testing.T) {
 	originalSetting := *operation_setting.GetUpstreamCircuitBreakerSetting()
 	originalRelayTimeout := common.RelayTimeout

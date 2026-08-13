@@ -105,6 +105,24 @@ export function parseLogOther(other: string): LogOtherData | null {
   }
 }
 
+const STREAM_END_REASON_LABELS: Record<string, string> = {
+  client_gone: 'Client Disconnected',
+  timeout: 'Stream Timeout',
+  scanner_error: 'Upstream Stream Read Error',
+  handler_stop: 'Stream Handler Error',
+  panic: 'Stream Processing Panic',
+  ping_fail: 'Stream Keepalive Error',
+}
+
+export function getStreamEndReasonLabel(
+  reason: string | undefined,
+  t: (key: string) => string
+): string {
+  if (!reason) return t('Unknown Stream Error')
+  const label = STREAM_END_REASON_LABELS[reason]
+  return label ? t(label) : reason
+}
+
 /**
  * Get time color based on duration (in seconds)
  */

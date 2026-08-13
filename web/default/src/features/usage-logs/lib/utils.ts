@@ -224,6 +224,13 @@ export function buildApiParams(config: {
     ...(searchParams.upstreamRequestId
       ? { upstream_request_id: String(searchParams.upstreamRequestId) }
       : {}),
+    ...(isAdmin && searchParams.streamStatus
+      ? {
+          stream_status: String(
+            searchParams.streamStatus
+          ) as GetLogsParams['stream_status'],
+        }
+      : {}),
     ...buildTimeRangeParams(searchParams, false),
   }
 

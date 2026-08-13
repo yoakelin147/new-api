@@ -5026,6 +5026,16 @@
     "Customer Scope": "Область клиентов",
     "Assigned customer": "Закреплённый клиент",
     "Select assigned customer": "Выберите закреплённого клиента",
+    "All Stream Errors": "Все ошибки потока",
+    "All Stream Statuses": "Все состояния потока",
+    "Client Disconnected": "Клиент отключён",
+    "Stream Handler Error": "Ошибка обработчика потока",
+    "Stream Keepalive Error": "Ошибка поддержания соединения потока",
+    "Stream Processing Panic": "Паника при обработке потока",
+    "Stream Status Filter": "Фильтр состояния потока",
+    "Stream Timeout": "Тайм-аут потока",
+    "Unknown Stream Error": "Неизвестная ошибка потока",
+    "Upstream Stream Read Error": "Ошибка чтения вышестоящего потока",
     "Filter model analytics by time range and assigned customer. All assigned customers are included by default.": "Фильтруйте аналитику моделей по периоду и закреплённому клиенту. По умолчанию включены все закреплённые клиенты."
   }
 }

@@ -5026,6 +5026,16 @@
     "Customer Scope": "Périmètre des clients",
     "Assigned customer": "Client attribué",
     "Select assigned customer": "Sélectionner un client attribué",
+    "All Stream Errors": "Toutes les erreurs de flux",
+    "All Stream Statuses": "Tous les états de flux",
+    "Client Disconnected": "Client déconnecté",
+    "Stream Handler Error": "Erreur du gestionnaire de flux",
+    "Stream Keepalive Error": "Erreur de maintien de connexion du flux",
+    "Stream Processing Panic": "Panique du traitement du flux",
+    "Stream Status Filter": "Filtre d’état du flux",
+    "Stream Timeout": "Délai d’attente du flux dépassé",
+    "Unknown Stream Error": "Erreur de flux inconnue",
+    "Upstream Stream Read Error": "Erreur de lecture du flux amont",
     "Filter model analytics by time range and assigned customer. All assigned customers are included by default.": "Filtrez l’analyse des modèles par période et client attribué. Tous les clients attribués sont inclus par défaut."
   }
 }

@@ -69,6 +69,15 @@ export interface CommonLogFilters extends CommonFilters {
   upstreamRequestId?: string
 }
 
+export type StreamStatusFilter =
+  | 'error'
+  | 'client_gone'
+  | 'timeout'
+  | 'scanner_error'
+  | 'handler_stop'
+  | 'panic'
+  | 'ping_fail'
+
 /**
  * Drawing logs specific filters
  */
@@ -313,6 +322,7 @@ export interface GetLogsParams {
   group?: string
   request_id?: string
   upstream_request_id?: string
+  stream_status?: StreamStatusFilter
   user_id?: number
 }
 
@@ -338,6 +348,7 @@ export interface GetLogStatsParams {
   group?: string
   request_id?: string
   upstream_request_id?: string
+  stream_status?: StreamStatusFilter
   user_id?: number
 }
 

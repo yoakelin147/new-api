@@ -41,10 +41,14 @@ import {
 } from '@/components/ui/tooltip'
 import { SearchableSubjectSelect } from '@/components/searchable-subject-select'
 import { getManagedLogUsers } from '../api'
-import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
+import {
+  LOG_TYPE_ALL_VALUE,
+  LOG_TYPE_FILTERS,
+  STREAM_STATUS_FILTERS,
+} from '../constants'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
-import type { CommonLogFilters } from '../types'
+import type { CommonLogFilters, StreamStatusFilter } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import {
@@ -56,11 +60,27 @@ import { useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 const logTypeValues = ['0', '1', '2', '3', '4', '5', '6'] as const
+const streamStatusValues = [
+  'all',
+  'error',
+  'client_gone',
+  'timeout',
+  'scanner_error',
+  'handler_stop',
+  'panic',
+  'ping_fail',
+] as const
 
 type LogTypeValue = (typeof logTypeValues)[number]
 
 function isLogTypeValue(value: string): value is LogTypeValue {
   return (logTypeValues as readonly string[]).includes(value)
+}
+
+type StreamStatusValue = (typeof streamStatusValues)[number]
+
+function isStreamStatusValue(value: string): value is StreamStatusValue {
+  return (streamStatusValues as readonly string[]).includes(value)
 }
 
 interface CommonLogsFilterBarProps<TData> {
@@ -93,6 +113,7 @@ export function CommonLogsFilterBar<TData>(
     return { startTime: start, endTime: end }
   })
   const [logType, setLogType] = useState<LogTypeValue>(LOG_TYPE_ALL_VALUE)
+  const [streamStatus, setStreamStatus] = useState<StreamStatusValue>('all')
 
   useEffect(() => {
     const { start, end } = getDefaultTimeRange()
@@ -120,6 +141,7 @@ export function CommonLogsFilterBar<TData>(
         ? typeArr[0]
         : LOG_TYPE_ALL_VALUE
     setLogType(nextLogType)
+    setStreamStatus(searchParams.streamStatus || 'all')
   }, [
     searchParams.startTime,
     searchParams.endTime,
@@ -130,6 +152,7 @@ export function CommonLogsFilterBar<TData>(
     searchParams.username,
     searchParams.requestId,
     searchParams.upstreamRequestId,
+    searchParams.streamStatus,
     searchParams.type,
   ])
 
@@ -148,18 +171,22 @@ export function CommonLogsFilterBar<TData>(
       search: {
         ...filterParams,
         type: [logType],
+        ...(streamStatus !== 'all'
+          ? { streamStatus: streamStatus as StreamStatusFilter }
+          : {}),
         page: 1,
       },
     })
     queryClient.invalidateQueries({ queryKey: ['logs'] })
     queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-  }, [filters, logType, navigate, queryClient])
+  }, [filters, logType, navigate, queryClient, streamStatus])
 
   const handleReset = useCallback(() => {
     const { start, end } = getDefaultTimeRange()
     const resetFilters: CommonLogFilters = { startTime: start, endTime: end }
     setFilters(resetFilters)
     setLogType(LOG_TYPE_ALL_VALUE)
+    setStreamStatus('all')
 
     navigate({
       to: '/usage-logs/$section',
@@ -190,8 +217,13 @@ export function CommonLogsFilterBar<TData>(
     !!filters.upstreamRequestId
 
   const hasTypeFilter = logType !== LOG_TYPE_ALL_VALUE
+  const hasStreamStatusFilter = streamStatus !== 'all'
   const hasAdditionalFilters =
-    !!filters.model || !!filters.group || hasTypeFilter || hasExpandedFilters
+    !!filters.model ||
+    !!filters.group ||
+    hasTypeFilter ||
+    hasStreamStatusFilter ||
+    hasExpandedFilters
 
   const expandedFilterCount = [
     filters.token,
@@ -211,6 +243,17 @@ export function CommonLogsFilterBar<TData>(
   )
   const logTypeLabel =
     logTypeItems.find((type) => type.value === logType)?.label ?? t('All Types')
+  const streamStatusItems = useMemo(
+    () =>
+      STREAM_STATUS_FILTERS.map((status) => ({
+        value: status.value,
+        label: t(status.label),
+      })),
+    [t]
+  )
+  const streamStatusLabel =
+    streamStatusItems.find((status) => status.value === streamStatus)?.label ??
+    t('All Stream Statuses')
   const managedUsers = managedUsersQuery.data?.data ?? []
   const subjectItems = isAdmin
     ? [
@@ -355,6 +398,32 @@ export function CommonLogsFilterBar<TData>(
       </Select>
     </LogsFilterField>
   )
+  const streamStatusFilter = isAdmin && (
+    <LogsFilterField>
+      <Select
+        items={streamStatusItems}
+        value={streamStatus}
+        onValueChange={(value) => {
+          if (value !== null && isStreamStatusValue(value)) {
+            setStreamStatus(value)
+          }
+        }}
+      >
+        <SelectTrigger aria-label={t('Stream Status Filter')}>
+          <SelectValue>{streamStatusLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {streamStatusItems.map((status) => (
+              <SelectItem key={status.value} value={status.value}>
+                {status.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </LogsFilterField>
+  )
   const advancedFilters = (
     <>
       <LogsFilterField>
@@ -417,6 +486,7 @@ export function CommonLogsFilterBar<TData>(
           {modelFilter}
           {groupFilter}
           {typeFilter}
+          {streamStatusFilter}
         </>
       }
       advancedFilters={advancedFilters}
@@ -431,12 +501,17 @@ export function CommonLogsFilterBar<TData>(
           {modelFilter}
           {groupFilter}
           {typeFilter}
+          {streamStatusFilter}
           {advancedFilters}
         </>
       }
       mobileFilterCount={
-        [filters.model, filters.group, hasTypeFilter].filter(Boolean).length +
-        expandedFilterCount
+        [
+          filters.model,
+          filters.group,
+          hasTypeFilter,
+          hasStreamStatusFilter,
+        ].filter(Boolean).length + expandedFilterCount
       }
       hasAdvancedActiveFilters={hasExpandedFilters}
       advancedFilterCount={expandedFilterCount}

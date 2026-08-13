@@ -44,6 +44,7 @@ import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-p
 import type { UsageLog } from '../../data/schema'
 import {
   parseLogOther,
+  getStreamEndReasonLabel,
   getParamOverrideActionLabel,
   parseAuditLine,
   decodeBillingExprB64,
@@ -1060,7 +1061,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
               {other.stream_status.end_reason && (
                 <DetailRow
                   label={t('End Reason')}
-                  value={other.stream_status.end_reason}
+                  value={`${getStreamEndReasonLabel(other.stream_status.end_reason, t)} (${other.stream_status.end_reason})`}
                 />
               )}
               {(other.stream_status.error_count ?? 0) > 0 && (

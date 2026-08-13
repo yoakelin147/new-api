@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -331,7 +332,34 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			AutoBan: &autoBanInt,
 		}, nil
 	}
-	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
+	channelFilter := retryParam.ChannelFilter
+	usedChannelIDs := make(map[int]struct{})
+	for _, channelID := range c.GetStringSlice("use_channel") {
+		id, parseErr := strconv.Atoi(channelID)
+		if parseErr == nil {
+			usedChannelIDs[id] = struct{}{}
+		}
+	}
+	if len(usedChannelIDs) > 0 {
+		baseFilter := channelFilter
+		channelFilter = func(channel *model.Channel) bool {
+			if channel == nil {
+				return false
+			}
+			if baseFilter != nil && !baseFilter(channel) {
+				return false
+			}
+			_, alreadyUsed := usedChannelIDs[channel.Id]
+			return !alreadyUsed
+		}
+	}
+	selectionParam := *retryParam
+	selectionParam.ChannelFilter = channelFilter
+	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(&selectionParam)
+	if err == nil && channel == nil && len(usedChannelIDs) > 0 {
+		// 当所有候选渠道都已尝试过时，保留原有优先级/重试行为，避免把请求直接变成“无可用渠道”。
+		channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(retryParam)
+	}
 
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
 

@@ -5026,6 +5026,16 @@
     "Customer Scope": "Customer Scope",
     "Assigned customer": "Assigned customer",
     "Select assigned customer": "Select assigned customer",
+    "All Stream Errors": "All Stream Errors",
+    "All Stream Statuses": "All Stream Statuses",
+    "Client Disconnected": "Client Disconnected",
+    "Stream Handler Error": "Stream Handler Error",
+    "Stream Keepalive Error": "Stream Keepalive Error",
+    "Stream Processing Panic": "Stream Processing Panic",
+    "Stream Status Filter": "Stream Status Filter",
+    "Stream Timeout": "Stream Timeout",
+    "Unknown Stream Error": "Unknown Stream Error",
+    "Upstream Stream Read Error": "Upstream Stream Read Error",
     "Filter model analytics by time range and assigned customer. All assigned customers are included by default.": "Filter model analytics by time range and assigned customer. All assigned customers are included by default."
   }
 }

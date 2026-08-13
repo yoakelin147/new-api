@@ -35,6 +35,19 @@ const logTypeSearchSchema = z
   )
   .catch([])
 
+const streamStatusSearchSchema = z
+  .enum([
+    'error',
+    'client_gone',
+    'timeout',
+    'scanner_error',
+    'handler_stop',
+    'panic',
+    'ping_fail',
+  ])
+  .optional()
+  .catch(undefined)
+
 const usageLogsSearchSchema = z.object({
   page: z.number().optional().catch(1),
   pageSize: z.number().optional().catch(undefined),
@@ -47,6 +60,7 @@ const usageLogsSearchSchema = z.object({
   username: z.string().optional().catch(''),
   requestId: z.string().optional().catch(''),
   upstreamRequestId: z.string().optional().catch(''),
+  streamStatus: streamStatusSearchSchema,
   startTime: z.number().optional(),
   endTime: z.number().optional(),
 })
@@ -59,15 +73,18 @@ export const Route = createFileRoute('/_authenticated/usage-logs/$section')({
         params: { section: USAGE_LOGS_DEFAULT_SECTION },
       })
     }
-    // type 仅 common 使用，非 common 时清掉 URL 里的 type
+    // type 和 streamStatus 仅 common 使用，非 common 时清掉对应参数。
     const hasTypeSearch = Array.isArray(search?.type)
       ? search.type.length > 0
       : search?.type != null && search.type !== ''
-    if (params.section !== 'common' && hasTypeSearch) {
+    if (
+      params.section !== 'common' &&
+      (hasTypeSearch || search?.streamStatus != null)
+    ) {
       throw redirect({
         to: '/usage-logs/$section',
         params: { section: params.section },
-        search: { ...search, type: undefined },
+        search: { ...search, type: undefined, streamStatus: undefined },
         replace: true,
       })
     }

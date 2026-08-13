@@ -114,6 +114,17 @@ export const LOG_TYPE_FILTERS = [
   ),
 ] as const
 
+export const STREAM_STATUS_FILTERS = [
+  { value: 'all', label: 'All Stream Statuses' },
+  { value: 'error', label: 'All Stream Errors' },
+  { value: 'client_gone', label: 'Client Disconnected' },
+  { value: 'timeout', label: 'Stream Timeout' },
+  { value: 'scanner_error', label: 'Upstream Stream Read Error' },
+  { value: 'handler_stop', label: 'Stream Handler Error' },
+  { value: 'panic', label: 'Stream Processing Panic' },
+  { value: 'ping_fail', label: 'Stream Keepalive Error' },
+] as const
+
 // ============================================================================
 // Drawing Logs (Midjourney) Constants
 // ============================================================================

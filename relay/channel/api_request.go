@@ -568,7 +568,9 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		}
 		logger.LogError(c, "do request failed: "+err.Error())
 		if !info.IsStream && c.Request.Context().Err() != nil {
-			return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry(), types.ErrOptionWithHideErrMsg("client disconnected during upstream request"))
+			// 保留原有错误提示，但按普通上游错误参与重试判定。
+			// 客户端连接断开不应阻止平台切换到其他可用渠道；下游最终是否仍能接收结果由网关决定。
+			return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("client disconnected during upstream request"))
 		}
 		var netErr net.Error
 		isUpstreamTimeout := errors.Is(req.Context().Err(), context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout()

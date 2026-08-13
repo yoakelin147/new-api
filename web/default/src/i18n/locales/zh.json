@@ -5026,6 +5026,16 @@
     "Customer Scope": "客户范围",
     "Assigned customer": "名下客户",
     "Select assigned customer": "选择名下客户",
+    "All Stream Errors": "所有流异常",
+    "All Stream Statuses": "所有流状态",
+    "Client Disconnected": "客户端断开",
+    "Stream Handler Error": "流处理器错误",
+    "Stream Keepalive Error": "流保活错误",
+    "Stream Processing Panic": "流处理崩溃",
+    "Stream Status Filter": "流状态筛选",
+    "Stream Timeout": "流超时",
+    "Unknown Stream Error": "未知流错误",
+    "Upstream Stream Read Error": "上游流读取错误",
     "Filter model analytics by time range and assigned customer. All assigned customers are included by default.": "按时间范围和名下客户筛选模型调用分析，默认统计全部名下客户。"
   }
 }
