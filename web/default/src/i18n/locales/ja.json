@@ -1161,6 +1161,7 @@
     "Custom OAuth": "カスタム OAuth",
     "Custom OAuth Providers": "カスタムOAuthプロバイダー",
     "Custom Range": "カスタム範囲",
+    "Custom range cannot exceed 31 days": "カスタム範囲は31日を超えることはできません",
     "Custom Seconds": "カスタム秒数",
     "Custom sidebar section": "カスタムサイドバーセクション",
     "Custom Time Range": "カスタム時間範囲",

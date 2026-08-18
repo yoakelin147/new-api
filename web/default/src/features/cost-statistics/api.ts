@@ -43,11 +43,11 @@ export async function getCostStatistics(params: {
     page_size: params.pageSize,
     period: params.filters.period,
     start_timestamp:
-      params.isAdmin && params.filters.period === 'custom'
+      params.filters.period === 'custom'
         ? params.filters.start_timestamp
         : undefined,
     end_timestamp:
-      params.isAdmin && params.filters.period === 'custom'
+      params.filters.period === 'custom'
         ? params.filters.end_timestamp
         : undefined,
     type: params.filters.type,

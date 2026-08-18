@@ -14,12 +14,13 @@ import (
 )
 
 const (
-	costStatisticsPeriodToday     = "today"
-	costStatisticsPeriodYesterday = "yesterday"
-	costStatisticsPeriodWeek      = "week"
-	costStatisticsPeriodMonth     = "month"
-	costStatisticsPeriodLastMonth = "last_month"
-	costStatisticsPeriodCustom    = "custom"
+	costStatisticsPeriodToday                         = "today"
+	costStatisticsPeriodYesterday                     = "yesterday"
+	costStatisticsPeriodWeek                          = "week"
+	costStatisticsPeriodMonth                         = "month"
+	costStatisticsPeriodLastMonth                     = "last_month"
+	costStatisticsPeriodCustom                        = "custom"
+	maxNonAdminCostStatisticsCustomRangeSeconds int64 = 31 * 24 * 60 * 60
 )
 
 func GetCostStatistics(c *gin.Context) {
@@ -140,12 +141,6 @@ func resolveCostStatisticsPeriod(raw string, isAdmin bool, rawStart string, rawE
 		start = thisMonthStart.AddDate(0, -1, 0)
 		end = thisMonthStart.Add(-time.Second)
 	case costStatisticsPeriodCustom:
-		if !isAdmin {
-			period = costStatisticsPeriodToday
-			start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-			end = now
-			break
-		}
 		startTimestamp, err := strconv.ParseInt(rawStart, 10, 64)
 		if err != nil || startTimestamp <= 0 {
 			return 0, 0, "", errors.New("invalid start time")
@@ -156,6 +151,9 @@ func resolveCostStatisticsPeriod(raw string, isAdmin bool, rawStart string, rawE
 		}
 		if endTimestamp < startTimestamp {
 			return 0, 0, "", errors.New("end time must be later than start time")
+		}
+		if !isAdmin && endTimestamp-startTimestamp > maxNonAdminCostStatisticsCustomRangeSeconds {
+			return 0, 0, "", errors.New("custom time range cannot exceed 31 days")
 		}
 		return startTimestamp, endTimestamp, period, nil
 	default:

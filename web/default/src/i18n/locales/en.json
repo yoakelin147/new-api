@@ -1161,6 +1161,7 @@
     "Custom OAuth": "Custom OAuth",
     "Custom OAuth Providers": "Custom OAuth Providers",
     "Custom Range": "Custom Range",
+    "Custom range cannot exceed 31 days": "Custom range cannot exceed 31 days",
     "Custom Seconds": "Custom Seconds",
     "Custom sidebar section": "Custom sidebar section",
     "Custom Time Range": "Custom Time Range",

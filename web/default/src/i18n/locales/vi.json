@@ -1161,6 +1161,7 @@
     "Custom OAuth": "OAuth tùy chỉnh",
     "Custom OAuth Providers": "Nhà cung cấp OAuth tùy chỉnh",
     "Custom Range": "Khoảng tùy chỉnh",
+    "Custom range cannot exceed 31 days": "Khoảng tùy chỉnh không được vượt quá 31 ngày",
     "Custom Seconds": "Giây tùy chỉnh",
     "Custom sidebar section": "Phần thanh bên tùy chỉnh",
     "Custom Time Range": "Khoảng thời gian tùy chỉnh",

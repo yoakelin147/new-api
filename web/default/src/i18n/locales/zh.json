@@ -1161,6 +1161,7 @@
     "Custom OAuth": "自定义 OAuth",
     "Custom OAuth Providers": "自定义OAuth提供商",
     "Custom Range": "自定义范围",
+    "Custom range cannot exceed 31 days": "自定义范围不能超过 31 天",
     "Custom Seconds": "自定义秒数",
     "Custom sidebar section": "自定义侧边栏部分",
     "Custom Time Range": "自定义时间范围",

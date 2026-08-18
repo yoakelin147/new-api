@@ -1161,6 +1161,7 @@
     "Custom OAuth": "Пользовательский OAuth",
     "Custom OAuth Providers": "Пользовательские OAuth-провайдеры",
     "Custom Range": "Пользовательский диапазон",
+    "Custom range cannot exceed 31 days": "Пользовательский диапазон не может превышать 31 день",
     "Custom Seconds": "Пользовательские секунды",
     "Custom sidebar section": "Пользовательский раздел боковой панели",
     "Custom Time Range": "Пользовательский диапазон времени",

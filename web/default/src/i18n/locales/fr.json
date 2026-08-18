@@ -1161,6 +1161,7 @@
     "Custom OAuth": "OAuth personnalisé",
     "Custom OAuth Providers": "Fournisseurs OAuth personnalisés",
     "Custom Range": "Plage personnalisée",
+    "Custom range cannot exceed 31 days": "La plage personnalisée ne peut pas dépasser 31 jours",
     "Custom Seconds": "Secondes personnalisées",
     "Custom sidebar section": "Section de barre latérale personnalisée",
     "Custom Time Range": "Plage horaire personnalisée",

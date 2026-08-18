@@ -83,6 +83,10 @@ import { SearchableSubjectSelect } from '@/components/searchable-subject-select'
 import { getManagedLogUsers } from '@/features/usage-logs/api'
 import { ModelBadge } from '@/features/usage-logs/components/model-badge'
 import { getCostStatistics } from './api'
+import {
+  MAX_NON_ADMIN_CUSTOM_RANGE_SECONDS,
+  validateCostStatisticsCustomRange,
+} from './time-range'
 import type {
   CostStatisticsData,
   CostStatisticsFilters,
@@ -994,8 +998,7 @@ function DateRangePicker(props: {
   period: CostStatisticsPeriod
   start: number
   end: number
-  allowCustom: boolean
-  showRangeInputs: boolean
+  maxCustomRangeSeconds?: number
   onPeriodChange: (period: CostStatisticsPeriod) => void
   onRangeChange: (start: number, end: number) => void
 }) {
@@ -1025,8 +1028,20 @@ function DateRangePicker(props: {
   const applyCustomRange = () => {
     const start = parseTimestampFromInput(draftStart)
     const end = parseTimestampFromInput(draftEnd)
-    if (start <= 0 || end <= 0 || end < start) {
+    const validationError = validateCostStatisticsCustomRange(
+      start,
+      end,
+      props.maxCustomRangeSeconds
+    )
+    if (
+      validationError === 'invalid_time' ||
+      validationError === 'end_before_start'
+    ) {
       toast.error(t('End time must be later than start time'))
+      return
+    }
+    if (validationError === 'range_too_long') {
+      toast.error(t('Custom range cannot exceed 31 days'))
       return
     }
     props.onRangeChange(start, end)
@@ -1051,49 +1066,33 @@ function DateRangePicker(props: {
       </PopoverTrigger>
       <PopoverContent align='start' className='w-[min(420px,calc(100vw-2rem))]'>
         <div className='flex flex-col gap-3'>
-          {props.showRangeInputs && (
-            <div className='grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-end'>
-              <div className='flex flex-col gap-1.5'>
-                <div className='text-muted-foreground text-xs'>
-                  {t('Start Time')}
-                </div>
-                <Input
-                  readOnly={!props.allowCustom}
-                  type={props.allowCustom ? 'datetime-local' : 'text'}
-                  value={
-                    props.allowCustom
-                      ? draftStart
-                      : props.start
-                        ? formatTimestampToDate(props.start).slice(0, 16)
-                        : ''
-                  }
-                  onChange={(event) => setDraftStart(event.target.value)}
-                  className='h-8 font-mono text-xs tabular-nums'
-                />
+          <div className='grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-end'>
+            <div className='flex flex-col gap-1.5'>
+              <div className='text-muted-foreground text-xs'>
+                {t('Start Time')}
               </div>
-              <span className='text-muted-foreground hidden pb-2 text-xs sm:block'>
-                ~
-              </span>
-              <div className='flex flex-col gap-1.5'>
-                <div className='text-muted-foreground text-xs'>
-                  {t('End Time')}
-                </div>
-                <Input
-                  readOnly={!props.allowCustom}
-                  type={props.allowCustom ? 'datetime-local' : 'text'}
-                  value={
-                    props.allowCustom
-                      ? draftEnd
-                      : props.end
-                        ? formatTimestampToDate(props.end).slice(0, 16)
-                        : ''
-                  }
-                  onChange={(event) => setDraftEnd(event.target.value)}
-                  className='h-8 font-mono text-xs tabular-nums'
-                />
-              </div>
+              <Input
+                type='datetime-local'
+                value={draftStart}
+                onChange={(event) => setDraftStart(event.target.value)}
+                className='h-8 font-mono text-xs tabular-nums'
+              />
             </div>
-          )}
+            <span className='text-muted-foreground hidden pb-2 text-xs sm:block'>
+              ~
+            </span>
+            <div className='flex flex-col gap-1.5'>
+              <div className='text-muted-foreground text-xs'>
+                {t('End Time')}
+              </div>
+              <Input
+                type='datetime-local'
+                value={draftEnd}
+                onChange={(event) => setDraftEnd(event.target.value)}
+                className='h-8 font-mono text-xs tabular-nums'
+              />
+            </div>
+          </div>
           <div className='grid grid-cols-2 gap-2 sm:grid-cols-5'>
             {PERIOD_OPTIONS.map((option) => (
               <Button
@@ -1110,17 +1109,15 @@ function DateRangePicker(props: {
               </Button>
             ))}
           </div>
-          {props.allowCustom && (
-            <Button
-              type='button'
-              variant={props.period === 'custom' ? 'default' : 'outline'}
-              size='sm'
-              className='h-8'
-              onClick={applyCustomRange}
-            >
-              {t('Custom Range')}
-            </Button>
-          )}
+          <Button
+            type='button'
+            variant={props.period === 'custom' ? 'default' : 'outline'}
+            size='sm'
+            className='h-8'
+            onClick={applyCustomRange}
+          >
+            {t('Custom Range')}
+          </Button>
           <div className='text-muted-foreground text-xs'>{t(activeLabel)}</div>
         </div>
       </PopoverContent>
@@ -1501,7 +1498,6 @@ export function CostStatistics() {
   }
 
   const handleCustomRangeChange = (start: number, end: number) => {
-    if (!isAdmin) return
     setDraftFilters((current) => ({
       ...current,
       period: 'custom',
@@ -1595,8 +1591,9 @@ export function CostStatistics() {
                 period={draftFilters.period}
                 start={draftRange.start}
                 end={draftRange.end}
-                allowCustom={isAdmin}
-                showRangeInputs={!isSales}
+                maxCustomRangeSeconds={
+                  isAdmin ? undefined : MAX_NON_ADMIN_CUSTOM_RANGE_SECONDS
+                }
                 onPeriodChange={handlePeriodChange}
                 onRangeChange={handleCustomRangeChange}
               />

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -32,13 +33,13 @@ func TestResolveCostStatisticsPeriodYesterday(t *testing.T) {
 	assert.Equal(t, todayStart.Add(-time.Second).Unix(), end)
 }
 
-func TestResolveCostStatisticsPeriodCustomRequiresAdmin(t *testing.T) {
+func TestResolveCostStatisticsPeriodCustomForNonAdmin(t *testing.T) {
 	start, end, period, err := resolveCostStatisticsPeriod(costStatisticsPeriodCustom, false, "100", "200")
 	require.NoError(t, err)
 
-	assert.Equal(t, costStatisticsPeriodToday, period)
-	assert.NotEqual(t, int64(100), start)
-	assert.NotEqual(t, int64(200), end)
+	assert.Equal(t, costStatisticsPeriodCustom, period)
+	assert.Equal(t, int64(100), start)
+	assert.Equal(t, int64(200), end)
 }
 
 func TestResolveCostStatisticsPeriodCustomForAdmin(t *testing.T) {
@@ -53,4 +54,51 @@ func TestResolveCostStatisticsPeriodCustomForAdmin(t *testing.T) {
 func TestResolveCostStatisticsPeriodCustomRejectsInvalidRange(t *testing.T) {
 	_, _, _, err := resolveCostStatisticsPeriod(costStatisticsPeriodCustom, true, "200", "100")
 	require.Error(t, err)
+}
+
+func TestResolveCostStatisticsPeriodCustomAllowsMaximumNonAdminRange(t *testing.T) {
+	const startTimestamp int64 = 100
+	endTimestamp := startTimestamp + maxNonAdminCostStatisticsCustomRangeSeconds
+
+	start, end, period, err := resolveCostStatisticsPeriod(
+		costStatisticsPeriodCustom,
+		false,
+		strconv.FormatInt(startTimestamp, 10),
+		strconv.FormatInt(endTimestamp, 10),
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, costStatisticsPeriodCustom, period)
+	assert.Equal(t, startTimestamp, start)
+	assert.Equal(t, endTimestamp, end)
+}
+
+func TestResolveCostStatisticsPeriodCustomRejectsOversizedNonAdminRange(t *testing.T) {
+	const startTimestamp int64 = 100
+	endTimestamp := startTimestamp + maxNonAdminCostStatisticsCustomRangeSeconds + 1
+
+	_, _, _, err := resolveCostStatisticsPeriod(
+		costStatisticsPeriodCustom,
+		false,
+		strconv.FormatInt(startTimestamp, 10),
+		strconv.FormatInt(endTimestamp, 10),
+	)
+	require.EqualError(t, err, "custom time range cannot exceed 31 days")
+}
+
+func TestResolveCostStatisticsPeriodCustomKeepsAdminRangeUnlimited(t *testing.T) {
+	const startTimestamp int64 = 100
+	endTimestamp := startTimestamp + maxNonAdminCostStatisticsCustomRangeSeconds + 1
+
+	start, end, period, err := resolveCostStatisticsPeriod(
+		costStatisticsPeriodCustom,
+		true,
+		strconv.FormatInt(startTimestamp, 10),
+		strconv.FormatInt(endTimestamp, 10),
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, costStatisticsPeriodCustom, period)
+	assert.Equal(t, startTimestamp, start)
+	assert.Equal(t, endTimestamp, end)
 }
