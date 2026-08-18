@@ -17,3 +17,11 @@
 - `bun run build`：通过。
 - `go test ./common/... ./relay/...`：仅现有 `relay/channel/claude` MIME 内容转换测试失败，本轮未修改该逻辑。
 - `git diff --check`：通过。
+
+---
+
+# 客户端断开后的流式 Token 结算
+
+- [x] 调整客户端断开后的文本用量结算
+- [x] 删除客户可见的内部提示
+- [x] 增加回归测试并完成验证

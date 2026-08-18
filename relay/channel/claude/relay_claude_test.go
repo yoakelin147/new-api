@@ -1,18 +1,51 @@
 package claude
 
 import (
+	"context"
 	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func commonPointer[T any](value T) *T {
 	return &value
+}
+
+func TestHandleStreamFinalResponseKeepsUpstreamUsageWhenClientGone(t *testing.T) {
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	info := &relaycommon.RelayInfo{
+		RelayFormat:  types.RelayFormatClaude,
+		ChannelMeta:  &relaycommon.ChannelMeta{UpstreamModelName: "claude-test"},
+		StreamStatus: relaycommon.NewStreamStatus(),
+	}
+	info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, context.Canceled)
+	responseInfo := &ClaudeResponseInfo{
+		Usage: &dto.Usage{
+			PromptTokens:     100,
+			CompletionTokens: 20,
+			TotalTokens:      120,
+		},
+	}
+	responseInfo.ResponseText.WriteString("partial response")
+
+	HandleStreamFinalResponse(ctx, info, responseInfo)
+
+	require.Equal(t, 20, responseInfo.Usage.CompletionTokens)
+	require.False(t, common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens))
 }
 
 func TestResponseOpenAI2ClaudeToolUseInputIsObject(t *testing.T) {

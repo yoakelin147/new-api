@@ -25,6 +25,7 @@ import {
   Headphones,
   Monitor,
   Cloud,
+  CircleOff,
   Globe,
   ShieldCheck,
   UserCog,
@@ -319,9 +320,11 @@ function BillingBreakdown(props: {
   if (isAdmin && other.admin_info) {
     rows.push({
       label: t('Billing Source'),
-      value: other.admin_info.local_count_tokens
-        ? t('Local Billing')
-        : t('Upstream Response'),
+      value: other.billing_waived_reason
+        ? t('Billing Waived (Client Disconnected)')
+        : other.admin_info.local_count_tokens
+          ? t('Local Billing')
+          : t('Upstream Response'),
     })
   }
 
@@ -1027,15 +1030,19 @@ export function DetailsDialog(props: DetailsDialogProps) {
               label={t('Billing Source')}
               value={
                 <span className='flex items-center gap-1'>
-                  {other.admin_info.local_count_tokens ? (
+                  {other.billing_waived_reason ? (
+                    <CircleOff className='size-3 text-amber-500' />
+                  ) : other.admin_info.local_count_tokens ? (
                     <Monitor className='size-3 text-blue-500' />
                   ) : (
                     <Cloud className='size-3 text-emerald-500' />
                   )}
                   <span className='text-xs'>
-                    {other.admin_info.local_count_tokens
-                      ? t('Local Billing')
-                      : t('Upstream Response')}
+                    {other.billing_waived_reason
+                      ? t('Billing Waived (Client Disconnected)')
+                      : other.admin_info.local_count_tokens
+                        ? t('Local Billing')
+                        : t('Upstream Response')}
                   </span>
                 </span>
               }

@@ -1,7 +1,9 @@
 package service
 
 import (
+	"context"
 	"math"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -16,6 +18,154 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestIsClientGoneRequest(t *testing.T) {
+	tests := []struct {
+		name         string
+		stream       bool
+		clientGone   bool
+		endReason    relaycommon.StreamEndReason
+		streamStatus bool
+		want         bool
+	}{
+		{
+			name:         "stream client gone",
+			stream:       true,
+			streamStatus: true,
+			endReason:    relaycommon.StreamEndReasonClientGone,
+			want:         true,
+		},
+		{
+			name:       "stream without status uses canceled context",
+			stream:     true,
+			clientGone: true,
+			want:       true,
+		},
+		{
+			name:       "non stream client gone",
+			clientGone: true,
+			want:       true,
+		},
+		{
+			name:         "completed stream is not client gone",
+			stream:       true,
+			streamStatus: true,
+			endReason:    relaycommon.StreamEndReasonClientGoneAfterDone,
+			want:         false,
+		},
+		{
+			name: "ordinary request",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			if tt.clientGone {
+				requestCtx, cancel := context.WithCancel(request.Context())
+				cancel()
+				request = request.WithContext(requestCtx)
+			}
+			w := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(w)
+			ctx.Request = request
+			info := &relaycommon.RelayInfo{IsStream: tt.stream}
+			if tt.streamStatus {
+				info.StreamStatus = relaycommon.NewStreamStatus()
+				info.StreamStatus.SetEndReason(tt.endReason, nil)
+			}
+			require.Equal(t, tt.want, isClientGoneRequest(ctx, info))
+		})
+	}
+}
+
+func TestClientGoneBillingKeepsUpstreamUsage(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	requestCtx, cancel := context.WithCancel(request.Context())
+	cancel()
+	request = request.WithContext(requestCtx)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = request
+
+	relayInfo := &relaycommon.RelayInfo{
+		IsStream:     true,
+		StreamStatus: relaycommon.NewStreamStatus(),
+	}
+	relayInfo.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, nil)
+	usage := &dto.Usage{
+		PromptTokens:     100,
+		CompletionTokens: 20,
+		TotalTokens:      120,
+		UsageSource:      "upstream",
+	}
+
+	got, waived := clientGoneUsageForBilling(ctx, relayInfo, usage)
+
+	require.Same(t, usage, got)
+	require.False(t, waived)
+	require.Equal(t, "upstream", got.UsageSource)
+	require.False(t, common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens))
+}
+
+func TestClientGoneBillingKeepsEstimatedOutput(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	requestCtx, cancel := context.WithCancel(request.Context())
+	cancel()
+	request = request.WithContext(requestCtx)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = request
+	common.SetContextKey(ctx, constant.ContextKeyLocalCountTokens, true)
+
+	relayInfo := &relaycommon.RelayInfo{
+		IsStream:        true,
+		OriginModelName: "gpt-test",
+		StreamStatus:    relaycommon.NewStreamStatus(),
+		PriceData:       types.PriceData{ModelRatio: 1, CompletionRatio: 2, GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1}},
+		StartTime:       time.Now(),
+	}
+	relayInfo.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, nil)
+	usage := &dto.Usage{
+		PromptTokens:     100,
+		CompletionTokens: 20,
+		OutputTokens:     20,
+		TotalTokens:      120,
+	}
+
+	got, waived := clientGoneUsageForBilling(ctx, relayInfo, usage)
+	require.Same(t, usage, got)
+	require.False(t, waived)
+	summary := calculateTextQuotaSummary(ctx, relayInfo, got)
+	require.Equal(t, 100, summary.PromptTokens)
+	require.Equal(t, 20, summary.CompletionTokens)
+	require.Greater(t, summary.Quota, 0)
+}
+
+func TestClientGoneBillingWaivesChargeWhenNoOutputWasReceived(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	requestCtx, cancel := context.WithCancel(request.Context())
+	cancel()
+	request = request.WithContext(requestCtx)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = request
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-test",
+		StartTime:       time.Now(),
+	}
+	relayInfo.SetEstimatePromptTokens(100)
+
+	got, waived := clientGoneUsageForBilling(ctx, relayInfo, nil)
+	require.NotNil(t, got)
+	require.True(t, waived)
+	require.Equal(t, 100, got.PromptTokens)
+	require.Zero(t, got.CompletionTokens)
+	require.Equal(t, 100, got.TotalTokens)
+	require.True(t, common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens))
+}
 
 func TestCalculateTextQuotaSummaryUnifiedForClaudeSemantic(t *testing.T) {
 	gin.SetMode(gin.TestMode)

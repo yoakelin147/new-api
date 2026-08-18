@@ -350,21 +350,75 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 	return "openai"
 }
 
+const clientGoneWithoutUpstreamOutputBillingWaiver = "client_gone_without_upstream_output_tokens"
+
+func isClientGoneRequest(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) bool {
+	if ctx == nil || relayInfo == nil {
+		return false
+	}
+
+	if relayInfo.IsStream && relayInfo.StreamStatus != nil {
+		return relayInfo.StreamStatus.EndReason == relaycommon.StreamEndReasonClientGone
+	}
+	return ctx.Request != nil && ctx.Request.Context().Err() != nil
+}
+
+func clientGoneUsageForBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) (*dto.Usage, bool) {
+	if !isClientGoneRequest(ctx, relayInfo) {
+		return usage, false
+	}
+
+	if usage == nil {
+		modelName := relayInfo.OriginModelName
+		if relayInfo.ChannelMeta != nil && relayInfo.UpstreamModelName != "" {
+			modelName = relayInfo.UpstreamModelName
+		}
+		usage = ResponseText2Usage(ctx, "", modelName, relayInfo.GetEstimatePromptTokens())
+	} else {
+		promptTokens := usage.PromptTokens
+		completionTokens := usage.CompletionTokens
+		if promptTokens == 0 {
+			promptTokens = usage.InputTokens
+		}
+		if completionTokens == 0 {
+			completionTokens = usage.OutputTokens
+		}
+
+		if promptTokens == 0 {
+			promptTokens = relayInfo.GetEstimatePromptTokens()
+			common.SetContextKey(ctx, constant.ContextKeyLocalCountTokens, true)
+		}
+		if promptTokens != usage.PromptTokens || completionTokens != usage.CompletionTokens {
+			normalized := *usage
+			normalized.PromptTokens = promptTokens
+			normalized.CompletionTokens = completionTokens
+			normalized.TotalTokens = promptTokens + completionTokens
+			usage = &normalized
+		}
+	}
+
+	return usage, usage.CompletionTokens <= 0 && usage.OutputTokens <= 0
+}
+
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {
+	usage, billingWaived := clientGoneUsageForBilling(ctx, relayInfo, usage)
 	originUsage := usage
 	if usage == nil {
 		extraContent = append(extraContent, "上游无计费信息")
 	}
-	if originUsage != nil {
+	if originUsage != nil && !billingWaived {
 		ObserveChannelAffinityUsageCacheByRelayFormat(ctx, usage, relayInfo.GetFinalRequestRelayFormat())
 	}
 
 	adminRejectReason := common.GetContextKeyString(ctx, constant.ContextKeyAdminRejectReason)
 	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+	if billingWaived {
+		summary.Quota = 0
+	}
 
 	var tieredResult *billingexpr.TieredResult
 	tieredBillingApplied := false
-	if originUsage != nil {
+	if originUsage != nil && !billingWaived {
 		var tieredUsedVars map[string]bool
 		if snap := relayInfo.TieredBillingSnapshot; snap != nil {
 			tieredUsedVars = billingexpr.UsedVars(snap.ExprString)
@@ -394,7 +448,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	}
 
 	if summary.TotalTokens == 0 {
-		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
+		if !billingWaived {
+			extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
+		}
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, relayInfo.FinalPreConsumedQuota))
 	} else {
 		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, summary.Quota)
@@ -431,6 +487,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	}
 	if adminRejectReason != "" {
 		other["reject_reason"] = adminRejectReason
+	}
+	if billingWaived {
+		other["billing_waived_reason"] = clientGoneWithoutUpstreamOutputBillingWaiver
 	}
 	if summary.ImageTokens != 0 {
 		other["image"] = true

@@ -54,3 +54,22 @@ func TestFormatUserLogsStripsModelMappingDetails(t *testing.T) {
 	require.Equal(t, "glm-5.2", logs[0].ModelName)
 	require.Contains(t, parsed, "model_ratio")
 }
+
+func TestFormatUserLogsStripsClientGoneBillingDetails(t *testing.T) {
+	const internalMessage = "客户端已断开且未获取到上游输出 Token，本次请求不计费"
+	other := common.MapToJsonStr(map[string]interface{}{
+		"billing_waived_reason": "client_gone_without_upstream_output_tokens",
+		"model_ratio":           1,
+	})
+	logs := []*Log{{
+		Content: "模型 gpt-test, " + internalMessage,
+		Other:   other,
+	}}
+
+	formatUserLogs(logs, 0)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.NotContains(t, parsed, "billing_waived_reason")
+	require.Equal(t, "模型 gpt-test", logs[0].Content)
+}

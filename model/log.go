@@ -41,6 +41,19 @@ const (
 	StreamStatusFilterPingFail     = "ping_fail"
 )
 
+const clientGoneBillingInternalMessage = "客户端已断开且未获取到上游输出 Token，本次请求不计费"
+
+func stripInternalLogContent(content string) string {
+	parts := strings.Split(content, ", ")
+	kept := parts[:0]
+	for _, part := range parts {
+		if part != clientGoneBillingInternalMessage {
+			kept = append(kept, part)
+		}
+	}
+	return strings.Join(kept, ", ")
+}
+
 func applyStreamStatusFilter(tx *gorm.DB, streamStatus string) (*gorm.DB, error) {
 	if streamStatus == "" {
 		return tx, nil
@@ -105,6 +118,7 @@ const (
 func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
+		logs[i].Content = stripInternalLogContent(logs[i].Content)
 		var otherMap map[string]interface{}
 		otherMap, _ = common.StrToMap(logs[i].Other)
 		if otherMap != nil {
@@ -115,6 +129,7 @@ func formatUserLogs(logs []*Log, startIdx int) {
 			// Hide upstream routing details from regular users.
 			delete(otherMap, "is_model_mapped")
 			delete(otherMap, "upstream_model_name")
+			delete(otherMap, "billing_waived_reason")
 			// delete(otherMap, "reject_reason")
 			delete(otherMap, "stream_status")
 		}
