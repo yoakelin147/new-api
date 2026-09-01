@@ -52,6 +52,7 @@ func handleCostStatisticsForUsers(c *gin.Context, userIds []int) {
 
 func handleCostStatisticsWithQuery(c *gin.Context, isAdmin bool, userIds []int) {
 	pageInfo := common.GetPageQuery(c)
+	exportAll := c.Query("export") == "true"
 	startTimestamp, endTimestamp, period, err := resolveCostStatisticsPeriod(
 		c.Query("period"),
 		isAdmin,
@@ -84,7 +85,14 @@ func handleCostStatisticsWithQuery(c *gin.Context, isAdmin bool, userIds []int) 
 		Group:          c.Query("group"),
 	}
 
-	rows, total, summary, err := model.GetCostStatistics(query, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	query.ExportAll = exportAll
+	startIdx := pageInfo.GetStartIdx()
+	pageSize := pageInfo.GetPageSize()
+	if exportAll {
+		startIdx = 0
+		pageSize = 0
+	}
+	rows, total, summary, err := model.GetCostStatistics(query, startIdx, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return

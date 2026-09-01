@@ -1520,9 +1520,10 @@ export function CostStatistics() {
         const result = await getCostStatistics({
           isAdmin,
           page: 1,
-          pageSize: stats.total,
+          pageSize: 0,
           filters,
           subject,
+          exportAll: true,
         })
         if (!result.success) {
           toast.error(result.message || t('Failed to load cost statistics'))

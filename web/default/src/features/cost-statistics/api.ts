@@ -30,6 +30,7 @@ export async function getCostStatistics(params: {
   pageSize: number
   filters: CostStatisticsFilters
   subject?: CostStatisticsSubject
+  exportAll?: boolean
 }): Promise<CostStatisticsResponse> {
   const isManaged =
     !params.isAdmin && params.subject !== undefined && params.subject !== 'self'
@@ -60,6 +61,7 @@ export async function getCostStatistics(params: {
       params.subject?.startsWith('customer:') === true
         ? Number(params.subject.slice('customer:'.length))
         : undefined,
+    export: params.exportAll ? 'true' : undefined,
   })
   const res = await api.get(`${endpoint}?${query}`)
   return res.data

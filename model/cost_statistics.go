@@ -26,6 +26,9 @@ type CostStatisticsQuery struct {
 	ModelName      string
 	ChannelId      int
 	Group          string
+	// ExportAll disables result pagination for the authenticated export path.
+	// Summary aggregation is unchanged; only the returned rows are unpaged.
+	ExportAll bool
 }
 
 type CostStatisticsSummary struct {
@@ -286,6 +289,9 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 	})
 
 	total := len(rows)
+	if query.ExportAll {
+		return rows, total, summary, nil
+	}
 	if startIdx >= total {
 		return []*CostStatisticsRow{}, total, summary, nil
 	}

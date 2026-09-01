@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/base64"
+	"strconv"
 	"testing"
 	"time"
 
@@ -521,6 +522,44 @@ func TestGetCostStatisticsPagination(t *testing.T) {
 	assert.Equal(t, 2, total)
 	assert.Len(t, rows, 1)
 	assert.Equal(t, 300, summary.Quota)
+}
+
+func TestGetCostStatisticsExportAllBypassesPagination(t *testing.T) {
+	truncateTables(t)
+
+	base := time.Date(2026, 7, 16, 9, 0, 0, 0, time.Local)
+	logs := make([]*Log, 0, 120)
+	for i := 0; i < 120; i++ {
+		logs = append(logs, &Log{
+			UserId:    7,
+			CreatedAt: base.Add(time.Duration(i) * time.Minute).Unix(),
+			Type:      LogTypeConsume,
+			TokenId:   i + 1,
+			TokenName: "key-" + strconv.Itoa(i),
+			ModelName: "model-" + strconv.Itoa(i),
+			Group:     "default",
+			Quota:     100,
+		})
+	}
+	require.NoError(t, DB.CreateInBatches(&logs, 50).Error)
+
+	query := CostStatisticsQuery{
+		UserId:         7,
+		LogType:        LogTypeConsume,
+		StartTimestamp: base.Add(-time.Minute).Unix(),
+		EndTimestamp:   base.Add(121 * time.Minute).Unix(),
+	}
+
+	rows, total, _, err := GetCostStatistics(query, 0, 100)
+	require.NoError(t, err)
+	assert.Equal(t, 120, total)
+	assert.Len(t, rows, 100)
+
+	query.ExportAll = true
+	rows, total, _, err = GetCostStatistics(query, 0, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 120, total)
+	assert.Len(t, rows, 120)
 }
 
 func TestGetCostStatisticsScansAllBatches(t *testing.T) {
