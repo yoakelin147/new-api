@@ -27,6 +27,8 @@ import {
   WalletCards,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useCountUp } from '@/hooks/use-count-up'
+import { useSpotlight } from '@/hooks/use-spotlight'
 import { useStatus } from '@/hooks/use-status'
 import { Button } from '@/components/ui/button'
 
@@ -36,6 +38,31 @@ const routeNodes = [
   { label: '弹性保障', value: '10%', tone: 'lavender' },
 ] as const
 
+function TelemetryChip(props: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  numericValue?: number
+  suffix?: string
+  decimals?: number
+}) {
+  const { ref, display } = useCountUp<HTMLDivElement>(
+    props.numericValue ?? Number.NaN,
+    { decimals: props.decimals ?? 0, delay: 600 }
+  )
+  return (
+    <div ref={ref}>
+      {props.icon}
+      <span>{props.label}</span>
+      <strong>
+        {props.numericValue !== undefined
+          ? `${display}${props.suffix ?? ''}`
+          : props.value}
+      </strong>
+    </div>
+  )
+}
+
 /**
  * The landing hero for the relay product. It intentionally presents a
  * traffic-control narrative instead of the upstream project's generic model
@@ -44,6 +71,7 @@ const routeNodes = [
 export function HeroCommandCenter() {
   const { t } = useTranslation()
   const { status } = useStatus()
+  const panelRef = useSpotlight<HTMLDivElement>()
   const docsUrl =
     (status?.docs_link as string | undefined) || 'https://docs.newapi.pro'
 
@@ -68,7 +96,7 @@ export function HeroCommandCenter() {
   )
 
   return (
-    <section className='relay-hero relative overflow-hidden px-6 pt-28 pb-20 md:pt-36 md:pb-28'>
+    <section className='relay-hero relative overflow-hidden px-6 pt-20 pb-16 md:pt-24 md:pb-20'>
       <div
         className='relay-hero__orb relay-hero__orb--sky'
         aria-hidden='true'
@@ -82,7 +110,7 @@ export function HeroCommandCenter() {
       <div className='relay-hero__content relative z-10 mx-auto max-w-7xl'>
         <div className='grid items-center gap-14 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16'>
           <div className='max-w-2xl'>
-            <div className='relay-hero__kicker landing-animate-fade-up mb-7 flex items-center gap-3 font-mono text-[10px] font-semibold tracking-[0.24em] uppercase opacity-0'>
+            <div className='relay-hero__kicker landing-animate-fade-up mb-7 flex items-center gap-3 font-mono text-xs font-semibold tracking-[0.24em] uppercase opacity-0'>
               <span className='relay-hero__kicker-line h-px w-10' />
               {t('API Traffic Control')}
             </div>
@@ -142,35 +170,29 @@ export function HeroCommandCenter() {
               </Button>
               {docsButton}
             </div>
-
-            <p
-              className='relay-hero__compatibility landing-animate-fade-up mt-6 text-xs opacity-0'
-              style={{ animationDelay: '360ms' }}
-            >
-              {t('No client migration required')} ·{' '}
-              {t('Compatible API surfaces')}: OpenAI / Responses / Claude /
-              Gemini
-            </p>
           </div>
 
           <div
             className='relay-hero__panel-wrap landing-animate-fade-up opacity-0'
             style={{ animationDelay: '260ms' }}
           >
-            <div className='relay-hero__panel-header mb-3 flex items-center justify-between px-1 font-mono text-[10px] font-semibold tracking-[0.16em] uppercase'>
+            <div className='relay-hero__panel-header mb-3 flex items-center justify-between px-1 font-mono text-xs font-semibold tracking-[0.16em] uppercase'>
               <span>{t('Service experience')}</span>
               <span className='flex items-center gap-2'>
                 <span className='relay-hero__live-dot' /> {t('Live')}
               </span>
             </div>
 
-            <div className='relay-hero__traffic-panel'>
+            <div
+              ref={panelRef}
+              className='relay-hero__traffic-panel relay-spotlight'
+            >
               <div className='flex items-start justify-between gap-4'>
                 <div>
                   <p className='relay-hero__panel-label'>
                     {t('One simple connection')}
                   </p>
-                  <p className='relay-hero__endpoint text-xs'>
+                  <p className='relay-hero__endpoint text-sm'>
                     {t('Everything you need, ready to use')}
                   </p>
                 </div>
@@ -244,21 +266,28 @@ export function HeroCommandCenter() {
             </div>
 
             <div className='relay-hero__telemetry mt-3 grid grid-cols-3 gap-2'>
-              <div>
-                <Gauge className='size-3.5' />
-                <span>{t('Fast response')}</span>
-                <strong>142ms</strong>
-              </div>
-              <div>
-                <Check className='size-3.5' />
-                <span>{t('Reliable service')}</span>
-                <strong>99.98%</strong>
-              </div>
-              <div>
-                <WalletCards className='size-3.5' />
-                <span>{t('Transparent pricing')}</span>
-                <strong>100%</strong>
-              </div>
+              <TelemetryChip
+                icon={<Gauge className='size-3.5' />}
+                label={t('Fast response')}
+                value='142ms'
+                numericValue={142}
+                suffix='ms'
+              />
+              <TelemetryChip
+                icon={<Check className='size-3.5' />}
+                label={t('Reliable service')}
+                value='99.98%'
+                numericValue={99.98}
+                suffix='%'
+                decimals={2}
+              />
+              <TelemetryChip
+                icon={<WalletCards className='size-3.5' />}
+                label={t('Transparent pricing')}
+                value='100%'
+                numericValue={100}
+                suffix='%'
+              />
             </div>
           </div>
         </div>

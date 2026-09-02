@@ -1,5 +1,5 @@
 /* Copyright (C) 2023-2026 QuantumNous */
-import { ArrowRight, Check, Settings2, Waypoints, Workflow } from 'lucide-react'
+import { ArrowRight, Settings2, Waypoints, Workflow } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { AnimateInView } from '@/components/animate-in-view'
 
@@ -40,27 +40,30 @@ export function HowItWorks() {
         </div>
         <div className='relay-workflow__track'>
           {steps.map(({ number, title, copy, icon: Icon }, index) => (
-            <div key={number} className='relay-workflow__step'>
-              <div className='relay-workflow__node'>
-                <span>{number}</span>
-                <Icon className='size-5' />
+            <AnimateInView
+              key={number}
+              delay={index * 140}
+              animation='fade-up'
+              className='h-full'
+            >
+              <div className='relay-workflow__step h-full'>
+                <div className='relay-workflow__node'>
+                  <span>{number}</span>
+                  <Icon className='size-5' />
+                </div>
+                <div className='relay-workflow__copy'>
+                  <p className='relay-workflow__eyebrow'>
+                    {t(`Step ${number}`)}
+                  </p>
+                  <h3>{t(title)}</h3>
+                  <p>{t(copy)}</p>
+                </div>
+                {index < steps.length - 1 && (
+                  <ArrowRight className='relay-workflow__arrow hidden md:block' />
+                )}
               </div>
-              <div className='relay-workflow__copy'>
-                <p className='relay-workflow__eyebrow'>{t(`Step ${number}`)}</p>
-                <h3>{t(title)}</h3>
-                <p>{t(copy)}</p>
-              </div>
-              {index < steps.length - 1 && (
-                <ArrowRight className='relay-workflow__arrow hidden md:block' />
-              )}
-            </div>
+            </AnimateInView>
           ))}
-        </div>
-        <div className='relay-workflow__footer mt-12 flex flex-wrap items-center gap-3 text-xs'>
-          <Check className='size-4' />
-          <span>{t('No client migration required')}</span>
-          <span className='relay-workflow__separator'>/</span>
-          <span>{t('Compatible API surfaces')}</span>
         </div>
       </div>
     </AnimateInView>

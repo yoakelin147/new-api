@@ -8,6 +8,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useSpotlight } from '@/hooks/use-spotlight'
 import { AnimateInView } from '@/components/animate-in-view'
 
 const featureCards = [
@@ -41,6 +42,41 @@ const featureCards = [
   },
 ] as const
 
+function FeatureCard({
+  card,
+  index,
+}: {
+  card: (typeof featureCards)[number]
+  index: number
+}) {
+  const { t } = useTranslation()
+  const spotlightRef = useSpotlight<HTMLElement>()
+  const Icon = card.icon
+  return (
+    <AnimateInView
+      as='div'
+      delay={index * 100}
+      animation='fade-up'
+      className='h-full'
+    >
+      <article
+        ref={spotlightRef}
+        className={`relay-feature-card relay-feature-card--${card.tone} relay-spotlight h-full`}
+      >
+        <div className='flex items-start justify-between gap-6'>
+          <div className='relay-feature-card__number'>{card.number}</div>
+          <Icon className='relay-feature-card__icon size-5' />
+        </div>
+        <h3 className='relay-feature-card__title mt-12'>{t(card.title)}</h3>
+        <p className='relay-feature-card__copy mt-3 max-w-sm text-sm leading-7'>
+          {t(card.copy)}
+        </p>
+        <ArrowUpRight className='relay-feature-card__arrow mt-8 size-5' />
+      </article>
+    </AnimateInView>
+  )
+}
+
 export function Features() {
   const { t } = useTranslation()
   return (
@@ -60,21 +96,8 @@ export function Features() {
           </p>
         </div>
         <div className='grid gap-3 md:grid-cols-2'>
-          {featureCards.map(({ number, title, copy, icon: Icon, tone }) => (
-            <article
-              key={number}
-              className={`relay-feature-card relay-feature-card--${tone}`}
-            >
-              <div className='flex items-start justify-between gap-6'>
-                <div className='relay-feature-card__number'>{number}</div>
-                <Icon className='relay-feature-card__icon size-5' />
-              </div>
-              <h3 className='relay-feature-card__title mt-12'>{t(title)}</h3>
-              <p className='relay-feature-card__copy mt-3 max-w-sm text-sm leading-7'>
-                {t(copy)}
-              </p>
-              <ArrowUpRight className='relay-feature-card__arrow mt-8 size-5' />
-            </article>
+          {featureCards.map((card, index) => (
+            <FeatureCard key={card.number} card={card} index={index} />
           ))}
         </div>
         <div className='relay-capability-strip mt-3 grid gap-3 sm:grid-cols-3'>
