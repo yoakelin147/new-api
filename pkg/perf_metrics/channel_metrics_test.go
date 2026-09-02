@@ -26,11 +26,15 @@ func TestShouldRecordChannelFailure(t *testing.T) {
 		{name: "forbidden upstream", statusCode: 403, errorCode: types.ErrorCodeBadResponseStatusCode, want: true},
 		{name: "model not found", statusCode: 404, errorCode: types.ErrorCodeModelNotFound, want: true},
 		{name: "upstream timeout", statusCode: 408, errorCode: types.ErrorCodeChannelUpstreamTimeout, want: true},
-		{name: "rate limited", statusCode: 429, errorCode: types.ErrorCodeBadResponseStatusCode},
+		{name: "rate limited", statusCode: 429, errorCode: types.ErrorCodeBadResponseStatusCode, want: true},
+		{name: "too many requests variant", statusCode: 430, errorCode: types.ErrorCodeBadResponseStatusCode, want: true},
+		{name: "last client error range", statusCode: 499, errorCode: types.ErrorCodeBadResponseStatusCode, want: true},
+		{name: "rate limited conversion error still alerts", statusCode: 429, errorCode: types.ErrorCodeConvertRequestFailed, want: true},
 		{name: "upstream server error", statusCode: 500, errorCode: types.ErrorCodeBadResponseStatusCode, want: true},
 		{name: "network error", statusCode: 500, errorCode: types.ErrorCodeDoRequestFailed, want: true},
 		{name: "request conversion error", statusCode: 500, errorCode: types.ErrorCodeConvertRequestFailed},
 		{name: "request body error", statusCode: 500, errorCode: types.ErrorCodeBadRequestBody},
+		{name: "last excluded client error", statusCode: 428, errorCode: types.ErrorCodeBadResponseStatusCode},
 		{name: "client disconnected", statusCode: 500, errorCode: types.ErrorCodeDoRequestFailed, requestCanceled: true},
 	}
 

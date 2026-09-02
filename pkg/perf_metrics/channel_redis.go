@@ -42,11 +42,14 @@ func RecordChannelFailure(modelName string, channelId int, latencyMs int64) {
 }
 
 // ShouldRecordChannelFailure reports whether a failed relay attempt reflects
-// model-channel availability. Client request errors and rate limiting are
-// excluded so they do not lower the Zabbix channel health success rate.
+// model-channel availability. Client request errors below 429 are excluded;
+// rate limiting and other 429-499 responses are treated as channel failures.
 func ShouldRecordChannelFailure(statusCode int, errorCode types.ErrorCode, requestCanceled bool) bool {
 	if requestCanceled {
 		return false
+	}
+	if statusCode >= 429 && statusCode <= 499 {
+		return true
 	}
 
 	switch errorCode {
@@ -59,8 +62,6 @@ func ShouldRecordChannelFailure(statusCode int, errorCode types.ErrorCode, reque
 	switch statusCode {
 	case 401, 403, 404, 408:
 		return true
-	case 429:
-		return false
 	default:
 		return statusCode >= 500
 	}
