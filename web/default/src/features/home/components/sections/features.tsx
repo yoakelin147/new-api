@@ -2,10 +2,11 @@
 import {
   ArrowUpRight,
   BarChart3,
+  GitBranch,
   KeyRound,
-  Network,
   ShieldCheck,
-  SlidersHorizontal,
+  Workflow,
+  Zap,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSpotlight } from '@/hooks/use-spotlight'
@@ -14,30 +15,30 @@ import { AnimateInView } from '@/components/animate-in-view'
 const featureCards = [
   {
     number: '01',
-    title: 'Easy to connect',
-    copy: 'Use the tools and models you already know, with one simple connection.',
-    icon: Network,
+    title: 'Unified API interface',
+    copy: 'One OpenAI-compatible endpoint for chat, embeddings, images, audio and video. Switch models by changing a single parameter.',
+    icon: Workflow,
     tone: 'mint',
   },
   {
     number: '02',
-    title: 'Always available',
-    copy: 'Enjoy a dependable service that keeps your work moving when demand changes.',
-    icon: SlidersHorizontal,
+    title: 'Smart load balancing',
+    copy: 'Distribute traffic across providers by latency, cost, and availability. Automatic failover keeps your app running when a provider degrades.',
+    icon: GitBranch,
     tone: 'sky',
   },
   {
     number: '03',
-    title: 'Clear and fair pricing',
-    copy: 'See what you use and what you pay, with straightforward usage details.',
+    title: 'Transparent cost control',
+    copy: 'Real-time token metering, per-key budgets, and detailed usage analytics. Know exactly what every request costs before you send it.',
     icon: BarChart3,
     tone: 'violet',
   },
   {
     number: '04',
-    title: 'Made for real work',
-    copy: 'From coding to content and images, get the right capability for every task.',
-    icon: KeyRound,
+    title: 'Enterprise-grade security',
+    copy: 'Isolated API keys, granular permissions, rate limiting and audit logs. Your credentials and data stay under your control.',
+    icon: ShieldCheck,
     tone: 'mint',
   },
 ] as const
@@ -61,17 +62,17 @@ function FeatureCard({
     >
       <article
         ref={spotlightRef}
-        className={`relay-feature-card relay-feature-card--${card.tone} relay-spotlight h-full`}
+        className={`nexus-feature-card nexus-feature-card--${card.tone} relay-spotlight h-full`}
       >
         <div className='flex items-start justify-between gap-6'>
-          <div className='relay-feature-card__number'>{card.number}</div>
-          <Icon className='relay-feature-card__icon size-5' />
+          <div className='nexus-feature-card__number'>{card.number}</div>
+          <Icon className='nexus-feature-card__icon size-5' />
         </div>
-        <h3 className='relay-feature-card__title mt-12'>{t(card.title)}</h3>
-        <p className='relay-feature-card__copy mt-3 max-w-sm text-sm leading-7'>
+        <h3 className='nexus-feature-card__title mt-12'>{t(card.title)}</h3>
+        <p className='nexus-feature-card__copy mt-3 max-w-sm text-sm leading-7'>
           {t(card.copy)}
         </p>
-        <ArrowUpRight className='relay-feature-card__arrow mt-8 size-5' />
+        <ArrowUpRight className='nexus-feature-card__arrow mt-8 size-5' />
       </article>
     </AnimateInView>
   )
@@ -80,18 +81,20 @@ function FeatureCard({
 export function Features() {
   const { t } = useTranslation()
   return (
-    <AnimateInView as='section' className='relay-features px-6 py-24 md:py-32'>
+    <AnimateInView as='section' className='nexus-features px-6 py-24 md:py-32'>
       <div className='mx-auto max-w-7xl'>
-        <div className='relay-section-heading mb-12 flex flex-col justify-between gap-6 md:flex-row md:items-end'>
+        <div className='nexus-section-heading mb-12 flex flex-col justify-between gap-6 md:flex-row md:items-end'>
           <div>
-            <p className='relay-section-kicker'>
-              {t('Everything you need to create')}
+            <p className='nexus-section-kicker'>
+              {t('Built for production AI')}
             </p>
-            <h2 className='relay-section-title mt-3'>{t('with AI, simply')}</h2>
+            <h2 className='nexus-section-title mt-3'>
+              {t('Everything you need to ship with confidence')}
+            </h2>
           </div>
-          <p className='relay-section-intro max-w-md text-sm leading-7'>
+          <p className='nexus-section-intro max-w-md text-sm leading-7'>
             {t(
-              'A simple, dependable way to access powerful AI services without managing the complexity behind them.'
+              'Stop juggling API keys and provider quirks. One integration gives you the entire model ecosystem with the reliability your users expect.'
             )}
           </p>
         </div>
@@ -100,18 +103,18 @@ export function Features() {
             <FeatureCard key={card.number} card={card} index={index} />
           ))}
         </div>
-        <div className='relay-capability-strip mt-3 grid gap-3 sm:grid-cols-3'>
+        <div className='nexus-capability-strip mt-3 grid gap-3 sm:grid-cols-3'>
           <div>
-            <ShieldCheck className='size-4' />
-            <span>{t('Stable service')}</span>
+            <Zap className='size-4' />
+            <span>{t('Millisecond routing')}</span>
           </div>
           <div>
-            <Network className='size-4' />
-            <span>{t('Flexible access')}</span>
+            <KeyRound className='size-4' />
+            <span>{t('Fine-grained access')}</span>
           </div>
           <div>
             <BarChart3 className='size-4' />
-            <span>{t('Clear pricing')}</span>
+            <span>{t('Usage analytics')}</span>
           </div>
         </div>
       </div>

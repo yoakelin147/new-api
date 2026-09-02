@@ -20,11 +20,11 @@ import { Link } from '@tanstack/react-router'
 import {
   ArrowRight,
   BookOpen,
-  Check,
-  CircleDot,
+  Boxes,
   Gauge,
-  Route,
-  WalletCards,
+  Layers,
+  Sparkles,
+  Zap,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useCountUp } from '@/hooks/use-count-up'
@@ -32,41 +32,43 @@ import { useSpotlight } from '@/hooks/use-spotlight'
 import { useStatus } from '@/hooks/use-status'
 import { Button } from '@/components/ui/button'
 
-const routeNodes = [
-  { label: '稳定服务', value: '60%', tone: 'mint' },
-  { label: '智能调度', value: '30%', tone: 'sky' },
-  { label: '弹性保障', value: '10%', tone: 'lavender' },
+const modelChips = [
+  { name: 'GPT', tone: 'mint', x: '8%', y: '12%', delay: '0s' },
+  { name: 'Claude', tone: 'sky', x: '62%', y: '6%', delay: '0.6s' },
+  { name: 'Gemini', tone: 'violet', x: '76%', y: '38%', delay: '1.2s' },
+  { name: 'DeepSeek', tone: 'mint', x: '12%', y: '56%', delay: '0.3s' },
+  { name: 'Llama', tone: 'sky', x: '55%', y: '72%', delay: '0.9s' },
+  { name: 'Qwen', tone: 'violet', x: '30%', y: '84%', delay: '1.5s' },
+  { name: 'Midjourney', tone: 'mint', x: '72%', y: '82%', delay: '0.4s' },
+  { name: 'Sora', tone: 'sky', x: '4%', y: '82%', delay: '1.1s' },
 ] as const
 
-function TelemetryChip(props: {
+function MetricChip(props: {
   icon: React.ReactNode
   label: string
-  value: string
-  numericValue?: number
-  suffix?: string
+  numericValue: number
+  suffix: string
   decimals?: number
 }) {
-  const { ref, display } = useCountUp<HTMLDivElement>(
-    props.numericValue ?? Number.NaN,
-    { decimals: props.decimals ?? 0, delay: 600 }
-  )
+  const { ref, display } = useCountUp<HTMLDivElement>(props.numericValue, {
+    decimals: props.decimals ?? 0,
+    delay: 500,
+  })
   return (
-    <div ref={ref}>
+    <div ref={ref} className='nexus-hero__metric'>
       {props.icon}
       <span>{props.label}</span>
       <strong>
-        {props.numericValue !== undefined
-          ? `${display}${props.suffix ?? ''}`
-          : props.value}
+        {display}
+        {props.suffix}
       </strong>
     </div>
   )
 }
 
 /**
- * The landing hero for the relay product. It intentionally presents a
- * traffic-control narrative instead of the upstream project's generic model
- * catalog layout while keeping all existing CTA destinations intact.
+ * Landing hero for the model-aggregation narrative: a single unified entry
+ * point surrounded by a constellation of model/provider chips.
  */
 export function HeroCommandCenter() {
   const { t } = useTranslation()
@@ -78,7 +80,7 @@ export function HeroCommandCenter() {
   const docsButton = docsUrl.startsWith('http') ? (
     <Button
       variant='outline'
-      className='relay-hero__button relay-hero__button--secondary'
+      className='nexus-hero__button nexus-hero__button--secondary'
       render={<a href={docsUrl} target='_blank' rel='noopener noreferrer' />}
     >
       <BookOpen className='size-4' />
@@ -87,7 +89,7 @@ export function HeroCommandCenter() {
   ) : (
     <Button
       variant='outline'
-      className='relay-hero__button relay-hero__button--secondary'
+      className='nexus-hero__button nexus-hero__button--secondary'
       render={<Link to={docsUrl} />}
     >
       <BookOpen className='size-4' />
@@ -96,51 +98,45 @@ export function HeroCommandCenter() {
   )
 
   return (
-    <section className='relay-hero relative overflow-hidden px-6 pt-20 pb-16 md:pt-24 md:pb-20'>
-      <div
-        className='relay-hero__orb relay-hero__orb--sky'
-        aria-hidden='true'
-      />
-      <div
-        className='relay-hero__orb relay-hero__orb--mint'
-        aria-hidden='true'
-      />
-      <div className='relay-hero__grid' aria-hidden='true' />
+    <section className='nexus-hero relative overflow-hidden px-6 pt-20 pb-16 md:pt-24 md:pb-20'>
+      <div className='nexus-hero__orb nexus-hero__orb--a' aria-hidden='true' />
+      <div className='nexus-hero__orb nexus-hero__orb--b' aria-hidden='true' />
+      <div className='nexus-hero__grid' aria-hidden='true' />
 
-      <div className='relay-hero__content relative z-10 mx-auto max-w-7xl'>
-        <div className='grid items-center gap-14 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16'>
+      <div className='nexus-hero__content relative z-10 mx-auto max-w-7xl'>
+        <div className='grid items-center gap-14 lg:grid-cols-[1fr_1.05fr] lg:gap-16'>
           <div className='max-w-2xl'>
-            <div className='relay-hero__kicker landing-animate-fade-up mb-7 flex items-center gap-3 font-mono text-xs font-semibold tracking-[0.24em] uppercase opacity-0'>
-              <span className='relay-hero__kicker-line h-px w-10' />
-              {t('API Traffic Control')}
+            <div className='nexus-hero__kicker landing-animate-fade-up mb-7 flex items-center gap-3 font-mono text-xs font-semibold tracking-[0.24em] uppercase opacity-0'>
+              <span className='nexus-hero__kicker-line h-px w-10' />
+              {t('AI Model Aggregation Platform')}
             </div>
 
             <div
-              className='relay-hero__badge landing-animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-semibold opacity-0'
+              className='nexus-hero__badge landing-animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-semibold opacity-0'
               style={{ animationDelay: '80ms' }}
             >
-              <CircleDot className='size-3.5' />
-              {t('AI Gateway Control Plane')}
+              <Sparkles className='size-3.5' />
+              {t('One API for every frontier model')}
             </div>
 
             <h1
-              className='relay-hero__title landing-animate-fade-up text-[clamp(2.5rem,5vw,4rem)] leading-[1.04] font-black tracking-[-0.05em] opacity-0'
+              className='nexus-hero__title landing-animate-fade-up text-[clamp(2.5rem,5vw,4rem)] leading-[1.04] font-black tracking-[-0.05em] opacity-0'
               style={{ animationDelay: '140ms' }}
             >
-              {t('Unified API Gateway for')}
+              {t('Access any frontier model')}
               <br />
-              <span className='relay-hero__title-accent'>
-                {t('Vast Range of AI Models')}
+              <span className='nexus-hero__title-accent'>
+                {t('through one unified gateway')}
               </span>
             </h1>
 
             <div
-              className='relay-hero__lead landing-animate-fade-up mt-7 max-w-xl text-base leading-8 opacity-0 md:text-lg'
+              className='nexus-hero__lead landing-animate-fade-up mt-7 max-w-xl text-base leading-8 opacity-0 md:text-lg'
               style={{ animationDelay: '220ms' }}
             >
               <p>
                 {t(
-                  '一个入口，连接所有模型供应商。自动路由、实时观测、按真实用量计费，让你的 AI 应用稳定地跑在正确的路径上。'
+                  'Connect to leading model providers through a single unified API. Intelligent routing, real-time observability, and pay-as-you-go billing built for production workloads.'
                 )}
               </p>
             </div>
@@ -150,7 +146,7 @@ export function HeroCommandCenter() {
               style={{ animationDelay: '300ms' }}
             >
               <Button
-                className='relay-hero__button relay-hero__button--primary'
+                className='nexus-hero__button nexus-hero__button--primary'
                 render={
                   <Link
                     to='/dashboard/$section'
@@ -158,12 +154,12 @@ export function HeroCommandCenter() {
                   />
                 }
               >
-                {t('Get Started')}
+                {t('Start Building')}
                 <ArrowRight className='size-4' />
               </Button>
               <Button
                 variant='outline'
-                className='relay-hero__button relay-hero__button--secondary'
+                className='nexus-hero__button nexus-hero__button--secondary'
                 render={<Link to='/pricing' />}
               >
                 {t('View Pricing')}
@@ -173,121 +169,72 @@ export function HeroCommandCenter() {
           </div>
 
           <div
-            className='relay-hero__panel-wrap landing-animate-fade-up opacity-0'
+            className='nexus-hero__panel-wrap landing-animate-fade-up opacity-0'
             style={{ animationDelay: '260ms' }}
           >
-            <div className='relay-hero__panel-header mb-3 flex items-center justify-between px-1 font-mono text-xs font-semibold tracking-[0.16em] uppercase'>
-              <span>{t('Service experience')}</span>
-              <span className='flex items-center gap-2'>
-                <span className='relay-hero__live-dot' /> {t('Live')}
-              </span>
-            </div>
-
-            <div
-              ref={panelRef}
-              className='relay-hero__traffic-panel relay-spotlight'
-            >
-              <div className='flex items-start justify-between gap-4'>
-                <div>
-                  <p className='relay-hero__panel-label'>
-                    {t('One simple connection')}
-                  </p>
-                  <p className='relay-hero__endpoint text-sm'>
-                    {t('Everything you need, ready to use')}
-                  </p>
-                </div>
-                <div className='relay-hero__normal-state'>
-                  <Check className='size-3.5' /> {t('All systems normal')}
-                </div>
+            <div ref={panelRef} className='nexus-hero__panel relay-spotlight'>
+              <div className='nexus-hero__panel-header'>
+                <span>{t('Unified model hub')}</span>
+                <span className='nexus-hero__live'>
+                  <span className='nexus-hero__live-dot' /> {t('Live')}
+                </span>
               </div>
 
-              <div className='relay-hero__flow mt-8'>
-                <div className='relay-hero__request-node'>
-                  <span className='relay-hero__node-caption'>
-                    {t('Your application')}
-                  </span>
-                  <strong>{t('Your app')}</strong>
-                  <span className='relay-hero__node-port'>
-                    {t('Ready to connect')}
-                  </span>
-                </div>
-                <div
-                  className='relay-hero__route-lane relay-hero__route-lane--one'
+              <div className='nexus-hero__constellation'>
+                <svg
+                  className='nexus-hero__links'
+                  viewBox='0 0 400 300'
                   aria-hidden='true'
                 >
-                  <span className='relay-hero__packet' />
+                  <line x1='200' y1='150' x2='60' y2='45' />
+                  <line x1='200' y1='150' x2='330' y2='30' />
+                  <line x1='200' y1='150' x2='350' y2='130' />
+                  <line x1='200' y1='150' x2='55' y2='185' />
+                  <line x1='200' y1='150' x2='295' y2='230' />
+                  <line x1='200' y1='150' x2='140' y2='265' />
+                  <line x1='200' y1='150' x2='330' y2='260' />
+                  <line x1='200' y1='150' x2='25' y2='260' />
+                </svg>
+                <div className='nexus-hero__hub'>
+                  <Layers className='size-5' />
+                  <span>{t('Unified API')}</span>
                 </div>
-                <div className='relay-hero__router-node'>
-                  <Route className='size-5' />
-                  <span>{t('Smart matching')}</span>
-                  <strong>{t('Best experience')}</strong>
-                </div>
-                <div
-                  className='relay-hero__route-lane relay-hero__route-lane--two'
-                  aria-hidden='true'
-                >
-                  <span className='relay-hero__packet' />
-                </div>
-                <div className='relay-hero__provider-node'>
-                  <span className='relay-hero__node-caption'>
-                    {t('AI models')}
-                  </span>
-                  <strong>{t('The right model')}</strong>
-                  <span className='relay-hero__node-port'>
-                    {t('Reliable and ready')}
-                  </span>
-                </div>
+                {modelChips.map((chip) => (
+                  <div
+                    key={chip.name}
+                    className={`nexus-hero__chip nexus-hero__chip--${chip.tone}`}
+                    style={{
+                      left: chip.x,
+                      top: chip.y,
+                      animationDelay: chip.delay,
+                    }}
+                  >
+                    {chip.name}
+                  </div>
+                ))}
               </div>
 
-              <div className='mt-10'>
-                <div className='mb-3 flex items-center justify-between'>
-                  <span className='relay-hero__panel-label'>
-                    {t('A stable experience, every time')}
-                  </span>
-                  <span className='relay-hero__panel-label'>100%</span>
-                </div>
-                <div className='relay-hero__traffic-bar'>
-                  <span className='relay-hero__traffic-bar-segment relay-hero__traffic-bar-segment--mint' />
-                  <span className='relay-hero__traffic-bar-segment relay-hero__traffic-bar-segment--sky' />
-                  <span className='relay-hero__traffic-bar-segment relay-hero__traffic-bar-segment--lavender' />
-                </div>
-                <div className='mt-3 grid grid-cols-3 gap-2'>
-                  {routeNodes.map((node) => (
-                    <div key={node.label} className='relay-hero__route-stat'>
-                      <span
-                        className={`relay-hero__route-dot relay-hero__route-dot--${node.tone}`}
-                      />
-                      <span>{t(node.label)}</span>
-                      <strong>{node.value}</strong>
-                    </div>
-                  ))}
-                </div>
+              <div className='nexus-hero__metrics'>
+                <MetricChip
+                  icon={<Boxes className='size-3.5' />}
+                  label={t('Models')}
+                  numericValue={300}
+                  suffix='+'
+                />
+                <MetricChip
+                  icon={<Zap className='size-3.5' />}
+                  label={t('Latency p95')}
+                  numericValue={90}
+                  suffix='ms'
+                />
+                <MetricChip
+                  icon={<Gauge className='size-3.5' />}
+                  label={t('Uptime')}
+                  numericValue={99.98}
+                  suffix='%'
+                  decimals={2}
+                />
               </div>
-            </div>
-
-            <div className='relay-hero__telemetry mt-3 grid grid-cols-3 gap-2'>
-              <TelemetryChip
-                icon={<Gauge className='size-3.5' />}
-                label={t('Fast response')}
-                value='142ms'
-                numericValue={142}
-                suffix='ms'
-              />
-              <TelemetryChip
-                icon={<Check className='size-3.5' />}
-                label={t('Reliable service')}
-                value='99.98%'
-                numericValue={99.98}
-                suffix='%'
-                decimals={2}
-              />
-              <TelemetryChip
-                icon={<WalletCards className='size-3.5' />}
-                label={t('Transparent pricing')}
-                value='100%'
-                numericValue={100}
-                suffix='%'
-              />
             </div>
           </div>
         </div>

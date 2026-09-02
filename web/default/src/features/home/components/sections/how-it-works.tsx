@@ -1,26 +1,26 @@
 /* Copyright (C) 2023-2026 QuantumNous */
-import { ArrowRight, Settings2, Waypoints, Workflow } from 'lucide-react'
+import { ArrowRight, Code2, KeyRound, Rocket } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { AnimateInView } from '@/components/animate-in-view'
 
 const steps = [
   {
     number: '01',
-    title: 'Choose what you need',
-    copy: 'Pick a model or service that fits your task and start right away.',
-    icon: Settings2,
+    title: 'Get your API key',
+    copy: 'Sign up and create a key in seconds. One key unlocks every model on the platform.',
+    icon: KeyRound,
   },
   {
     number: '02',
-    title: 'Start creating',
-    copy: 'Use the same simple experience for conversations, code, images, and more.',
-    icon: Waypoints,
+    title: 'Point your code',
+    copy: 'Change the base URL in your existing OpenAI, Claude, or Gemini SDK. No other changes needed.',
+    icon: Code2,
   },
   {
     number: '03',
-    title: 'Keep moving',
-    copy: 'Rely on a stable service with clear usage and pricing as your work grows.',
-    icon: Workflow,
+    title: 'Scale with confidence',
+    copy: 'Route across providers, monitor usage in real time, and optimize costs as you grow.',
+    icon: Rocket,
   },
 ] as const
 
@@ -29,16 +29,18 @@ export function HowItWorks() {
   return (
     <AnimateInView
       as='section'
-      className='relay-workflow border-t px-6 py-24 md:py-32'
+      className='nexus-workflow border-t px-6 py-24 md:py-32'
     >
       <div className='mx-auto max-w-7xl'>
         <div className='mb-14 max-w-2xl'>
-          <p className='relay-section-kicker'>{t('A simple way to use AI')}</p>
-          <h2 className='relay-section-title mt-3'>
-            {t('From your idea to the result.')}
+          <p className='nexus-section-kicker'>
+            {t('Up and running in minutes')}
+          </p>
+          <h2 className='nexus-section-title mt-3'>
+            {t('Three steps to every model.')}
           </h2>
         </div>
-        <div className='relay-workflow__track'>
+        <div className='nexus-workflow__track'>
           {steps.map(({ number, title, copy, icon: Icon }, index) => (
             <AnimateInView
               key={number}
@@ -46,20 +48,20 @@ export function HowItWorks() {
               animation='fade-up'
               className='h-full'
             >
-              <div className='relay-workflow__step h-full'>
-                <div className='relay-workflow__node'>
+              <div className='nexus-workflow__step h-full'>
+                <div className='nexus-workflow__node'>
                   <span>{number}</span>
                   <Icon className='size-5' />
                 </div>
-                <div className='relay-workflow__copy'>
-                  <p className='relay-workflow__eyebrow'>
+                <div className='nexus-workflow__copy'>
+                  <p className='nexus-workflow__eyebrow'>
                     {t(`Step ${number}`)}
                   </p>
                   <h3>{t(title)}</h3>
                   <p>{t(copy)}</p>
                 </div>
                 {index < steps.length - 1 && (
-                  <ArrowRight className='relay-workflow__arrow hidden md:block' />
+                  <ArrowRight className='nexus-workflow__arrow hidden md:block' />
                 )}
               </div>
             </AnimateInView>

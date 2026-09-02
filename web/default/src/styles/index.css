@@ -598,780 +598,102 @@ For commercial licensing, please contact support@quantumnous.com
   animation: terminal-demo-pulse 1.5s ease-in-out infinite;
 }
 
-/* Relayflow landing hero: a dedicated traffic-control visual language. */
-.relay-hero {
+/* ── Nexus landing design: unified model-aggregation visual language ──
+ * Palette: light mint green (oklch hue ~165) + light sky blue (hue ~220).
+ */
+
+/* Section canvas */
+.nexus-hero {
   isolation: isolate;
   background:
     radial-gradient(
-      ellipse 60% 70% at 8% 18%,
-      oklch(0.92 0.06 235 / 72%),
-      transparent 66%
+      ellipse 65% 70% at 10% 15%,
+      oklch(0.93 0.06 165 / 65%),
+      transparent 65%
     ),
     radial-gradient(
-      ellipse 56% 80% at 94% 34%,
-      oklch(0.93 0.08 165 / 64%),
+      ellipse 55% 75% at 92% 30%,
+      oklch(0.92 0.07 225 / 60%),
       transparent 68%
     ),
-    linear-gradient(135deg, oklch(0.99 0.008 220), var(--background));
+    linear-gradient(140deg, oklch(0.985 0.01 180), var(--background));
 }
 
-.relay-hero__grid {
+.nexus-hero__grid {
   position: absolute;
   inset: 0;
   z-index: -1;
-  opacity: 0.35;
-  background-image: radial-gradient(
-    circle,
-    oklch(0.55 0.04 210 / 22%) 1px,
-    transparent 1px
+  opacity: 0.4;
+  background-image:
+    linear-gradient(oklch(0.6 0.05 200 / 8%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.6 0.05 200 / 8%) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(
+    ellipse 80% 70% at 50% 30%,
+    black,
+    transparent 75%
   );
-  background-size: 22px 22px;
-  mask-image: linear-gradient(to bottom, black, transparent 88%);
 }
 
-.relay-hero__orb {
+.nexus-hero__orb {
   position: absolute;
   z-index: -1;
   border-radius: 999px;
-  filter: blur(2px);
+  filter: blur(60px);
   pointer-events: none;
 }
 
-.relay-hero__orb--sky {
-  top: 18%;
-  right: 27%;
-  width: 7rem;
-  height: 7rem;
-  border: 1px solid oklch(0.75 0.1 220 / 38%);
-  background: oklch(0.8 0.12 220 / 12%);
+.nexus-hero__orb--a {
+  top: -8%;
+  right: 12%;
+  width: 22rem;
+  height: 22rem;
+  background: oklch(0.85 0.1 165 / 35%);
 }
 
-.relay-hero__orb--mint {
-  right: 4%;
-  bottom: 14%;
-  width: 11rem;
-  height: 11rem;
-  background: oklch(0.78 0.13 165 / 16%);
+.nexus-hero__orb--b {
+  bottom: -12%;
+  left: -4%;
+  width: 26rem;
+  height: 26rem;
+  background: oklch(0.86 0.09 220 / 32%);
 }
 
-.relay-hero__content {
-  min-height: 690px;
+.nexus-hero__kicker {
+  color: oklch(0.5 0.12 168);
 }
 
-.relay-hero__kicker,
-.relay-hero__panel-header {
-  color: oklch(0.52 0.11 170);
+.nexus-hero__kicker-line {
+  background: linear-gradient(90deg, oklch(0.56 0.15 168), transparent);
 }
 
-.relay-hero__kicker-line {
-  background: linear-gradient(90deg, oklch(0.58 0.14 170), transparent);
+.nexus-hero__badge {
+  border-color: oklch(0.72 0.1 170 / 55%);
+  color: oklch(0.36 0.11 170);
+  background: oklch(0.95 0.05 165 / 75%);
 }
 
-.relay-hero__badge {
-  border-color: oklch(0.72 0.1 170 / 50%);
-  color: oklch(0.38 0.1 170);
-  background: oklch(0.95 0.05 165 / 72%);
-}
-
-.relay-hero__title {
+.nexus-hero__title {
   max-width: none;
-  white-space: nowrap;
-  color: oklch(0.27 0.07 220);
+  color: oklch(0.26 0.07 220);
 }
 
-.relay-hero__title-accent {
-  color: oklch(0.44 0.12 180);
-}
-
-.relay-hero__lead {
-  color: oklch(0.42 0.04 215);
-}
-
-.relay-hero__button {
-  display: inline-flex;
-  height: 2.9rem;
-  align-items: center;
-  gap: 0.55rem;
-  border-radius: 0.85rem;
-  padding-inline: 1.25rem;
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.relay-hero__button--primary {
-  color: white;
-  background: oklch(0.34 0.08 215);
-  box-shadow: 0 12px 24px -16px oklch(0.35 0.09 215 / 80%);
-}
-
-.relay-hero__button--primary:hover {
-  background: oklch(0.29 0.08 215);
-}
-
-.relay-hero__button--secondary {
-  border-color: oklch(0.74 0.04 205 / 70%);
-  color: oklch(0.35 0.06 215);
-  background: oklch(1 0 0 / 48%);
-}
-
-.relay-hero__button--secondary:hover {
-  border-color: oklch(0.55 0.11 170 / 55%);
-  background: oklch(0.95 0.04 170 / 72%);
-}
-
-.relay-hero__compatibility {
-  color: oklch(0.54 0.03 215);
-}
-
-.relay-hero__panel-wrap {
-  width: 100%;
-  max-width: 47rem;
-  justify-self: end;
-}
-
-.relay-hero__traffic-panel,
-.relay-hero__telemetry > div {
-  border: 1px solid oklch(1 0 0 / 78%);
-  background: oklch(1 0 0 / 62%);
-  box-shadow: 0 26px 70px -38px oklch(0.35 0.1 210 / 38%);
-  backdrop-filter: blur(18px);
-}
-
-.relay-hero__traffic-panel {
-  border-radius: 1.45rem;
-  padding: 1.45rem;
-}
-
-.relay-hero__panel-label,
-.relay-hero__node-caption {
-  color: oklch(0.56 0.04 210);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.relay-hero__endpoint {
-  margin-top: 0.4rem;
-  color: oklch(0.34 0.07 215);
-}
-
-.relay-hero__normal-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border-radius: 999px;
-  padding: 0.45rem 0.75rem;
-  color: oklch(0.45 0.12 165);
-  background: oklch(0.93 0.07 165 / 72%);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.relay-hero__flow {
-  display: grid;
-  grid-template-columns:
-    minmax(7rem, 1fr) 2.5rem minmax(7rem, 1fr)
-    2.5rem minmax(7rem, 1fr);
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.relay-hero__request-node,
-.relay-hero__router-node,
-.relay-hero__provider-node {
-  display: flex;
-  min-height: 6rem;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.35rem;
-  border-radius: 1rem;
-  padding: 0.85rem;
-}
-
-.relay-hero__request-node {
-  color: white;
-  background: oklch(0.34 0.08 215);
-}
-
-.relay-hero__router-node {
-  align-items: center;
-  border: 1px solid oklch(0.72 0.1 170 / 55%);
-  color: oklch(0.42 0.1 170);
-  background: oklch(0.93 0.07 165 / 68%);
-  text-align: center;
-}
-
-.relay-hero__provider-node {
-  border: 1px solid oklch(0.75 0.08 220 / 58%);
-  color: oklch(0.34 0.08 215);
-  background: oklch(0.94 0.05 225 / 72%);
-}
-
-.relay-hero__request-node strong,
-.relay-hero__router-node strong,
-.relay-hero__provider-node strong {
-  font-size: 1rem;
-}
-
-.relay-hero__node-port,
-.relay-hero__router-node span:not(.relay-hero__node-caption) {
-  color: color-mix(in oklch, currentColor 62%, transparent);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.72rem;
-}
-
-.relay-hero__route-lane {
-  position: relative;
-  height: 2px;
-  background: linear-gradient(90deg, oklch(0.6 0.13 170), oklch(0.66 0.11 220));
-}
-
-.relay-hero__route-lane::after {
-  position: absolute;
-  top: 50%;
-  right: -1px;
-  width: 0.4rem;
-  height: 0.4rem;
-  border-top: 2px solid oklch(0.55 0.1 210);
-  border-right: 2px solid oklch(0.55 0.1 210);
-  content: '';
-  transform: translateY(-50%) rotate(45deg);
-}
-
-.relay-hero__packet {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 999px;
-  background: oklch(0.76 0.15 165);
-  box-shadow: 0 0 0.6rem oklch(0.7 0.16 165 / 80%);
-  animation: relay-packet-travel 2.8s ease-in-out infinite;
-  transform: translateY(-50%);
-}
-
-.relay-hero__route-lane--two .relay-hero__packet {
-  animation-delay: 0.8s;
-}
-
-.relay-hero__traffic-bar {
-  display: flex;
-  height: 0.6rem;
-  overflow: hidden;
-  gap: 0.15rem;
-  border-radius: 999px;
-  background: oklch(0.9 0.03 210);
-}
-
-.relay-hero__traffic-bar-segment--mint {
-  flex: 6;
-  background: oklch(0.74 0.13 165);
-}
-.relay-hero__traffic-bar-segment--sky {
-  flex: 3;
-  background: oklch(0.76 0.11 225);
-}
-.relay-hero__traffic-bar-segment--lavender {
-  flex: 1;
-  background: oklch(0.78 0.09 300);
-}
-
-.relay-hero__route-stat {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 0.4rem;
-  color: oklch(0.5 0.04 210);
-  font-size: 0.78rem;
-}
-
-.relay-hero__route-stat strong {
-  color: oklch(0.34 0.07 215);
-  font-family: var(--font-mono, monospace);
-}
-
-.relay-hero__route-dot {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 999px;
-}
-
-.relay-hero__route-dot--mint {
-  background: oklch(0.67 0.15 165);
-}
-.relay-hero__route-dot--sky {
-  background: oklch(0.68 0.13 225);
-}
-.relay-hero__route-dot--lavender {
-  background: oklch(0.7 0.12 300);
-}
-
-.relay-hero__live-dot {
-  display: inline-block;
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 999px;
-  background: oklch(0.7 0.15 165);
-  box-shadow: 0 0 0.6rem oklch(0.7 0.15 165 / 80%);
-}
-
-.relay-hero__telemetry > div {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  column-gap: 0.45rem;
-  border-radius: 0.9rem;
-  padding: 0.8rem 0.95rem;
-  color: oklch(0.52 0.04 210);
-  font-size: 0.75rem;
-}
-
-.relay-hero__telemetry > div svg {
-  color: oklch(0.52 0.11 170);
-}
-.relay-hero__telemetry strong {
-  grid-column: 2;
-  color: oklch(0.34 0.07 215);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.88rem;
-}
-
-.relay-hero__terminal {
-  overflow: hidden;
-  max-height: 0;
-  opacity: 0.02;
-  pointer-events: none;
-}
-
-@keyframes relay-packet-travel {
-  0% {
-    left: 0;
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-  }
-  88% {
-    opacity: 1;
-  }
-  100% {
-    left: calc(100% - 0.42rem);
-    opacity: 0;
-  }
-}
-
-@media (max-width: 1023px) {
-  .relay-hero__content {
-    min-height: 0;
-  }
-  .relay-hero__panel-wrap {
-    justify-self: stretch;
-  }
-  .relay-hero__title {
-    max-width: none;
-  }
-}
-
-@media (max-width: 640px) {
-  .relay-hero {
-    padding-inline: 1rem;
-  }
-  .relay-hero__title {
-    white-space: normal;
-  }
-  .relay-hero__flow {
-    grid-template-columns: 1fr;
-    gap: 0.65rem;
-  }
-  .relay-hero__route-lane {
-    width: 2px;
-    height: 1.5rem;
-    justify-self: center;
-    background: linear-gradient(
-      180deg,
-      oklch(0.6 0.13 170),
-      oklch(0.66 0.11 220)
-    );
-  }
-  .relay-hero__route-lane::after {
-    top: auto;
-    right: auto;
-    bottom: -1px;
-    left: 50%;
-    border-top: 0;
-    border-right: 2px solid oklch(0.55 0.1 210);
-    border-bottom: 2px solid oklch(0.55 0.1 210);
-    transform: translateX(-50%) rotate(45deg);
-  }
-  .relay-hero__packet {
-    top: 0;
-    left: 50%;
-    animation-name: relay-packet-travel-vertical;
-    transform: translateX(-50%);
-  }
-  .relay-hero__route-stat {
-    font-size: 0.72rem;
-  }
-  .relay-hero__telemetry {
-    grid-template-columns: 1fr;
-  }
-}
-
-@keyframes relay-packet-travel-vertical {
-  0% {
-    top: 0;
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-  }
-  88% {
-    opacity: 1;
-  }
-  100% {
-    top: calc(100% - 0.42rem);
-    opacity: 0;
-  }
-}
-
-.relay-stats {
-  border-color: oklch(0.82 0.06 190 / 60%);
-  background: oklch(0.97 0.03 185 / 72%);
-}
-.relay-stat {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  border: 1px solid oklch(1 0 0 / 80%);
-  border-radius: 1rem;
-  padding: 0.85rem 1rem;
-  background: oklch(1 0 0 / 56%);
-  box-shadow: 0 12px 28px -22px oklch(0.35 0.1 210 / 55%);
-  transition:
-    transform 180ms ease,
-    border-color 180ms ease,
-    background 180ms ease;
-}
-.relay-stat:hover {
-  transform: translateY(-2px);
-  border-color: oklch(0.68 0.12 175 / 55%);
-  background: oklch(1 0 0 / 78%);
-}
-.relay-stat__icon {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  flex: none;
-  place-items: center;
-  border-radius: 0.65rem;
-}
-.relay-stat--mint .relay-stat__icon {
-  color: oklch(0.43 0.11 165);
-  background: oklch(0.9 0.09 165);
-}
-.relay-stat--sky .relay-stat__icon {
-  color: oklch(0.4 0.1 225);
-  background: oklch(0.9 0.07 225);
-}
-.relay-stat--violet .relay-stat__icon {
-  color: oklch(0.45 0.11 300);
-  background: oklch(0.92 0.06 300);
-}
-.relay-stat__value {
-  color: oklch(0.28 0.07 215);
-  font-family: var(--font-mono, monospace);
-  font-size: 1.15rem;
-  font-weight: 800;
-}
-.relay-stat__label {
-  color: oklch(0.52 0.04 210);
-  font-size: 0.78rem;
-}
-.relay-stat__arrow {
-  margin-left: auto;
-  color: oklch(0.55 0.06 210 / 65%);
-}
-.relay-section-kicker {
-  color: oklch(0.48 0.12 170);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-.relay-section-title {
-  max-width: 44rem;
-  color: oklch(0.28 0.07 215);
-  font-size: clamp(1.8rem, 4vw, 3.15rem);
-  font-weight: 850;
-  letter-spacing: -0.055em;
-  line-height: 1.05;
-}
-.relay-section-intro {
-  color: oklch(0.49 0.04 215);
-}
-.relay-features {
+.nexus-hero__title-accent {
   background: linear-gradient(
-    180deg,
-    var(--background),
-    oklch(0.97 0.025 200 / 56%)
+    90deg,
+    oklch(0.45 0.13 170),
+    oklch(0.55 0.14 200),
+    oklch(0.48 0.13 230),
+    oklch(0.45 0.13 170)
   );
-}
-.relay-feature-card {
-  min-height: 19rem;
-  border: 1px solid oklch(1 0 0 / 82%);
-  border-radius: 1.25rem;
-  padding: 1.4rem;
-  background: oklch(1 0 0 / 56%);
-  box-shadow: 0 18px 45px -30px oklch(0.35 0.1 210 / 50%);
-  transition:
-    transform 220ms ease,
-    box-shadow 220ms ease;
-}
-.relay-feature-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 24px 52px -30px oklch(0.35 0.1 210 / 70%);
-}
-.relay-feature-card--mint {
-  background: linear-gradient(
-    145deg,
-    oklch(0.97 0.04 170 / 80%),
-    oklch(1 0 0 / 54%)
-  );
-}
-.relay-feature-card--sky {
-  background: linear-gradient(
-    145deg,
-    oklch(0.96 0.035 225 / 80%),
-    oklch(1 0 0 / 54%)
-  );
-}
-.relay-feature-card--violet {
-  background: linear-gradient(
-    145deg,
-    oklch(0.97 0.03 300 / 72%),
-    oklch(1 0 0 / 54%)
-  );
-}
-.relay-feature-card__number {
-  color: oklch(0.57 0.05 210);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-}
-.relay-feature-card__icon {
-  color: oklch(0.45 0.11 170);
-}
-.relay-feature-card__title {
-  color: oklch(0.29 0.07 215);
-  font-size: 1.3rem;
-  font-weight: 800;
-  letter-spacing: -0.035em;
-}
-.relay-feature-card__copy {
-  color: oklch(0.49 0.04 215);
-}
-.relay-feature-card__arrow {
-  color: oklch(0.46 0.09 170);
-}
-.relay-capability-strip > div {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  border: 1px solid oklch(0.78 0.05 205 / 55%);
-  border-radius: 0.9rem;
-  padding: 0.8rem 1rem;
-  color: oklch(0.42 0.07 215);
-  background: oklch(1 0 0 / 48%);
-  font-size: 0.82rem;
-  font-weight: 650;
-}
-.relay-capability-strip svg {
-  color: oklch(0.48 0.11 170);
-}
-.relay-workflow {
-  background: oklch(0.98 0.018 190 / 58%);
-}
-.relay-workflow__track {
-  display: grid;
-  gap: 1rem;
-}
-.relay-workflow__step {
-  position: relative;
-  display: flex;
-  min-height: 12rem;
-  flex-direction: column;
-  gap: 1rem;
-  border-top: 2px solid oklch(0.71 0.12 170 / 65%);
-  padding-top: 1rem;
-}
-.relay-workflow__node {
-  display: flex;
-  width: fit-content;
-  align-items: center;
-  gap: 0.55rem;
-  color: oklch(0.42 0.1 170);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-.relay-workflow__node span {
-  display: grid;
-  width: 2.2rem;
-  height: 2.2rem;
-  place-items: center;
-  border-radius: 0.7rem;
-  background: oklch(0.9 0.08 165);
-}
-.relay-workflow__copy {
-  max-width: 18rem;
-}
-.relay-workflow__eyebrow {
-  color: oklch(0.55 0.04 210);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.relay-workflow__copy h3 {
-  margin-top: 0.45rem;
-  color: oklch(0.3 0.07 215);
-  font-size: 1.3rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-}
-.relay-workflow__copy p:last-child {
-  margin-top: 0.55rem;
-  color: oklch(0.5 0.04 215);
-  font-size: 0.92rem;
-  line-height: 1.7;
-}
-.relay-workflow__arrow {
-  position: absolute;
-  top: 1.35rem;
-  right: 1rem;
-  color: oklch(0.6 0.08 190);
-}
-.relay-workflow__footer {
-  color: oklch(0.46 0.1 170);
-}
-.relay-workflow__separator {
-  color: oklch(0.72 0.05 205);
-}
-.relay-cta {
-  background: linear-gradient(
-    120deg,
-    oklch(0.9 0.09 165 / 82%),
-    oklch(0.92 0.06 220 / 82%)
-  );
-}
-.relay-cta__inner {
-  border: 1px solid oklch(1 0 0 / 78%);
-  border-radius: 1.5rem;
-  padding: clamp(1.4rem, 4vw, 3.2rem);
-  background: oklch(1 0 0 / 34%);
-  box-shadow: 0 26px 60px -42px oklch(0.3 0.1 205 / 65%);
-}
-.relay-cta__icon {
-  display: grid;
-  width: 2.6rem;
-  height: 2.6rem;
-  place-items: center;
-  border-radius: 0.8rem;
-  color: oklch(0.38 0.1 170);
-  background: oklch(0.9 0.08 165);
-}
-.relay-cta__title {
-  max-width: 38rem;
-  color: oklch(0.27 0.07 215);
-  font-size: clamp(1.8rem, 4vw, 3.25rem);
-  font-weight: 850;
-  letter-spacing: -0.055em;
-  line-height: 1.04;
-}
-.relay-cta__copy {
-  color: oklch(0.44 0.05 215);
-}
-.relay-cta__primary,
-.relay-cta__secondary {
-  display: inline-flex;
-  height: 2.9rem;
-  align-items: center;
-  gap: 0.5rem;
-  border-radius: 0.85rem;
-  padding-inline: 1.2rem;
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-.relay-cta__primary {
-  color: white;
-  background: oklch(0.34 0.08 215);
-}
-.relay-cta__secondary {
-  border-color: oklch(0.65 0.07 205 / 58%);
-  color: oklch(0.35 0.07 215);
-  background: oklch(1 0 0 / 48%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: nexus-shimmer-text 7s ease-in-out infinite;
 }
 
-@media (min-width: 768px) {
-  .relay-workflow__track {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .relay-hero__packet {
-    animation: none !important;
-    opacity: 1;
-  }
-}
-
-/* ── Landing page dynamic effects ── */
-
-/* Slow float for decorative orbs and icons */
-@keyframes relay-float {
-  0%,
-  100% {
-    transform: translateY(0) translateX(0);
-  }
-  33% {
-    transform: translateY(-12px) translateX(6px);
-  }
-  66% {
-    transform: translateY(-4px) translateX(-8px);
-  }
-}
-
-@keyframes relay-float-soft {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
-}
-
-/* Breathing scale glow for status / router nodes */
-@keyframes relay-breathe {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 oklch(0.7 0.15 165 / 45%);
-  }
-  50% {
-    box-shadow: 0 0 0 7px oklch(0.7 0.15 165 / 0%);
-  }
-}
-
-/* Gradient shimmer sweeping across the hero title accent */
-@keyframes relay-shimmer-text {
+@keyframes nexus-shimmer-text {
   0% {
     background-position: 0% 50%;
   }
@@ -1383,131 +705,42 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
-/* Light sweep across primary buttons on hover */
-@keyframes relay-shine {
-  from {
-    transform: translateX(-120%) skewX(-18deg);
-  }
-  to {
-    transform: translateX(240%) skewX(-18deg);
-  }
+.nexus-hero__lead {
+  color: oklch(0.4 0.04 215);
 }
 
-/* Traffic bar scanning highlight */
-@keyframes relay-bar-scan {
-  0% {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  15% {
-    opacity: 1;
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(400%);
-    opacity: 0;
-  }
+/* Buttons */
+.nexus-hero__button,
+.nexus-cta__primary,
+.nexus-cta__secondary {
+  display: inline-flex;
+  height: 2.9rem;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 0.85rem;
+  padding-inline: 1.3rem;
+  font-size: 0.88rem;
+  font-weight: 700;
 }
 
-/* Card spotlight follows the pointer (set --spot-x / --spot-y from JS) */
-.relay-spotlight {
-  position: relative;
-}
-.relay-spotlight::before {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(
-    220px circle at var(--spot-x, 50%) var(--spot-y, 50%),
-    oklch(0.72 0.12 175 / 14%),
-    transparent 70%
-  );
-  content: '';
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 240ms ease;
-}
-.relay-spotlight:hover::before {
-  opacity: 1;
-}
-
-/* Traffic panel shimmer border on hover */
-.relay-hero__traffic-panel {
-  position: relative;
-  transition:
-    transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 300ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.relay-hero__traffic-panel:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 34px 80px -38px oklch(0.35 0.1 210 / 50%);
-}
-
-/* Hero orbs drift slowly */
-.relay-hero__orb--sky {
-  animation: relay-float 11s ease-in-out infinite;
-}
-.relay-hero__orb--mint {
-  animation: relay-float 13s ease-in-out 1.5s infinite reverse;
-}
-
-/* Title accent: animated gradient text */
-.relay-hero__title-accent {
-  background: linear-gradient(
-    90deg,
-    oklch(0.44 0.12 180),
-    oklch(0.55 0.15 165),
-    oklch(0.5 0.13 220),
-    oklch(0.44 0.12 180)
-  );
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: relay-shimmer-text 7s ease-in-out infinite;
-}
-
-/* Live dot breathing */
-.relay-hero__live-dot {
-  animation: relay-breathe 2.2s ease-in-out infinite;
-}
-
-/* Router node: breathing ring to suggest active routing */
-.relay-hero__router-node {
-  animation: relay-breathe 2.8s ease-in-out infinite;
-  transition: transform 300ms ease;
-}
-.relay-hero__flow:hover .relay-hero__router-node {
-  transform: scale(1.03);
-}
-
-/* Node cards react on hover */
-.relay-hero__request-node,
-.relay-hero__provider-node {
-  transition:
-    transform 220ms ease,
-    box-shadow 220ms ease;
-}
-.relay-hero__request-node:hover,
-.relay-hero__provider-node:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px -14px oklch(0.35 0.09 215 / 55%);
-}
-
-/* Primary buttons: light sweep on hover */
-.relay-hero__button--primary,
-.relay-cta__primary {
+.nexus-hero__button--primary,
+.nexus-cta__primary {
   position: relative;
   overflow: hidden;
+  color: white;
+  background: linear-gradient(
+    120deg,
+    oklch(0.42 0.11 175),
+    oklch(0.38 0.1 215)
+  );
+  box-shadow: 0 14px 28px -16px oklch(0.4 0.1 200 / 80%);
   transition:
     transform 180ms ease,
-    box-shadow 180ms ease,
-    background 180ms ease;
+    box-shadow 180ms ease;
 }
-.relay-hero__button--primary::after,
-.relay-cta__primary::after {
+
+.nexus-hero__button--primary::after,
+.nexus-cta__primary::after {
   position: absolute;
   top: 0;
   left: 0;
@@ -1516,114 +749,274 @@ For commercial licensing, please contact support@quantumnous.com
   background: linear-gradient(
     90deg,
     transparent,
-    oklch(1 0 0 / 32%),
+    oklch(1 0 0 / 35%),
     transparent
   );
   content: '';
   transform: translateX(-120%) skewX(-18deg);
   pointer-events: none;
 }
-.relay-hero__button--primary:hover::after,
-.relay-cta__primary:hover::after {
-  animation: relay-shine 0.9s ease;
+
+.nexus-hero__button--primary:hover::after,
+.nexus-cta__primary:hover::after {
+  animation: nexus-shine 0.9s ease;
 }
-.relay-hero__button--primary:hover,
-.relay-cta__primary:hover {
+
+.nexus-hero__button--primary:hover,
+.nexus-cta__primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 16px 30px -16px oklch(0.35 0.09 215 / 90%);
+  box-shadow: 0 18px 34px -16px oklch(0.4 0.1 200 / 90%);
 }
-.relay-hero__button--primary:active,
-.relay-cta__primary:active {
+
+.nexus-hero__button--primary:active,
+.nexus-cta__primary:active {
   transform: translateY(0) scale(0.98);
 }
 
-/* Secondary buttons: gentle lift */
-.relay-hero__button--secondary,
-.relay-cta__secondary {
+.nexus-hero__button--secondary,
+.nexus-cta__secondary {
+  border-color: oklch(0.72 0.06 210 / 65%);
+  color: oklch(0.34 0.07 215);
+  background: oklch(1 0 0 / 55%);
   transition:
     transform 180ms ease,
     border-color 180ms ease,
     background 180ms ease;
 }
-.relay-hero__button--secondary:hover,
-.relay-cta__secondary:hover {
+
+.nexus-hero__button--secondary:hover,
+.nexus-cta__secondary:hover {
   transform: translateY(-1px);
+  border-color: oklch(0.55 0.12 170 / 60%);
+  background: oklch(0.95 0.05 170 / 75%);
 }
 
-/* Traffic bar: animated scanning highlight */
-.relay-hero__traffic-bar {
-  position: relative;
-}
-.relay-hero__traffic-bar::after {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 25%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    oklch(1 0 0 / 55%),
-    transparent
-  );
-  content: '';
-  animation: relay-bar-scan 3.4s ease-in-out 1s infinite;
-  pointer-events: none;
-}
-
-/* Traffic bar segments grow in on load */
-.relay-hero__traffic-bar-segment {
-  transform-origin: left center;
-  animation: relay-bar-grow 1s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both;
-}
-.relay-hero__traffic-bar-segment--sky {
-  animation-delay: 0.65s;
-}
-.relay-hero__traffic-bar-segment--lavender {
-  animation-delay: 0.8s;
-}
-@keyframes relay-bar-grow {
+@keyframes nexus-shine {
   from {
-    transform: scaleX(0);
+    transform: translateX(-120%) skewX(-18deg);
   }
   to {
-    transform: scaleX(1);
+    transform: translateX(240%) skewX(-18deg);
   }
 }
 
-/* Route stat rows: subtle hover */
-.relay-hero__route-stat {
-  border-radius: 0.5rem;
-  padding: 0.15rem 0.3rem;
-  margin: -0.15rem -0.3rem;
-  transition: background 160ms ease;
-}
-.relay-hero__route-stat:hover {
-  background: oklch(1 0 0 / 60%);
+/* Panel / constellation */
+.nexus-hero__panel-wrap {
+  width: 100%;
+  max-width: 46rem;
+  justify-self: end;
 }
 
-/* Telemetry chips: float in with stagger, gentle hover */
-.relay-hero__telemetry > div {
+.nexus-hero__panel {
+  position: relative;
+  border: 1px solid oklch(1 0 0 / 80%);
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  background: oklch(1 0 0 / 60%);
+  box-shadow: 0 28px 70px -40px oklch(0.35 0.1 210 / 40%);
+  backdrop-filter: blur(18px);
+  transition:
+    transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nexus-hero__panel:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 36px 80px -40px oklch(0.35 0.1 210 / 52%);
+}
+
+.nexus-hero__panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: oklch(0.52 0.11 168);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.nexus-hero__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.nexus-hero__live-dot {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: oklch(0.68 0.16 165);
+  box-shadow: 0 0 0.6rem oklch(0.68 0.16 165 / 80%);
+  animation: nexus-breathe 2.2s ease-in-out infinite;
+}
+
+@keyframes nexus-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.68 0.16 165 / 45%);
+  }
+  50% {
+    box-shadow: 0 0 0 7px oklch(0.68 0.16 165 / 0%);
+  }
+}
+
+.nexus-hero__constellation {
+  position: relative;
+  height: 19rem;
+  margin-top: 1rem;
+}
+
+.nexus-hero__links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.nexus-hero__links line {
+  stroke: oklch(0.7 0.08 200 / 35%);
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+  animation: nexus-dash-flow 20s linear infinite;
+}
+
+@keyframes nexus-dash-flow {
+  to {
+    stroke-dashoffset: -200;
+  }
+}
+
+.nexus-hero__hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.7rem 1.15rem;
+  color: white;
+  background: linear-gradient(
+    120deg,
+    oklch(0.42 0.11 175),
+    oklch(0.38 0.1 215)
+  );
+  box-shadow: 0 16px 36px -16px oklch(0.4 0.1 200 / 70%);
+  font-size: 0.85rem;
+  font-weight: 700;
+  transform: translate(-50%, -50%);
+  animation: nexus-hub-pulse 3s ease-in-out infinite;
+  white-space: nowrap;
+}
+
+@keyframes nexus-hub-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 16px 36px -16px oklch(0.4 0.1 200 / 70%),
+      0 0 0 0 oklch(0.6 0.13 175 / 40%);
+  }
+  50% {
+    box-shadow:
+      0 16px 36px -16px oklch(0.4 0.1 200 / 70%),
+      0 0 0 12px oklch(0.6 0.13 175 / 0%);
+  }
+}
+
+.nexus-hero__chip {
+  position: absolute;
+  border: 1px solid oklch(1 0 0 / 85%);
+  border-radius: 999px;
+  padding: 0.42rem 0.8rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  box-shadow: 0 10px 24px -14px oklch(0.35 0.1 210 / 50%);
+  backdrop-filter: blur(8px);
+  animation: nexus-float-soft 5s ease-in-out infinite;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+.nexus-hero__chip--mint {
+  color: oklch(0.38 0.11 170);
+  background: oklch(0.93 0.06 165 / 85%);
+}
+
+.nexus-hero__chip--sky {
+  color: oklch(0.36 0.1 225);
+  background: oklch(0.92 0.06 225 / 85%);
+}
+
+.nexus-hero__chip--violet {
+  color: oklch(0.4 0.11 300);
+  background: oklch(0.93 0.05 300 / 85%);
+}
+
+@keyframes nexus-float-soft {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translateY(0);
+  }
+  50% {
+    transform: translate(-50%, -50%) translateY(-7px);
+  }
+}
+
+.nexus-hero__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+
+.nexus-hero__metric {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 0.5rem;
+  border: 1px solid oklch(1 0 0 / 80%);
+  border-radius: 0.9rem;
+  padding: 0.75rem 0.9rem;
+  color: oklch(0.5 0.05 210);
+  background: oklch(1 0 0 / 55%);
+  font-size: 0.75rem;
   transition:
     transform 200ms ease,
     box-shadow 200ms ease;
-  animation: relay-float-soft-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: nexus-float-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.relay-hero__telemetry > div:nth-child(1) {
-  animation-delay: 0.55s;
+
+.nexus-hero__metric:nth-child(1) {
+  animation-delay: 0.5s;
 }
-.relay-hero__telemetry > div:nth-child(2) {
-  animation-delay: 0.68s;
+.nexus-hero__metric:nth-child(2) {
+  animation-delay: 0.62s;
 }
-.relay-hero__telemetry > div:nth-child(3) {
-  animation-delay: 0.81s;
+.nexus-hero__metric:nth-child(3) {
+  animation-delay: 0.74s;
 }
-.relay-hero__telemetry > div:hover {
+
+.nexus-hero__metric:hover {
   transform: translateY(-2px);
   box-shadow: 0 14px 30px -20px oklch(0.35 0.1 210 / 55%);
 }
-@keyframes relay-float-soft-in {
+
+.nexus-hero__metric svg {
+  color: oklch(0.5 0.12 168);
+}
+
+.nexus-hero__metric strong {
+  grid-column: 2;
+  color: oklch(0.32 0.07 215);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9rem;
+}
+
+@keyframes nexus-float-in {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -1634,155 +1027,465 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
-/* Stats cards: icon nudge + arrow slide on hover */
-.relay-stat {
-  position: relative;
-  overflow: hidden;
+/* Orbs drift */
+.nexus-hero__orb--a {
+  animation: nexus-orb-drift 14s ease-in-out infinite;
 }
-.relay-stat__icon {
-  transition: transform 200ms ease;
-}
-.relay-stat:hover .relay-stat__icon {
-  transform: scale(1.08) rotate(-4deg);
-}
-.relay-stat__arrow {
-  transition:
-    transform 200ms ease,
-    color 200ms ease;
-}
-.relay-stat:hover .relay-stat__arrow {
-  transform: translate(2px, -2px);
-  color: oklch(0.5 0.11 170);
+.nexus-hero__orb--b {
+  animation: nexus-orb-drift 17s ease-in-out 2s infinite reverse;
 }
 
-/* Feature cards: arrow slide + icon pop on hover */
-.relay-feature-card {
-  position: relative;
-  overflow: hidden;
-}
-.relay-feature-card__icon {
-  transition: transform 240ms ease;
-}
-.relay-feature-card:hover .relay-feature-card__icon {
-  transform: scale(1.15) rotate(-6deg);
-}
-.relay-feature-card__arrow {
-  transition:
-    transform 240ms ease,
-    color 240ms ease;
-}
-.relay-feature-card:hover .relay-feature-card__arrow {
-  transform: translate(3px, -3px);
-  color: oklch(0.4 0.12 170);
-}
-.relay-feature-card__number {
-  transition: color 240ms ease;
-}
-.relay-feature-card:hover .relay-feature-card__number {
-  color: oklch(0.5 0.12 175);
+@keyframes nexus-orb-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(20px, -25px) scale(1.05);
+  }
+  66% {
+    transform: translate(-15px, 12px) scale(0.97);
+  }
 }
 
-/* Capability strip chips */
-.relay-capability-strip > div {
+/* Stats band */
+.nexus-stats {
+  border-color: oklch(0.82 0.06 195 / 60%);
+  background: linear-gradient(
+    90deg,
+    oklch(0.97 0.03 170 / 75%),
+    oklch(0.97 0.03 220 / 75%)
+  );
+}
+
+.nexus-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  border: 1px solid oklch(1 0 0 / 80%);
+  border-radius: 1rem;
+  padding: 0.9rem 1.1rem;
+  background: oklch(1 0 0 / 58%);
+  box-shadow: 0 12px 28px -22px oklch(0.35 0.1 210 / 55%);
   transition:
     transform 180ms ease,
     border-color 180ms ease,
     background 180ms ease;
 }
-.relay-capability-strip > div:hover {
+
+.nexus-stat:hover {
   transform: translateY(-2px);
-  border-color: oklch(0.68 0.12 175 / 60%);
-  background: oklch(1 0 0 / 70%);
+  border-color: oklch(0.68 0.12 175 / 55%);
+  background: oklch(1 0 0 / 80%);
 }
 
-/* Workflow steps: top border draws in, node pulses on hover */
-.relay-workflow__step::before {
-  position: absolute;
-  top: -2px;
-  left: 0;
-  width: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    oklch(0.62 0.14 170),
-    oklch(0.66 0.12 220)
-  );
-  content: '';
-  transition: width 500ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.relay-workflow__step:hover::before {
-  width: 100%;
-}
-.relay-workflow__node span {
-  transition:
-    transform 220ms ease,
-    box-shadow 220ms ease;
-}
-.relay-workflow__step:hover .relay-workflow__node span {
-  transform: scale(1.08);
-  box-shadow: 0 0 0 5px oklch(0.9 0.08 165 / 55%);
-}
-.relay-workflow__arrow {
-  transition:
-    transform 260ms ease,
-    color 260ms ease;
-}
-.relay-workflow__step:hover .relay-workflow__arrow {
-  transform: translateX(4px);
-  color: oklch(0.5 0.12 175);
+.nexus-stat__icon {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: none;
+  place-items: center;
+  border-radius: 0.7rem;
+  transition: transform 200ms ease;
 }
 
-/* CTA icon floats gently */
-.relay-cta__icon {
-  animation: relay-float-soft 4.5s ease-in-out infinite;
+.nexus-stat:hover .nexus-stat__icon {
+  transform: scale(1.08) rotate(-4deg);
 }
 
-/* Section titles: underline accent draws in on hover of heading block */
-.relay-section-title {
+.nexus-stat--mint .nexus-stat__icon {
+  color: oklch(0.4 0.12 165);
+  background: oklch(0.9 0.09 165);
+}
+
+.nexus-stat--sky .nexus-stat__icon {
+  color: oklch(0.38 0.11 225);
+  background: oklch(0.9 0.07 225);
+}
+
+.nexus-stat--violet .nexus-stat__icon {
+  color: oklch(0.42 0.12 300);
+  background: oklch(0.92 0.06 300);
+}
+
+.nexus-stat__value {
+  color: oklch(0.27 0.07 215);
+  font-family: var(--font-mono, monospace);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.nexus-stat__label {
+  color: oklch(0.5 0.04 210);
+  font-size: 0.78rem;
+}
+
+/* Section typography */
+.nexus-section-kicker {
+  color: oklch(0.46 0.13 170);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.nexus-section-title {
+  max-width: 46rem;
+  color: oklch(0.27 0.07 220);
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 850;
+  letter-spacing: -0.05em;
+  line-height: 1.08;
   background-image: linear-gradient(
     90deg,
-    oklch(0.58 0.14 170 / 55%),
-    oklch(0.62 0.12 220 / 55%)
+    oklch(0.56 0.14 170 / 55%),
+    oklch(0.6 0.12 220 / 55%)
   );
   background-repeat: no-repeat;
   background-position: 0 100%;
   background-size: 0% 3px;
   transition: background-size 600ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.relay-section-heading:hover .relay-section-title,
-.relay-workflow .relay-section-title:hover {
+
+.nexus-section-heading:hover .nexus-section-title,
+.nexus-workflow .nexus-section-title:hover {
   background-size: 100% 3px;
 }
 
+.nexus-section-intro {
+  color: oklch(0.48 0.04 215);
+}
+
+/* Features */
+.nexus-features {
+  background: linear-gradient(
+    180deg,
+    var(--background),
+    oklch(0.97 0.02 200 / 55%)
+  );
+}
+
+.nexus-feature-card {
+  min-height: 19rem;
+  border: 1px solid oklch(1 0 0 / 82%);
+  border-radius: 1.25rem;
+  padding: 1.5rem;
+  background: oklch(1 0 0 / 58%);
+  box-shadow: 0 18px 45px -30px oklch(0.35 0.1 210 / 50%);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.nexus-feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 26px 54px -30px oklch(0.35 0.1 210 / 70%);
+}
+
+.nexus-feature-card--mint {
+  background: linear-gradient(
+    145deg,
+    oklch(0.96 0.04 168 / 80%),
+    oklch(1 0 0 / 55%)
+  );
+}
+
+.nexus-feature-card--sky {
+  background: linear-gradient(
+    145deg,
+    oklch(0.95 0.035 222 / 80%),
+    oklch(1 0 0 / 55%)
+  );
+}
+
+.nexus-feature-card--violet {
+  background: linear-gradient(
+    145deg,
+    oklch(0.96 0.03 300 / 72%),
+    oklch(1 0 0 / 55%)
+  );
+}
+
+.nexus-feature-card__number {
+  color: oklch(0.55 0.06 210);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  transition: color 240ms ease;
+}
+
+.nexus-feature-card:hover .nexus-feature-card__number {
+  color: oklch(0.48 0.13 172);
+}
+
+.nexus-feature-card__icon {
+  color: oklch(0.43 0.12 170);
+  transition: transform 240ms ease;
+}
+
+.nexus-feature-card:hover .nexus-feature-card__icon {
+  transform: scale(1.15) rotate(-6deg);
+}
+
+.nexus-feature-card__title {
+  color: oklch(0.28 0.07 218);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.nexus-feature-card__copy {
+  color: oklch(0.48 0.04 215);
+}
+
+.nexus-feature-card__arrow {
+  color: oklch(0.44 0.1 170);
+  transition:
+    transform 240ms ease,
+    color 240ms ease;
+}
+
+.nexus-feature-card:hover .nexus-feature-card__arrow {
+  transform: translate(3px, -3px);
+  color: oklch(0.38 0.13 170);
+}
+
+.nexus-capability-strip > div {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid oklch(0.76 0.06 205 / 55%);
+  border-radius: 0.9rem;
+  padding: 0.85rem 1.05rem;
+  color: oklch(0.4 0.07 215);
+  background: oklch(1 0 0 / 50%);
+  font-size: 0.82rem;
+  font-weight: 650;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.nexus-capability-strip > div:hover {
+  transform: translateY(-2px);
+  border-color: oklch(0.66 0.13 175 / 60%);
+  background: oklch(1 0 0 / 72%);
+}
+
+.nexus-capability-strip svg {
+  color: oklch(0.46 0.12 170);
+}
+
+/* Workflow */
+.nexus-workflow {
+  background: oklch(0.98 0.015 195 / 58%);
+}
+
+.nexus-workflow__track {
+  display: grid;
+  gap: 1rem;
+}
+
+.nexus-workflow__step {
+  position: relative;
+  display: flex;
+  min-height: 12rem;
+  flex-direction: column;
+  gap: 1rem;
+  border-top: 2px solid oklch(0.7 0.12 172 / 60%);
+  padding-top: 1rem;
+}
+
+.nexus-workflow__step::before {
+  position: absolute;
+  top: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, oklch(0.6 0.14 170), oklch(0.64 0.12 220));
+  content: '';
+  transition: width 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nexus-workflow__step:hover::before {
+  width: 100%;
+}
+
+.nexus-workflow__node {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.55rem;
+  color: oklch(0.4 0.11 170);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.nexus-workflow__node span {
+  display: grid;
+  width: 2.3rem;
+  height: 2.3rem;
+  place-items: center;
+  border-radius: 0.7rem;
+  background: linear-gradient(135deg, oklch(0.9 0.08 165), oklch(0.9 0.06 220));
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.nexus-workflow__step:hover .nexus-workflow__node span {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 5px oklch(0.9 0.08 165 / 55%);
+}
+
+.nexus-workflow__copy {
+  max-width: 19rem;
+}
+
+.nexus-workflow__eyebrow {
+  color: oklch(0.53 0.05 210);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.nexus-workflow__copy h3 {
+  margin-top: 0.45rem;
+  color: oklch(0.29 0.07 218);
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.nexus-workflow__copy p:last-child {
+  margin-top: 0.55rem;
+  color: oklch(0.49 0.04 215);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+.nexus-workflow__arrow {
+  position: absolute;
+  top: 1.35rem;
+  right: 1rem;
+  color: oklch(0.58 0.08 195);
+  transition:
+    transform 260ms ease,
+    color 260ms ease;
+}
+
+.nexus-workflow__step:hover .nexus-workflow__arrow {
+  transform: translateX(4px);
+  color: oklch(0.48 0.13 175);
+}
+
+/* CTA */
+.nexus-cta {
+  background: linear-gradient(
+    120deg,
+    oklch(0.91 0.08 168 / 82%),
+    oklch(0.92 0.07 222 / 82%)
+  );
+}
+
+.nexus-cta__inner {
+  border: 1px solid oklch(1 0 0 / 78%);
+  border-radius: 1.5rem;
+  padding: clamp(1.4rem, 4vw, 3.2rem);
+  background: oklch(1 0 0 / 36%);
+  box-shadow: 0 26px 60px -42px oklch(0.3 0.1 205 / 65%);
+}
+
+.nexus-cta__icon {
+  display: grid;
+  width: 2.6rem;
+  height: 2.6rem;
+  place-items: center;
+  border-radius: 0.8rem;
+  color: oklch(0.36 0.11 170);
+  background: linear-gradient(135deg, oklch(0.9 0.08 165), oklch(0.9 0.06 220));
+  animation: nexus-float-soft-cta 4.5s ease-in-out infinite;
+}
+
+@keyframes nexus-float-soft-cta {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.nexus-cta__title {
+  max-width: 40rem;
+  color: oklch(0.26 0.07 218);
+  font-size: clamp(1.8rem, 4vw, 3.1rem);
+  font-weight: 850;
+  letter-spacing: -0.05em;
+  line-height: 1.06;
+}
+
+.nexus-cta__copy {
+  color: oklch(0.43 0.05 215);
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .nexus-workflow__track {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1023px) {
+  .nexus-hero__panel-wrap {
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 640px) {
+  .nexus-hero {
+    padding-inline: 1rem;
+  }
+  .nexus-hero__constellation {
+    height: 15rem;
+  }
+  .nexus-hero__chip {
+    font-size: 0.62rem;
+    padding: 0.32rem 0.6rem;
+  }
+  .nexus-hero__metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .relay-hero__orb--sky,
-  .relay-hero__orb--mint,
-  .relay-hero__live-dot,
-  .relay-hero__router-node,
-  .relay-hero__title-accent,
-  .relay-hero__traffic-bar::after,
-  .relay-hero__traffic-bar-segment,
-  .relay-hero__telemetry > div,
-  .relay-cta__icon {
+  .nexus-hero__orb--a,
+  .nexus-hero__orb--b,
+  .nexus-hero__live-dot,
+  .nexus-hero__hub,
+  .nexus-hero__chip,
+  .nexus-hero__metric,
+  .nexus-hero__links line,
+  .nexus-hero__title-accent,
+  .nexus-cta__icon {
     animation: none !important;
   }
-  .relay-hero__title-accent {
+  .nexus-hero__title-accent {
     background: none;
-    color: oklch(0.44 0.12 180);
+    color: oklch(0.45 0.13 170);
   }
-  .relay-hero__button--primary::after,
-  .relay-cta__primary::after {
+  .nexus-hero__button--primary::after,
+  .nexus-cta__primary::after {
     display: none;
   }
   .relay-spotlight::before {
     display: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .terminal-demo-blink,
-  .terminal-demo-spin,
-  .terminal-demo-pulse {
-    animation: none !important;
   }
 }
