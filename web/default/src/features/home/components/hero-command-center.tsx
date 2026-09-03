@@ -20,11 +20,11 @@ import { Link } from '@tanstack/react-router'
 import {
   ArrowRight,
   BookOpen,
-  Boxes,
+  Check,
   Gauge,
-  Layers,
+  Route,
   Sparkles,
-  Zap,
+  WalletCards,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useCountUp } from '@/hooks/use-count-up'
@@ -32,43 +32,40 @@ import { useSpotlight } from '@/hooks/use-spotlight'
 import { useStatus } from '@/hooks/use-status'
 import { Button } from '@/components/ui/button'
 
-const modelChips = [
-  { name: 'GPT', tone: 'mint', x: '8%', y: '12%', delay: '0s' },
-  { name: 'Claude', tone: 'sky', x: '62%', y: '6%', delay: '0.6s' },
-  { name: 'Gemini', tone: 'violet', x: '76%', y: '38%', delay: '1.2s' },
-  { name: 'DeepSeek', tone: 'mint', x: '12%', y: '56%', delay: '0.3s' },
-  { name: 'Llama', tone: 'sky', x: '55%', y: '72%', delay: '0.9s' },
-  { name: 'Qwen', tone: 'violet', x: '30%', y: '84%', delay: '1.5s' },
-  { name: 'Midjourney', tone: 'mint', x: '72%', y: '82%', delay: '0.4s' },
-  { name: 'Sora', tone: 'sky', x: '4%', y: '82%', delay: '1.1s' },
+const routeNodes = [
+  { label: '稳定服务', value: '60%', tone: 'mint' },
+  { label: '智能调度', value: '30%', tone: 'sky' },
+  { label: '弹性保障', value: '10%', tone: 'lavender' },
 ] as const
 
-function MetricChip(props: {
+function TelemetryChip(props: {
   icon: React.ReactNode
   label: string
-  numericValue: number
-  suffix: string
+  value: string
+  numericValue?: number
+  suffix?: string
   decimals?: number
 }) {
-  const { ref, display } = useCountUp<HTMLDivElement>(props.numericValue, {
-    decimals: props.decimals ?? 0,
-    delay: 500,
-  })
+  const { ref, display } = useCountUp<HTMLDivElement>(
+    props.numericValue ?? Number.NaN,
+    { decimals: props.decimals ?? 0, delay: 600 }
+  )
   return (
-    <div ref={ref} className='nexus-hero__metric'>
+    <div ref={ref}>
       {props.icon}
       <span>{props.label}</span>
       <strong>
-        {display}
-        {props.suffix}
+        {props.numericValue !== undefined
+          ? `${display}${props.suffix ?? ''}`
+          : props.value}
       </strong>
     </div>
   )
 }
 
 /**
- * Landing hero for the model-aggregation narrative: a single unified entry
- * point surrounded by a constellation of model/provider chips.
+ * Landing hero: left copy + right traffic-flow panel showing a request
+ * moving from the user's app through the router to a model provider.
  */
 export function HeroCommandCenter() {
   const { t } = useTranslation()
@@ -104,7 +101,7 @@ export function HeroCommandCenter() {
       <div className='nexus-hero__grid' aria-hidden='true' />
 
       <div className='nexus-hero__content relative z-10 mx-auto max-w-7xl'>
-        <div className='grid items-center gap-14 lg:grid-cols-[1fr_1.05fr] lg:gap-16'>
+        <div className='grid items-center gap-14 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16'>
           <div className='max-w-2xl'>
             <div className='nexus-hero__kicker landing-animate-fade-up mb-7 flex items-center gap-3 font-mono text-xs font-semibold tracking-[0.24em] uppercase opacity-0'>
               <span className='nexus-hero__kicker-line h-px w-10' />
@@ -123,10 +120,10 @@ export function HeroCommandCenter() {
               className='nexus-hero__title landing-animate-fade-up text-[clamp(2.5rem,5vw,4rem)] leading-[1.04] font-black tracking-[-0.05em] opacity-0'
               style={{ animationDelay: '140ms' }}
             >
-              {t('Access any frontier model')}
+              {t('接入前沿优质模型')}
               <br />
               <span className='nexus-hero__title-accent'>
-                {t('through one unified gateway')}
+                {t('通过统一聚合网关')}
               </span>
             </h1>
 
@@ -172,69 +169,118 @@ export function HeroCommandCenter() {
             className='nexus-hero__panel-wrap landing-animate-fade-up opacity-0'
             style={{ animationDelay: '260ms' }}
           >
-            <div ref={panelRef} className='nexus-hero__panel relay-spotlight'>
-              <div className='nexus-hero__panel-header'>
-                <span>{t('Unified model hub')}</span>
-                <span className='nexus-hero__live'>
-                  <span className='nexus-hero__live-dot' /> {t('Live')}
-                </span>
+            <div className='nexus-hero__panel-header mb-3 flex items-center justify-between px-1 font-mono text-xs font-semibold tracking-[0.16em] uppercase'>
+              <span>{t('Service experience')}</span>
+              <span className='flex items-center gap-2'>
+                <span className='nexus-hero__live-dot' /> {t('Live')}
+              </span>
+            </div>
+
+            <div
+              ref={panelRef}
+              className='nexus-hero__traffic-panel relay-spotlight'
+            >
+              <div className='flex items-start justify-between gap-4'>
+                <div>
+                  <p className='nexus-hero__panel-label'>
+                    {t('One simple connection')}
+                  </p>
+                  <p className='nexus-hero__endpoint text-sm'>
+                    {t('Everything you need, ready to use')}
+                  </p>
+                </div>
+                <div className='nexus-hero__normal-state'>
+                  <Check className='size-3.5' /> {t('All systems normal')}
+                </div>
               </div>
 
-              <div className='nexus-hero__constellation'>
-                <svg
-                  className='nexus-hero__links'
-                  viewBox='0 0 400 300'
+              <div className='nexus-hero__flow mt-8'>
+                <div className='nexus-hero__request-node'>
+                  <span className='nexus-hero__node-caption'>
+                    {t('Your application')}
+                  </span>
+                  <strong>{t('Your app')}</strong>
+                  <span className='nexus-hero__node-port'>
+                    {t('Ready to connect')}
+                  </span>
+                </div>
+                <div
+                  className='nexus-hero__route-lane nexus-hero__route-lane--one'
                   aria-hidden='true'
                 >
-                  <line x1='200' y1='150' x2='60' y2='45' />
-                  <line x1='200' y1='150' x2='330' y2='30' />
-                  <line x1='200' y1='150' x2='350' y2='130' />
-                  <line x1='200' y1='150' x2='55' y2='185' />
-                  <line x1='200' y1='150' x2='295' y2='230' />
-                  <line x1='200' y1='150' x2='140' y2='265' />
-                  <line x1='200' y1='150' x2='330' y2='260' />
-                  <line x1='200' y1='150' x2='25' y2='260' />
-                </svg>
-                <div className='nexus-hero__hub'>
-                  <Layers className='size-5' />
-                  <span>{t('Unified API')}</span>
+                  <span className='nexus-hero__packet' />
                 </div>
-                {modelChips.map((chip) => (
-                  <div
-                    key={chip.name}
-                    className={`nexus-hero__chip nexus-hero__chip--${chip.tone}`}
-                    style={{
-                      left: chip.x,
-                      top: chip.y,
-                      animationDelay: chip.delay,
-                    }}
-                  >
-                    {chip.name}
-                  </div>
-                ))}
+                <div className='nexus-hero__router-node'>
+                  <Route className='size-5' />
+                  <span>{t('Smart matching')}</span>
+                  <strong>{t('Best experience')}</strong>
+                </div>
+                <div
+                  className='nexus-hero__route-lane nexus-hero__route-lane--two'
+                  aria-hidden='true'
+                >
+                  <span className='nexus-hero__packet' />
+                </div>
+                <div className='nexus-hero__provider-node'>
+                  <span className='nexus-hero__node-caption'>
+                    {t('AI models')}
+                  </span>
+                  <strong>{t('The right model')}</strong>
+                  <span className='nexus-hero__node-port'>
+                    {t('Reliable and ready')}
+                  </span>
+                </div>
               </div>
 
-              <div className='nexus-hero__metrics'>
-                <MetricChip
-                  icon={<Boxes className='size-3.5' />}
-                  label={t('Models')}
-                  numericValue={300}
-                  suffix='+'
-                />
-                <MetricChip
-                  icon={<Zap className='size-3.5' />}
-                  label={t('Latency p95')}
-                  numericValue={90}
-                  suffix='ms'
-                />
-                <MetricChip
-                  icon={<Gauge className='size-3.5' />}
-                  label={t('Uptime')}
-                  numericValue={99.98}
-                  suffix='%'
-                  decimals={2}
-                />
+              <div className='mt-10'>
+                <div className='mb-3 flex items-center justify-between'>
+                  <span className='nexus-hero__panel-label'>
+                    {t('A stable experience, every time')}
+                  </span>
+                  <span className='nexus-hero__panel-label'>100%</span>
+                </div>
+                <div className='nexus-hero__traffic-bar'>
+                  <span className='nexus-hero__traffic-bar-segment nexus-hero__traffic-bar-segment--mint' />
+                  <span className='nexus-hero__traffic-bar-segment nexus-hero__traffic-bar-segment--sky' />
+                  <span className='nexus-hero__traffic-bar-segment nexus-hero__traffic-bar-segment--lavender' />
+                </div>
+                <div className='mt-3 grid grid-cols-3 gap-2'>
+                  {routeNodes.map((node) => (
+                    <div key={node.label} className='nexus-hero__route-stat'>
+                      <span
+                        className={`nexus-hero__route-dot nexus-hero__route-dot--${node.tone}`}
+                      />
+                      <span>{t(node.label)}</span>
+                      <strong>{node.value}</strong>
+                    </div>
+                  ))}
+                </div>
               </div>
+            </div>
+
+            <div className='nexus-hero__telemetry mt-3 grid grid-cols-3 gap-2'>
+              <TelemetryChip
+                icon={<Gauge className='size-3.5' />}
+                label={t('Fast response')}
+                value='90ms'
+                numericValue={90}
+                suffix='ms'
+              />
+              <TelemetryChip
+                icon={<Check className='size-3.5' />}
+                label={t('Reliable service')}
+                value='99.98%'
+                numericValue={99.98}
+                suffix='%'
+                decimals={2}
+              />
+              <TelemetryChip
+                icon={<WalletCards className='size-3.5' />}
+                label={t('Transparent pricing')}
+                value='100%'
+                numericValue={100}
+                suffix='%'
+              />
             </div>
           </div>
         </div>

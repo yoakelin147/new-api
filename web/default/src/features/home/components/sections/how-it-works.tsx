@@ -13,7 +13,7 @@ const steps = [
   {
     number: '02',
     title: 'Point your code',
-    copy: 'Change the base URL in your existing OpenAI, Claude, or Gemini SDK. No other changes needed.',
+    copy: 'Change the base URL in your existing Agent application. No other changes needed.',
     icon: Code2,
   },
   {
