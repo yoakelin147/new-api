@@ -13,6 +13,7 @@ import (
 
 func GetProfitStatistics(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
+	exportAll := c.Query("export") == "true"
 	startTimestamp, endTimestamp, period, err := resolveCostStatisticsPeriod(
 		c.Query("period"),
 		true,
@@ -37,8 +38,15 @@ func GetProfitStatistics(c *gin.Context) {
 		ModelName:      modelName,
 		ChannelId:      channelId,
 		Group:          c.Query("group"),
+		ExportAll:      exportAll,
 	}
-	rows, total, summary, err := model.GetProfitStatistics(query, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	startIdx := pageInfo.GetStartIdx()
+	pageSize := pageInfo.GetPageSize()
+	if exportAll {
+		startIdx = 0
+		pageSize = 0
+	}
+	rows, total, summary, err := model.GetProfitStatistics(query, startIdx, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return

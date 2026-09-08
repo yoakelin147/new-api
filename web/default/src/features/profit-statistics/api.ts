@@ -30,6 +30,7 @@ export async function getProfitStatistics(params: {
   page: number
   pageSize: number
   filters: ProfitStatisticsFilters
+  exportAll?: boolean
 }): Promise<ProfitStatisticsResponse> {
   const query = buildQueryParams({
     p: params.page,
@@ -48,6 +49,7 @@ export async function getProfitStatistics(params: {
     group: params.filters.group?.trim(),
     username: params.filters.username?.trim(),
     channel: params.filters.channel?.trim(),
+    export: params.exportAll ? 'true' : undefined,
   })
   const res = await api.get(`/api/profit_statistics/?${query}`)
   return res.data

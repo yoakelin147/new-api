@@ -1529,8 +1529,9 @@ export function ProfitStatistics() {
       if (stats.total > stats.items.length) {
         const result = await getProfitStatistics({
           page: 1,
-          pageSize: stats.total,
+          pageSize: 0,
           filters,
+          exportAll: true,
         })
         if (!result.success) {
           toast.error(result.message || t('Failed to load profit statistics'))

@@ -25,6 +25,9 @@ type ProfitStatisticsQuery struct {
 	ModelName      string
 	ChannelId      int
 	Group          string
+	// ExportAll disables result pagination for the authenticated export path.
+	// Summary aggregation and all filters remain unchanged.
+	ExportAll bool
 }
 
 type ProfitStatisticsSummary struct {
@@ -204,6 +207,9 @@ func GetProfitStatistics(query ProfitStatisticsQuery, startIdx int, pageSize int
 	})
 
 	total := len(rows)
+	if query.ExportAll {
+		return rows, total, summary, nil
+	}
 	if startIdx >= total {
 		return []*ProfitStatisticsRow{}, total, summary, nil
 	}

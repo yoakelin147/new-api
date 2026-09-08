@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -331,6 +332,39 @@ func TestGetProfitStatisticsScansAllBatches(t *testing.T) {
 	assert.InDelta(t, 1, summary.OriginalAmount, 0.000001)
 	assert.InDelta(t, 0.1, summary.UpstreamCost, 0.000001)
 	assert.InDelta(t, 0.4, summary.Profit, 0.000001)
+}
+
+func TestGetProfitStatisticsExportAllBypassesPagination(t *testing.T) {
+	truncateTables(t)
+	common.QuotaPerUnit = 500000
+
+	base := time.Date(2026, 7, 23, 0, 0, 0, 0, time.Local)
+	require.NoError(t, DB.Create(&Channel{Id: 18, Name: "Azure", Key: "key"}).Error)
+	require.NoError(t, DB.Create(&ChannelProfitRatio{ChannelId: 18, UpstreamRatio: 0.1, Enabled: true}).Error)
+	logs := make([]*Log, 0, 120)
+	for i := 0; i < 120; i++ {
+		logs = append(logs, &Log{
+			UserId: 7, Username: "user-" + strconv.Itoa(i), CreatedAt: base.Unix(),
+			Type: LogTypeConsume, ModelName: "model-" + strconv.Itoa(i), Group: "default",
+			ChannelId: 18, Quota: int(common.QuotaPerUnit), Other: `{"group_ratio":1}`,
+		})
+	}
+	require.NoError(t, DB.CreateInBatches(&logs, 50).Error)
+
+	query := ProfitStatisticsQuery{
+		LogType: LogTypeConsume, StartTimestamp: base.Add(-time.Minute).Unix(),
+		EndTimestamp: base.Add(time.Minute).Unix(),
+	}
+	rows, total, _, err := GetProfitStatistics(query, 0, 100)
+	require.NoError(t, err)
+	require.Equal(t, 120, total)
+	require.Len(t, rows, 100)
+
+	query.ExportAll = true
+	rows, total, _, err = GetProfitStatistics(query, 0, 0)
+	require.NoError(t, err)
+	require.Equal(t, 120, total)
+	require.Len(t, rows, 120)
 }
 
 func TestChannelProfitRatioSpecificMatchWins(t *testing.T) {
