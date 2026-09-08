@@ -106,6 +106,8 @@ type GeneralOpenAIRequest struct {
 	SearchMode             json.RawMessage `json:"search_mode,omitempty"`
 	// Minimax
 	ReasoningSplit json.RawMessage `json:"reasoning_split,omitempty"`
+	// KimiDynamicToolsEnabled allows only the Moonshot adaptor to emit message-level tools.
+	KimiDynamicToolsEnabled bool `json:"-"`
 }
 
 func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
@@ -293,7 +295,9 @@ type Message struct {
 	Reasoning        *string         `json:"reasoning,omitempty"`
 	ToolCalls        json.RawMessage `json:"tool_calls,omitempty"`
 	ToolCallId       string          `json:"tool_call_id,omitempty"`
-	parsedContent    []MediaContent
+	// ProviderTools preserves provider-specific message extensions and is omitted unless an adaptor enables it.
+	ProviderTools json.RawMessage `json:"-"`
+	parsedContent []MediaContent
 	//parsedStringContent *string
 }
 

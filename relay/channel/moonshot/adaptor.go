@@ -81,6 +81,12 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 }
 
 func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
+	if request == nil {
+		return nil, errors.New("request is nil")
+	}
+	if isKimiK3OrLater(getUpstreamModelName(info, request.Model)) {
+		return convertKimiRequest(c, request)
+	}
 	if request.Temperature != nil && isTemperatureOneOnlyModel(getUpstreamModelName(info, request.Model)) && *request.Temperature != 1.0 {
 		request.Temperature = common.GetPointer[float64](1.0)
 	}

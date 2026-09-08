@@ -1,9 +1,11 @@
 package helper
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -307,6 +309,9 @@ func GetAndValidateTextRequest(c *gin.Context, relayMode int) (*dto.GeneralOpenA
 	if textRequest.Model == "" {
 		return nil, errors.New("model is required")
 	}
+	if err := validateResponseFormat(textRequest.ResponseFormat); err != nil {
+		return nil, err
+	}
 	if textRequest.WebSearchOptions != nil {
 		if textRequest.WebSearchOptions.SearchContextSize != "" {
 			validSizes := map[string]bool{
@@ -343,6 +348,37 @@ func GetAndValidateTextRequest(c *gin.Context, relayMode int) (*dto.GeneralOpenA
 		}
 	}
 	return textRequest, nil
+}
+
+func validateResponseFormat(format *dto.ResponseFormat) error {
+	if format == nil {
+		return nil
+	}
+	switch format.Type {
+	case "text", "json_object":
+		return nil
+	case "json_schema":
+		if len(format.JsonSchema) == 0 || common.GetJsonType(format.JsonSchema) != "object" {
+			return invalidResponseFormatError("response_format.json_schema must be an object")
+		}
+		var schema map[string]json.RawMessage
+		if err := common.Unmarshal(format.JsonSchema, &schema); err != nil {
+			return invalidResponseFormatError("response_format.json_schema must be a valid object")
+		}
+		if rawSchema, exists := schema["schema"]; exists && common.GetJsonType(rawSchema) != "object" {
+			return invalidResponseFormatError("response_format.json_schema.schema must be an object")
+		}
+		if rawStrict, exists := schema["strict"]; exists && common.GetJsonType(rawStrict) != "boolean" {
+			return invalidResponseFormatError("response_format.json_schema.strict must be a boolean")
+		}
+		return nil
+	default:
+		return invalidResponseFormatError("response_format.type is invalid")
+	}
+}
+
+func invalidResponseFormatError(message string) error {
+	return types.NewErrorWithStatusCode(errors.New(message), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 }
 
 func GetAndValidateGeminiRequest(c *gin.Context) (*dto.GeminiChatRequest, error) {

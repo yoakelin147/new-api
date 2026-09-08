@@ -42,6 +42,18 @@ func TestMaxTokensBounds(t *testing.T) {
 		require.Contains(t, err.Error(), "max_tokens is invalid")
 	})
 
+	t.Run("response format json schema requires object schema", func(t *testing.T) {
+		c := newJSONContext(t, `{"model":"kimi-k3","messages":[{"role":"user","content":"hi"}],"response_format":{"type":"json_schema","json_schema":{"name":"weather","schema":"x"}}}`)
+		_, err := GetAndValidateTextRequest(c, relayconstant.RelayModeChatCompletions)
+		require.ErrorContains(t, err, "response_format.json_schema.schema must be an object")
+	})
+
+	t.Run("response format json schema requires boolean strict", func(t *testing.T) {
+		c := newJSONContext(t, `{"model":"kimi-k3","messages":[{"role":"user","content":"hi"}],"response_format":{"type":"json_schema","json_schema":{"name":"weather","strict":"yes","schema":{"type":"object"}}}}`)
+		_, err := GetAndValidateTextRequest(c, relayconstant.RelayModeChatCompletions)
+		require.ErrorContains(t, err, "response_format.json_schema.strict must be a boolean")
+	})
+
 	t.Run("claude max_tokens overflow rejected", func(t *testing.T) {
 		c := newJSONContext(t, `{"model":"claude-sonnet-4","messages":[{"role":"user","content":"hi"}],"max_tokens":`+hugeN+`}`)
 		_, err := GetAndValidateClaudeRequest(c)

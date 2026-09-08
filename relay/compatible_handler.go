@@ -118,7 +118,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			if ok {
 				containSystemPrompt := false
 				for _, message := range request.Messages {
-					if message.Role == request.GetSystemRoleName() {
+					if message.Role == request.GetSystemRoleName() && (!request.KimiDynamicToolsEnabled || len(message.ProviderTools) == 0) {
 						containSystemPrompt = true
 						break
 					}
@@ -134,7 +134,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 					common.SetContextKey(c, constant.ContextKeySystemPromptOverride, true)
 					// 如果有系统提示，且允许覆盖，则拼接到前面
 					for i, message := range request.Messages {
-						if message.Role == request.GetSystemRoleName() {
+						if message.Role == request.GetSystemRoleName() && (!request.KimiDynamicToolsEnabled || len(message.ProviderTools) == 0) {
 							if message.IsStringContent() {
 								request.Messages[i].SetStringContent(info.ChannelSetting.SystemPrompt + "\n" + message.StringContent())
 							} else {
