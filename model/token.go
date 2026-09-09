@@ -56,6 +56,21 @@ func (token *Token) GetMaskedKey() string {
 	return MaskTokenKey(token.Key)
 }
 
+// MaskTokenKeyForAudit returns a stable, non-secret identifier for billing logs.
+// Stored token keys omit the public "sk-" prefix, so the prefix is restored only
+// in this display snapshot; the full key is never persisted in logs.
+func MaskTokenKeyForAudit(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	key = strings.TrimPrefix(key, "sk-")
+	if len(key) <= 8 {
+		return "sk-" + MaskTokenKey(key)
+	}
+	return "sk-" + key[:4] + "**********" + key[len(key)-4:]
+}
+
 func (token *Token) GetIpLimits() []string {
 	// delete empty spaces
 	//split with \n

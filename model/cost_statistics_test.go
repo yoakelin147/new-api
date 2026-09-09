@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -127,6 +128,28 @@ func TestGetCostStatisticsAggregatesConsumeLogs(t *testing.T) {
 	assert.Zero(t, byToken["backup-key"].ChannelId)
 	assert.Empty(t, byToken["backup-key"].ChannelName)
 	assert.Equal(t, 0.8, byToken["backup-key"].GroupRatio)
+}
+
+func TestGetCostStatisticsReadsMaskedTokenAuditSnapshot(t *testing.T) {
+	truncateTables(t)
+	common.QuotaPerUnit = 500000
+
+	base := time.Date(2026, 8, 5, 9, 0, 0, 0, time.Local)
+	require.NoError(t, DB.Create(&Log{
+		UserId: 7, CreatedAt: base.Unix(), Type: LogTypeConsume,
+		TokenId: 101, TokenName: "customer-key", ModelName: "gpt-5.6-sol",
+		Quota: 100, Other: `{"group_ratio":1,"token_audit":{"masked_key":"sk-abcd**********wxyz"}}`,
+	}).Error)
+
+	rows, total, _, err := GetCostStatistics(CostStatisticsQuery{
+		UserId: 7, StartTimestamp: base.Add(-time.Minute).Unix(), EndTimestamp: base.Add(time.Minute).Unix(),
+		LogType: LogTypeConsume,
+	}, 0, 20)
+	require.NoError(t, err)
+	require.Equal(t, 1, total)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "sk-abcd**********wxyz", rows[0].TokenKeyMasked)
+	assert.NotContains(t, rows[0].TokenKeyMasked, "full-secret-key")
 }
 
 func TestGetCostStatisticsScopesExplicitUserIds(t *testing.T) {

@@ -137,6 +137,11 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = props.UpstreamModelName
 	}
+	if task.PrivateData.TokenId > 0 && task.PrivateData.TokenKeyMasked != "" {
+		other["token_audit"] = map[string]interface{}{
+			"masked_key": task.PrivateData.TokenKeyMasked,
+		}
+	}
 	return other
 }
 

@@ -44,6 +44,7 @@ export interface CostStatisticsRow {
   type: number
   token_id: number
   token_name: string
+  token_key_masked?: string
   model_name: string
   group: string
   username: string

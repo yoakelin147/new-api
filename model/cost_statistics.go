@@ -44,6 +44,7 @@ type CostStatisticsRow struct {
 	Type              int     `json:"type"`
 	TokenId           int     `json:"token_id"`
 	TokenName         string  `json:"token_name"`
+	TokenKeyMasked    string  `json:"token_key_masked"`
 	ModelName         string  `json:"model_name"`
 	Group             string  `json:"group"`
 	Username          string  `json:"username"`
@@ -76,16 +77,17 @@ type CostStatisticsRow struct {
 }
 
 type costStatisticsKey struct {
-	Date        string
-	Type        int
-	TokenId     int
-	TokenName   string
-	ModelName   string
-	Group       string
-	Username    string
-	ChannelId   int
-	ChannelName string
-	Pricing     costStatisticsPricing
+	Date           string
+	Type           int
+	TokenId        int
+	TokenName      string
+	TokenKeyMasked string
+	ModelName      string
+	Group          string
+	Username       string
+	ChannelId      int
+	ChannelName    string
+	Pricing        costStatisticsPricing
 }
 
 type costStatisticsPricing struct {
@@ -107,29 +109,34 @@ type costStatisticsPricing struct {
 }
 
 type costStatisticsLogOther struct {
-	ModelRatio            float64 `json:"model_ratio"`
-	GroupRatio            float64 `json:"group_ratio"`
-	CompletionRatio       float64 `json:"completion_ratio"`
-	CacheTokens           int     `json:"cache_tokens"`
-	CacheRatio            float64 `json:"cache_ratio"`
-	CacheCreationTokens   int     `json:"cache_creation_tokens"`
-	CacheCreationRatio    float64 `json:"cache_creation_ratio"`
-	CacheCreationTokens5m int     `json:"cache_creation_tokens_5m"`
-	CacheCreationRatio5m  float64 `json:"cache_creation_ratio_5m"`
-	CacheCreationTokens1h int     `json:"cache_creation_tokens_1h"`
-	CacheCreationRatio1h  float64 `json:"cache_creation_ratio_1h"`
-	ModelPrice            float64 `json:"model_price"`
-	BillingMode           string  `json:"billing_mode"`
-	MatchedTier           string  `json:"matched_tier"`
-	ExprB64               string  `json:"expr_b64"`
-	UnitPricesResolved    bool    `json:"unit_prices_resolved"`
-	InputUnitPrice        float64 `json:"input_unit_price"`
-	OutputUnitPrice       float64 `json:"output_unit_price"`
-	CacheReadUnitPrice    float64 `json:"cache_read_unit_price"`
-	CacheWriteUnitPrice   float64 `json:"cache_write_unit_price"`
-	CacheWrite1hUnitPrice float64 `json:"cache_write_1h_unit_price"`
-	UsageSemantic         string  `json:"usage_semantic"`
-	Claude                bool    `json:"claude"`
+	TokenAudit            *costStatisticsTokenAudit `json:"token_audit"`
+	ModelRatio            float64                   `json:"model_ratio"`
+	GroupRatio            float64                   `json:"group_ratio"`
+	CompletionRatio       float64                   `json:"completion_ratio"`
+	CacheTokens           int                       `json:"cache_tokens"`
+	CacheRatio            float64                   `json:"cache_ratio"`
+	CacheCreationTokens   int                       `json:"cache_creation_tokens"`
+	CacheCreationRatio    float64                   `json:"cache_creation_ratio"`
+	CacheCreationTokens5m int                       `json:"cache_creation_tokens_5m"`
+	CacheCreationRatio5m  float64                   `json:"cache_creation_ratio_5m"`
+	CacheCreationTokens1h int                       `json:"cache_creation_tokens_1h"`
+	CacheCreationRatio1h  float64                   `json:"cache_creation_ratio_1h"`
+	ModelPrice            float64                   `json:"model_price"`
+	BillingMode           string                    `json:"billing_mode"`
+	MatchedTier           string                    `json:"matched_tier"`
+	ExprB64               string                    `json:"expr_b64"`
+	UnitPricesResolved    bool                      `json:"unit_prices_resolved"`
+	InputUnitPrice        float64                   `json:"input_unit_price"`
+	OutputUnitPrice       float64                   `json:"output_unit_price"`
+	CacheReadUnitPrice    float64                   `json:"cache_read_unit_price"`
+	CacheWriteUnitPrice   float64                   `json:"cache_write_unit_price"`
+	CacheWrite1hUnitPrice float64                   `json:"cache_write_1h_unit_price"`
+	UsageSemantic         string                    `json:"usage_semantic"`
+	Claude                bool                      `json:"claude"`
+}
+
+type costStatisticsTokenAudit struct {
+	MaskedKey string `json:"masked_key"`
 }
 
 func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([]*CostStatisticsRow, int, CostStatisticsSummary, error) {
@@ -187,15 +194,16 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 				channelId = log.ChannelId
 			}
 			key := costStatisticsKey{
-				Date:      date,
-				Type:      log.Type,
-				TokenId:   log.TokenId,
-				TokenName: log.TokenName,
-				ModelName: log.ModelName,
-				Group:     log.Group,
-				Username:  log.Username,
-				ChannelId: channelId,
-				Pricing:   pricing,
+				Date:           date,
+				Type:           log.Type,
+				TokenId:        log.TokenId,
+				TokenName:      log.TokenName,
+				TokenKeyMasked: tokenAuditMaskedKey(other),
+				ModelName:      log.ModelName,
+				Group:          log.Group,
+				Username:       log.Username,
+				ChannelId:      channelId,
+				Pricing:        pricing,
 			}
 			row := rowsByKey[key]
 			if row == nil {
@@ -204,6 +212,7 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 					Type:              log.Type,
 					TokenId:           log.TokenId,
 					TokenName:         log.TokenName,
+					TokenKeyMasked:    tokenAuditMaskedKey(other),
 					ModelName:         log.ModelName,
 					Group:             log.Group,
 					Username:          log.Username,
@@ -300,6 +309,13 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 		endIdx = total
 	}
 	return rows[startIdx:endIdx], total, summary, nil
+}
+
+func tokenAuditMaskedKey(other costStatisticsLogOther) string {
+	if other.TokenAudit == nil {
+		return ""
+	}
+	return other.TokenAudit.MaskedKey
 }
 
 func costStatisticsSignedQuota(log Log) int {

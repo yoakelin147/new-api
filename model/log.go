@@ -288,6 +288,7 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
+	other = attachTokenAuditFromContext(c, other, tokenId)
 	otherStr := common.MapToJsonStr(other)
 	// 判断是否需要记录 IP
 	needRecordIp := false
@@ -351,6 +352,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
+	params.Other = attachTokenAuditFromContext(c, params.Other, params.TokenId)
 	otherStr := common.MapToJsonStr(params.Other)
 	// 判断是否需要记录 IP
 	needRecordIp := false
@@ -394,6 +396,24 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			LogQuotaData(userId, username, params.ModelName, params.Quota, common.GetTimestamp(), params.PromptTokens+params.CompletionTokens)
 		})
 	}
+}
+
+func attachTokenAuditFromContext(c *gin.Context, other map[string]interface{}, tokenId int) map[string]interface{} {
+	if tokenId <= 0 || c == nil {
+		return other
+	}
+	if other == nil {
+		other = make(map[string]interface{})
+	}
+	tokenKey := c.GetString("token_key")
+	maskedKey := MaskTokenKeyForAudit(tokenKey)
+	if maskedKey == "" {
+		return other
+	}
+	other["token_audit"] = map[string]interface{}{
+		"masked_key": maskedKey,
+	}
+	return other
 }
 
 type RecordTaskBillingLogParams struct {
