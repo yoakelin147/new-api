@@ -8,16 +8,22 @@
 
 现有 Compose 默认 PostgreSQL 配置保持不变。ClickHouse 是可选的 `clickhouse` profile，未启用时不会启动该容器。
 
-在部署 `.env` 中配置匹配的用户、密码和连接地址，例如：
+账号密码直接填写在 `docker-compose.yml` 的 `clickhouse.environment` 中，当前默认值为：
 
-```dotenv
-CLICKHOUSE_USER=newapi
-CLICKHOUSE_PASSWORD=replace-with-your-password
-CLICKHOUSE_DSN=clickhouse://newapi:replace-with-your-password@clickhouse:9000/logs
-CLICKHOUSE_NODE_ID=0
+```yaml
+CLICKHOUSE_USER: newapi
+CLICKHOUSE_PASSWORD: "newapi-local-only"
+CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
 ```
 
-密码包含 URL 特殊字符时，需要在 DSN 中进行 URL 编码。Compose 内置密码仅供本地测试。
+无需额外设置 `.env`。启用时，在 `new-api.environment` 中注释 `CLICKHOUSE_DSN=` 空值行，取消下面这行的注释：
+
+```yaml
+- CLICKHOUSE_DSN=clickhouse://newapi:newapi-local-only@clickhouse:9000/logs
+- CLICKHOUSE_NODE_ID=0
+```
+
+修改账号密码时，同时修改连接地址中的对应值；密码包含 URL 特殊字符时，需要在 DSN 中进行 URL 编码。Compose 内置密码仅供本地测试。健康检查读取的是本服务上方配置的账号密码，不需要外部环境变量。
 
 ```sh
 docker compose --profile clickhouse up -d --wait clickhouse
