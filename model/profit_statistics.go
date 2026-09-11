@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-
-	"gorm.io/gorm"
 )
 
 const (
@@ -84,43 +82,15 @@ type profitStatisticsAccumulator struct {
 
 func GetProfitStatistics(query ProfitStatisticsQuery, startIdx int, pageSize int) ([]*ProfitStatisticsRow, int, ProfitStatisticsSummary, error) {
 	rowsByKey := make(map[profitStatisticsKey]*profitStatisticsAccumulator)
-	channelIds := make(map[int]struct{})
 	summary := ProfitStatisticsSummary{}
-
-	tx := LOG_DB.Model(&Log{}).Where("logs.created_at >= ? AND logs.created_at <= ?", query.StartTimestamp, query.EndTimestamp)
-	if query.LogType == LogTypeUnknown {
-		tx = tx.Where("logs.type IN ?", []int{LogTypeConsume, LogTypeRefund})
-	} else {
-		tx = tx.Where("logs.type = ?", query.LogType)
-	}
-	if query.Username != "" {
-		var err error
-		tx, err = applyExplicitLogTextFilter(tx, "logs.username", query.Username)
-		if err != nil {
-			return nil, 0, summary, err
-		}
-	}
-	if query.ModelName != "" {
-		var err error
-		tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", query.ModelName)
-		if err != nil {
-			return nil, 0, summary, err
-		}
-	}
-	if query.ChannelId != 0 {
-		tx = tx.Where("logs.channel_id = ?", query.ChannelId)
-	}
-	if query.Group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", query.Group)
+	if err := validateLogTextPatterns(query.Username, query.ModelName); err != nil {
+		return nil, 0, summary, err
 	}
 
-	var channelIdList []int
-	if err := tx.Session(&gorm.Session{}).Distinct("logs.channel_id").Where("logs.channel_id <> ?", 0).Pluck("logs.channel_id", &channelIdList).Error; err != nil {
+	channelIds, err := profitLogChannelIDs(query)
+	if err != nil {
 		common.SysError("failed to query profit statistics channel ids: " + err.Error())
 		return nil, 0, summary, errors.New("查询渠道利润统计失败")
-	}
-	for _, channelId := range channelIdList {
-		channelIds[channelId] = struct{}{}
 	}
 
 	ratiosByChannel, err := getEnabledChannelProfitRatios(channelIds)
@@ -132,14 +102,10 @@ func GetProfitStatistics(query ProfitStatisticsQuery, startIdx int, pageSize int
 		return nil, 0, summary, err
 	}
 
-	tx = tx.Select("id, created_at, type, username, model_name, quota, prompt_tokens, completion_tokens, channel_id, " + logGroupCol + ", other")
-	var logs []Log
-	if err := tx.FindInBatches(&logs, 1000, func(_tx *gorm.DB, _batch int) error {
-		for _, log := range logs {
-			addProfitStatisticsLog(rowsByKey, ratiosByChannel, channelNames, log)
-		}
+	if err := forEachProfitLog(query, func(log Log) error {
+		addProfitStatisticsLog(rowsByKey, ratiosByChannel, channelNames, log)
 		return nil
-	}).Error; err != nil {
+	}); err != nil {
 		common.SysError("failed to aggregate profit statistics logs: " + err.Error())
 		return nil, 0, summary, errors.New("查询渠道利润统计失败")
 	}

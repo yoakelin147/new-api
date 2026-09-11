@@ -139,6 +139,14 @@ func formatUserLogs(logs []*Log, startIdx int) {
 }
 
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
+	if clickHouseLogs != nil {
+		logs, _, err = clickHouseLogs.Query(context.Background(), logFilter{TokenID: &tokenId}, 0, common.MaxRecentItems, logOrderID)
+		if err == nil {
+			formatUserLogs(logs, 0)
+		}
+		return logs, err
+	}
+
 	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
 	formatUserLogs(logs, 0)
 	return logs, err
@@ -156,7 +164,7 @@ func RecordLog(userId int, logType int, content string) {
 		Type:      logType,
 		Content:   content,
 	}
-	err := LOG_DB.Create(log).Error
+	err := createLog(context.Background(), log)
 	if err != nil {
 		common.SysLog("failed to record log: " + err.Error())
 	}
@@ -181,7 +189,7 @@ func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo m
 		}
 		log.Other = common.MapToJsonStr(other)
 	}
-	if err := LOG_DB.Create(log).Error; err != nil {
+	if err := createLog(context.Background(), log); err != nil {
 		common.SysLog("failed to record log: " + err.Error())
 	}
 }
@@ -218,7 +226,7 @@ func RecordLoginLog(userId int, username string, content string, ip string, acti
 		Ip:        ip,
 		Other:     common.MapToJsonStr(other),
 	}
-	if err := LOG_DB.Create(log).Error; err != nil {
+	if err := createLog(context.Background(), log); err != nil {
 		common.SysLog("failed to record login log: " + err.Error())
 	}
 }
@@ -249,7 +257,7 @@ func RecordOperationAuditLog(logUserId int, content string, ip string, action st
 		Ip:        ip,
 		Other:     common.MapToJsonStr(other),
 	}
-	if err := LOG_DB.Create(log).Error; err != nil {
+	if err := createLog(context.Background(), log); err != nil {
 		common.SysLog("failed to record operation audit log: " + err.Error())
 	}
 }
@@ -276,7 +284,7 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 		Ip:        callerIp,
 		Other:     common.MapToJsonStr(other),
 	}
-	err := LOG_DB.Create(log).Error
+	err := createLog(context.Background(), log)
 	if err != nil {
 		common.SysLog("failed to record topup log: " + err.Error())
 	}
@@ -323,7 +331,7 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 		UpstreamRequestId: upstreamRequestId,
 		Other:             otherStr,
 	}
-	err := LOG_DB.Create(log).Error
+	err := createLog(context.Background(), log)
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
@@ -387,7 +395,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		UpstreamRequestId: upstreamRequestId,
 		Other:             otherStr,
 	}
-	err := LOG_DB.Create(log).Error
+	err := createLog(context.Background(), log)
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
@@ -453,13 +461,17 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 		Group:     params.Group,
 		Other:     common.MapToJsonStr(params.Other),
 	}
-	err := LOG_DB.Create(log).Error
+	err := createLog(context.Background(), log)
 	if err != nil {
 		common.SysLog("failed to record task billing log: " + err.Error())
 	}
 }
 
 func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, streamStatus string) (logs []*Log, total int64, err error) {
+	if clickHouseLogs != nil {
+		return getClickHouseAdminLogs(logFilter{Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId, StreamStatus: streamStatus}, startIdx, num)
+	}
+
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB
@@ -552,6 +564,15 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 const logSearchCountLimit = 10000
 
 func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+	if clickHouseLogs != nil {
+		logs, total, err = clickHouseLogs.Query(context.Background(), logFilter{UserIDs: []int{userId}, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
+		if err != nil {
+			return nil, 0, errors.New("查询日志失败")
+		}
+		formatUserLogs(logs, startIdx)
+		return logs, total, nil
+	}
+
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB.Where("logs.user_id = ?", userId)
@@ -596,6 +617,24 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 }
 
 func GetManagedUserLogs(userIds []int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+	if clickHouseLogs != nil {
+		if len(userIds) == 0 {
+			return []*Log{}, 0, nil
+		}
+		logs, total, err = clickHouseLogs.Query(context.Background(), logFilter{UserIDs: userIds, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
+		if err != nil {
+			return nil, 0, errors.New("查询日志失败")
+		}
+		formatUserLogs(logs, startIdx)
+		for _, log := range logs {
+			log.ChannelId = 0
+			log.ChannelName = ""
+			log.Ip = ""
+			log.TokenId = 0
+		}
+		return logs, total, nil
+	}
+
 	if len(userIds) == 0 {
 		return []*Log{}, 0, nil
 	}
@@ -650,6 +689,15 @@ type Stat struct {
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, streamStatus string) (stat Stat, err error) {
+	if clickHouseLogs != nil {
+		stat, err = sumClickHouseQuota(logFilter{Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, StreamStatus: streamStatus})
+		if err != nil {
+			common.SysError("failed to query ClickHouse log stat: " + err.Error())
+			return stat, errors.New("查询统计数据失败")
+		}
+		return stat, nil
+	}
+
 	tx := LOG_DB.Table("logs").Select("sum(quota) quota")
 
 	// 为rpm和tpm创建单独的查询
@@ -712,6 +760,17 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 }
 
 func SumUsedQuotaByUserIds(userIds []int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, group string) (stat Stat, err error) {
+	if clickHouseLogs != nil {
+		if len(userIds) == 0 {
+			return stat, nil
+		}
+		stat, err = sumClickHouseQuota(logFilter{UserIDs: userIds, Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group})
+		if err != nil {
+			return stat, errors.New("查询统计数据失败")
+		}
+		return stat, nil
+	}
+
 	if len(userIds) == 0 {
 		return stat, nil
 	}
@@ -753,6 +812,15 @@ func SumUsedQuotaByUserIds(userIds []int, startTimestamp int64, endTimestamp int
 }
 
 func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string) (token int) {
+	if clickHouseLogs != nil {
+		err := clickHouseLogs.Scan(context.Background(), logFilter{Types: []int{LogTypeConsume}, Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ExactText: true}, func(log Log) error { token += log.PromptTokens + log.CompletionTokens; return nil })
+		if err != nil {
+			common.SysError("failed to query ClickHouse token usage: " + err.Error())
+			return 0
+		}
+		return token
+	}
+
 	tx := LOG_DB.Table("logs").Select("ifnull(sum(prompt_tokens),0) + ifnull(sum(completion_tokens),0)")
 	if username != "" {
 		tx = tx.Where("username = ?", username)
@@ -774,6 +842,10 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 }
 
 func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64, error) {
+	if clickHouseLogs != nil {
+		return clickHouseLogs.DeleteBefore(ctx, targetTimestamp)
+	}
+
 	var total int64 = 0
 
 	for {

@@ -8,8 +8,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
-
-	"gorm.io/gorm"
 )
 
 type CostStatisticsQuery struct {
@@ -146,116 +144,85 @@ func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([
 	if !query.IsAdmin && query.UserIds != nil && len(query.UserIds) == 0 {
 		return []*CostStatisticsRow{}, 0, summary, nil
 	}
-
-	tx := LOG_DB.Model(&Log{}).Where("logs.created_at >= ? AND logs.created_at <= ?", query.StartTimestamp, query.EndTimestamp)
-	if query.LogType == LogTypeUnknown {
-		tx = tx.Where("logs.type IN ?", []int{LogTypeConsume, LogTypeRefund})
-	} else {
-		tx = tx.Where("logs.type = ?", query.LogType)
-	}
-	if !query.IsAdmin && query.UserIds != nil {
-		tx = tx.Where("logs.user_id IN ?", query.UserIds)
-	} else if !query.IsAdmin {
-		tx = tx.Where("logs.user_id = ?", query.UserId)
-	} else if query.Username != "" {
-		var err error
-		tx, err = applyExplicitLogTextFilter(tx, "logs.username", query.Username)
-		if err != nil {
+	if query.IsAdmin {
+		if err := validateLogTextPatterns(query.Username); err != nil {
 			return nil, 0, summary, err
 		}
 	}
-	if query.TokenName != "" {
-		tx = tx.Where("logs.token_name = ?", query.TokenName)
+	if err := validateLogTextPatterns(query.ModelName); err != nil {
+		return nil, 0, summary, err
 	}
-	if query.ModelName != "" {
-		var err error
-		tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", query.ModelName)
-		if err != nil {
-			return nil, 0, summary, err
+
+	err := forEachCostLog(query, func(log Log) error {
+		date := time.Unix(log.CreatedAt, 0).Local().Format("20060102")
+		other := parseCostStatisticsLogOther(log.Other)
+		pricing := resolveCostStatisticsPricing(other)
+		channelId := 0
+		if query.IsAdmin {
+			channelId = log.ChannelId
 		}
-	}
-	if query.IsAdmin && query.ChannelId != 0 {
-		tx = tx.Where("logs.channel_id = ?", query.ChannelId)
-	}
-	if query.Group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", query.Group)
-	}
-
-	tx = tx.Select("id, created_at, type, username, token_id, token_name, model_name, quota, prompt_tokens, completion_tokens, channel_id, use_time, " + logGroupCol + ", other")
-
-	var batch []Log
-	err := tx.FindInBatches(&batch, 1000, func(_tx *gorm.DB, _batch int) error {
-		for _, log := range batch {
-			date := time.Unix(log.CreatedAt, 0).Local().Format("20060102")
-			other := parseCostStatisticsLogOther(log.Other)
-			pricing := resolveCostStatisticsPricing(other)
-			channelId := 0
-			if query.IsAdmin {
-				channelId = log.ChannelId
+		key := costStatisticsKey{
+			Date:           date,
+			Type:           log.Type,
+			TokenId:        log.TokenId,
+			TokenName:      log.TokenName,
+			TokenKeyMasked: tokenAuditMaskedKey(other),
+			ModelName:      log.ModelName,
+			Group:          log.Group,
+			Username:       log.Username,
+			ChannelId:      channelId,
+			Pricing:        pricing,
+		}
+		row := rowsByKey[key]
+		if row == nil {
+			row = &CostStatisticsRow{
+				Date:              date,
+				Type:              log.Type,
+				TokenId:           log.TokenId,
+				TokenName:         log.TokenName,
+				TokenKeyMasked:    tokenAuditMaskedKey(other),
+				ModelName:         log.ModelName,
+				Group:             log.Group,
+				Username:          log.Username,
+				ChannelId:         channelId,
+				GroupRatio:        pricing.GroupRatio,
+				ModelRatio:        pricing.ModelRatio,
+				CompletionRatio:   pricing.CompletionRatio,
+				CacheRatio:        pricing.CacheRatio,
+				CacheWrite5mRate:  pricing.CacheWriteRate,
+				CacheWrite1hRate:  pricing.CacheWrite1hRate,
+				InputUnitPrice:    pricing.InputUnitPrice,
+				OutputUnitPrice:   pricing.OutputUnitPrice,
+				CacheReadPrice:    pricing.CacheReadPrice,
+				CacheWritePrice:   pricing.CacheWritePrice,
+				CacheWrite1hPrice: pricing.CacheWrite1hPrice,
+				ModelPrice:        pricing.ModelPrice,
+				BillingMode:       pricing.BillingMode,
+				MatchedTier:       pricing.MatchedTier,
 			}
-			key := costStatisticsKey{
-				Date:           date,
-				Type:           log.Type,
-				TokenId:        log.TokenId,
-				TokenName:      log.TokenName,
-				TokenKeyMasked: tokenAuditMaskedKey(other),
-				ModelName:      log.ModelName,
-				Group:          log.Group,
-				Username:       log.Username,
-				ChannelId:      channelId,
-				Pricing:        pricing,
-			}
-			row := rowsByKey[key]
-			if row == nil {
-				row = &CostStatisticsRow{
-					Date:              date,
-					Type:              log.Type,
-					TokenId:           log.TokenId,
-					TokenName:         log.TokenName,
-					TokenKeyMasked:    tokenAuditMaskedKey(other),
-					ModelName:         log.ModelName,
-					Group:             log.Group,
-					Username:          log.Username,
-					ChannelId:         channelId,
-					GroupRatio:        pricing.GroupRatio,
-					ModelRatio:        pricing.ModelRatio,
-					CompletionRatio:   pricing.CompletionRatio,
-					CacheRatio:        pricing.CacheRatio,
-					CacheWrite5mRate:  pricing.CacheWriteRate,
-					CacheWrite1hRate:  pricing.CacheWrite1hRate,
-					InputUnitPrice:    pricing.InputUnitPrice,
-					OutputUnitPrice:   pricing.OutputUnitPrice,
-					CacheReadPrice:    pricing.CacheReadPrice,
-					CacheWritePrice:   pricing.CacheWritePrice,
-					CacheWrite1hPrice: pricing.CacheWrite1hPrice,
-					ModelPrice:        pricing.ModelPrice,
-					BillingMode:       pricing.BillingMode,
-					MatchedTier:       pricing.MatchedTier,
-				}
-				rowsByKey[key] = row
-			}
-			quota := costStatisticsSignedQuota(log)
-			row.PromptTokens += log.PromptTokens
-			row.InputTokens += costStatisticsInputTokens(log.PromptTokens, other)
-			row.CompletionTokens += log.CompletionTokens
-			row.TotalTokens += log.PromptTokens + log.CompletionTokens
-			row.RequestCount++
-			row.Quota += quota
-			row.UseTimeSeconds += log.UseTime
-			row.CacheTokens += other.CacheTokens
-			row.CacheWrite5m += costStatisticsCacheWrite5mTokens(other)
-			row.CacheWrite1h += other.CacheCreationTokens1h
-			summary.PromptTokens += log.PromptTokens
-			summary.CompletionTokens += log.CompletionTokens
-			summary.TotalTokens += log.PromptTokens + log.CompletionTokens
-			summary.RequestCount++
-			summary.Quota += quota
-			if query.IsAdmin && log.ChannelId != 0 {
-				channelIds[log.ChannelId] = struct{}{}
-			}
+			rowsByKey[key] = row
+		}
+		quota := costStatisticsSignedQuota(log)
+		row.PromptTokens += log.PromptTokens
+		row.InputTokens += costStatisticsInputTokens(log.PromptTokens, other)
+		row.CompletionTokens += log.CompletionTokens
+		row.TotalTokens += log.PromptTokens + log.CompletionTokens
+		row.RequestCount++
+		row.Quota += quota
+		row.UseTimeSeconds += log.UseTime
+		row.CacheTokens += other.CacheTokens
+		row.CacheWrite5m += costStatisticsCacheWrite5mTokens(other)
+		row.CacheWrite1h += other.CacheCreationTokens1h
+		summary.PromptTokens += log.PromptTokens
+		summary.CompletionTokens += log.CompletionTokens
+		summary.TotalTokens += log.PromptTokens + log.CompletionTokens
+		summary.RequestCount++
+		summary.Quota += quota
+		if query.IsAdmin && log.ChannelId != 0 {
+			channelIds[log.ChannelId] = struct{}{}
 		}
 		return nil
-	}).Error
+	})
 	if err != nil {
 		common.SysError("failed to query cost statistics: " + err.Error())
 		return nil, 0, summary, errors.New("查询费用统计失败")

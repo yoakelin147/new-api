@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -285,6 +286,20 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 }
 
 func queryTokenCacheLogRows(params TokenCacheHitStatsQuery) ([]tokenCacheLogRow, error) {
+	if clickHouseLogs != nil {
+		filter := clickHouseUsageFilter(params.StartTimestamp, params.EndTimestamp)
+		filter.NonzeroChannel = true
+		filter.ModelName, filter.ModelContains = params.ModelName, true
+		if params.ChannelId > 0 {
+			filter.ChannelID = params.ChannelId
+		}
+		rows := make([]tokenCacheLogRow, 0)
+		err := clickHouseLogs.Scan(context.Background(), filter, func(log Log) error {
+			rows = append(rows, tokenCacheLogRow{ModelName: log.ModelName, Group: log.Group, ChannelId: log.ChannelId, CreatedAt: log.CreatedAt, PromptTokens: int64(log.PromptTokens), CompletionTokens: int64(log.CompletionTokens), Other: log.Other})
+			return nil
+		})
+		return rows, err
+	}
 	query := LOG_DB.Table("logs").
 		Select(fmt.Sprintf("model_name, %s, channel_id, created_at, prompt_tokens, completion_tokens, other", logGroupCol)).
 		Where("type = ? and channel_id <> 0", LogTypeConsume)

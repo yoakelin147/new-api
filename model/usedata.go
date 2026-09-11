@@ -169,6 +169,9 @@ func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*Quota
 }
 
 func GetQuotaDataGroupByChannel(startTime int64, endTime int64) ([]*ChannelQuotaData, error) {
+	if clickHouseLogs != nil {
+		return clickHouseChannelSeries(startTime, endTime)
+	}
 	var quotaDatas []*ChannelQuotaData
 	bucketExpr := quotaDataBucketExpr()
 	query := LOG_DB.Table("logs").
@@ -235,6 +238,17 @@ func GetQuotaDataGroupByChannel(startTime int64, endTime int64) ([]*ChannelQuota
 }
 
 func GetQuotaDataGroupByToken(userId int, startTime int64, endTime int64) ([]*TokenQuotaData, error) {
+	if clickHouseLogs != nil {
+		rows, err := clickHouseTokenSeries(userId, startTime, endTime, tokenSeriesSelf)
+		if err != nil {
+			return nil, err
+		}
+		result := make([]*TokenQuotaData, 0, len(rows))
+		for _, row := range rows {
+			result = append(result, &TokenQuotaData{TokenId: row.TokenId, TokenName: row.TokenName, CreatedAt: row.CreatedAt, TokenUsed: row.TokenUsed, Count: row.Count, Quota: row.Quota})
+		}
+		return result, nil
+	}
 	var quotaDatas []*TokenQuotaData
 	bucketExpr := quotaDataBucketExpr()
 	query := LOG_DB.Table("logs").
@@ -255,6 +269,9 @@ func GetQuotaDataGroupByToken(userId int, startTime int64, endTime int64) ([]*To
 }
 
 func GetQuotaDataGroupByUserToken(userId int, startTime int64, endTime int64) ([]*UserTokenQuotaData, error) {
+	if clickHouseLogs != nil {
+		return clickHouseTokenSeries(userId, startTime, endTime, tokenSeriesUsers)
+	}
 	var quotaDatas []*UserTokenQuotaData
 	bucketExpr := quotaDataBucketExpr()
 	query := LOG_DB.Table("logs").

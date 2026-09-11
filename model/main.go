@@ -203,6 +203,9 @@ func InitDB() (err error) {
 }
 
 func InitLogDB() (err error) {
+	if dsn := strings.TrimSpace(os.Getenv("CLICKHOUSE_DSN")); dsn != "" {
+		return initClickHouseLogs(dsn)
+	}
 	if os.Getenv("LOG_SQL_DSN") == "" {
 		LOG_DB = DB
 		return
@@ -582,7 +585,15 @@ func closeDB(db *gorm.DB) error {
 }
 
 func CloseDB() error {
+	if clickHouseLogs != nil {
+		if err := clickHouseLogs.Close(); err != nil {
+			return err
+		}
+	}
 	if LOG_DB != DB {
+		if LOG_DB == nil {
+			return closeDB(DB)
+		}
 		err := closeDB(LOG_DB)
 		if err != nil {
 			return err
