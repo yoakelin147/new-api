@@ -50,7 +50,9 @@ async function fetchLogs<T>(
     ...params,
   })
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(`${path}?${queryParams}`)
+  const res = await api.get(`${path}?${queryParams}`, {
+    skipBusinessError: true,
+  })
   return res.data
 }
 

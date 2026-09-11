@@ -138,9 +138,9 @@ func formatUserLogs(logs []*Log, startIdx int) {
 	}
 }
 
-func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
+func GetLogByTokenId(tokenId int, readState ...*LogReadState) (logs []*Log, err error) {
 	if clickHouseLogs != nil {
-		logs, _, err = clickHouseLogs.Query(context.Background(), logFilter{TokenID: &tokenId}, 0, common.MaxRecentItems, logOrderID)
+		logs, _, err = clickHouseLogs.Query(logReadContext(readState...), logFilter{TokenID: &tokenId}, 0, common.MaxRecentItems, logOrderID)
 		if err == nil {
 			formatUserLogs(logs, 0)
 		}
@@ -467,9 +467,9 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	}
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, streamStatus string) (logs []*Log, total int64, err error) {
+func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, streamStatus string, readState ...*LogReadState) (logs []*Log, total int64, err error) {
 	if clickHouseLogs != nil {
-		return getClickHouseAdminLogs(logFilter{Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId, StreamStatus: streamStatus}, startIdx, num)
+		return getClickHouseAdminLogs(logReadContext(readState...), logFilter{Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId, StreamStatus: streamStatus}, startIdx, num)
 	}
 
 	var tx *gorm.DB
@@ -563,9 +563,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 
 const logSearchCountLimit = 10000
 
-func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, readState ...*LogReadState) (logs []*Log, total int64, err error) {
 	if clickHouseLogs != nil {
-		logs, total, err = clickHouseLogs.Query(context.Background(), logFilter{UserIDs: []int{userId}, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
+		logs, total, err = clickHouseLogs.Query(logReadContext(readState...), logFilter{UserIDs: []int{userId}, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
 		if err != nil {
 			return nil, 0, errors.New("查询日志失败")
 		}
@@ -616,12 +616,12 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	return logs, total, err
 }
 
-func GetManagedUserLogs(userIds []int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func GetManagedUserLogs(userIds []int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, readState ...*LogReadState) (logs []*Log, total int64, err error) {
 	if clickHouseLogs != nil {
 		if len(userIds) == 0 {
 			return []*Log{}, 0, nil
 		}
-		logs, total, err = clickHouseLogs.Query(context.Background(), logFilter{UserIDs: userIds, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
+		logs, total, err = clickHouseLogs.Query(logReadContext(readState...), logFilter{UserIDs: userIds, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
 		if err != nil {
 			return nil, 0, errors.New("查询日志失败")
 		}
@@ -688,9 +688,9 @@ type Stat struct {
 	Tpm   int `json:"tpm"`
 }
 
-func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, streamStatus string) (stat Stat, err error) {
+func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, streamStatus string, readState ...*LogReadState) (stat Stat, err error) {
 	if clickHouseLogs != nil {
-		stat, err = sumClickHouseQuota(logFilter{Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, StreamStatus: streamStatus})
+		stat, err = sumClickHouseQuota(logReadContext(readState...), logFilter{Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, StreamStatus: streamStatus})
 		if err != nil {
 			common.SysError("failed to query ClickHouse log stat: " + err.Error())
 			return stat, errors.New("查询统计数据失败")
@@ -759,12 +759,12 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return stat, nil
 }
 
-func SumUsedQuotaByUserIds(userIds []int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, group string) (stat Stat, err error) {
+func SumUsedQuotaByUserIds(userIds []int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, group string, readState ...*LogReadState) (stat Stat, err error) {
 	if clickHouseLogs != nil {
 		if len(userIds) == 0 {
 			return stat, nil
 		}
-		stat, err = sumClickHouseQuota(logFilter{UserIDs: userIds, Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group})
+		stat, err = sumClickHouseQuota(logReadContext(readState...), logFilter{UserIDs: userIds, Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group})
 		if err != nil {
 			return stat, errors.New("查询统计数据失败")
 		}

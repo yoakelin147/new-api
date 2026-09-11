@@ -63,6 +63,6 @@ export async function getCostStatistics(params: {
         : undefined,
     export: params.exportAll ? 'true' : undefined,
   })
-  const res = await api.get(`${endpoint}?${query}`)
+  const res = await api.get(`${endpoint}?${query}`, { skipBusinessError: true })
   return res.data
 }

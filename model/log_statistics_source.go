@@ -1,7 +1,6 @@
 package model
 
 import (
-	"context"
 	"strings"
 
 	"gorm.io/gorm"
@@ -113,7 +112,7 @@ func profitLogFilter(query ProfitStatisticsQuery) logFilter {
 
 func forEachCostLog(query CostStatisticsQuery, visit func(Log) error) error {
 	if clickHouseLogs != nil {
-		return clickHouseLogs.Scan(context.Background(), costLogFilter(query), visit)
+		return clickHouseLogs.Scan(logReadContext(query.ReadState), costLogFilter(query), visit)
 	}
 	tx, err := costSQLQuery(query)
 	if err != nil {
@@ -124,7 +123,7 @@ func forEachCostLog(query CostStatisticsQuery, visit func(Log) error) error {
 
 func forEachProfitLog(query ProfitStatisticsQuery, visit func(Log) error) error {
 	if clickHouseLogs != nil {
-		return clickHouseLogs.Scan(context.Background(), profitLogFilter(query), visit)
+		return clickHouseLogs.Scan(logReadContext(query.ReadState), profitLogFilter(query), visit)
 	}
 	tx, err := profitSQLQuery(query)
 	if err != nil {
@@ -148,7 +147,7 @@ func scanSQLLogs(tx *gorm.DB, visit func(Log) error) error {
 
 func profitLogChannelIDs(query ProfitStatisticsQuery) (map[int]struct{}, error) {
 	if clickHouseLogs != nil {
-		return clickHouseLogs.ChannelIDs(context.Background(), profitLogFilter(query))
+		return clickHouseLogs.ChannelIDs(logReadContext(query.ReadState), profitLogFilter(query))
 	}
 	tx, err := profitSQLQuery(query)
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -24,13 +25,15 @@ import (
 var clickHouseLogs *clickHouseLogStore
 
 type clickHouseLogStore struct {
-	db       *sql.DB
-	database string
-	ids      *logIDGenerator
-	node     int
-	initMu   sync.Mutex
-	failover *logWriteFailover
-	engine   string
+	db          *sql.DB
+	database    string
+	ids         *logIDGenerator
+	node        int
+	initMu      sync.Mutex
+	failover    *logWriteFailover
+	engine      string
+	fallback    *gorm.DB
+	readRetryAt atomic.Int64
 }
 
 var clickHouseIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -142,6 +145,7 @@ func newClickHouseLogStoreWithFallback(ctx context.Context, dsn string, node int
 		return nil, err
 	}
 	// Reuse LOG_DB and its existing logs table; this store does not own the pool.
+	s.fallback = fallback
 	fallbackCtx, cancel := context.WithTimeout(ctx, logFailoverWriteTimeout)
 	var existing []Log
 	fallbackErr := fallback.WithContext(fallbackCtx).Select("id").Limit(1).Find(&existing).Error

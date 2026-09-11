@@ -214,14 +214,27 @@ func (s *clickHouseLogStore) Query(ctx context.Context, filter logFilter, offset
 	if err != nil {
 		return nil, 0, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
 	var total int64
-	if err := s.db.QueryRowContext(ctx, "SELECT count() FROM "+s.table()+" WHERE "+where, args...).Scan(&total); err != nil {
+	logs := make([]*Log, 0)
+	err = s.readLogs(ctx, func(ctx context.Context) error {
+		if err := s.db.QueryRowContext(ctx, "SELECT count() FROM "+s.table()+" WHERE "+where, args...).Scan(&total); err != nil {
+			return err
+		}
+		return s.scanQuery(ctx, "WHERE "+where+" ORDER BY "+string(order)+" LIMIT ? OFFSET ?", append(args, limit, offset), func(log Log) error { logs = append(logs, &log); return nil })
+	}, func(ctx context.Context) error {
+		logs, total = make([]*Log, 0), 0
+		tx, err := filter.sqlQuery(s.fallback.WithContext(ctx))
+		if err != nil {
+			return err
+		}
+		if err := tx.Count(&total).Error; err != nil {
+			return err
+		}
+		return tx.Order(string(order)).Offset(offset).Limit(limit).Find(&logs).Error
+	})
+	if err != nil {
 		return nil, 0, err
 	}
-	logs := make([]*Log, 0)
-	err = s.scanQuery(ctx, "WHERE "+where+" ORDER BY "+string(order)+" LIMIT ? OFFSET ?", append(args, limit, offset), func(log Log) error { logs = append(logs, &log); return nil })
 	return logs, total, err
 }
 
@@ -230,9 +243,19 @@ func (s *clickHouseLogStore) Scan(ctx context.Context, filter logFilter, visit f
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	return s.scanQuery(ctx, "WHERE "+where+" ORDER BY id", args, visit)
+	return s.readLogs(ctx, func(ctx context.Context) error {
+		return s.scanQuery(ctx, "WHERE "+where+" ORDER BY id", args, func(log Log) error {
+			// Once a row is consumed, retrying against SQL could double-count it.
+			ctx.Value(logReadStateKey{}).(*LogReadState).source = "clickhouse"
+			return visit(log)
+		})
+	}, func(ctx context.Context) error {
+		tx, err := filter.sqlQuery(s.fallback.WithContext(ctx))
+		if err != nil {
+			return err
+		}
+		return scanSQLLogs(tx, visit)
+	})
 }
 
 func (s *clickHouseLogStore) ChannelIDs(ctx context.Context, filter logFilter) (map[int]struct{}, error) {
@@ -240,20 +263,36 @@ func (s *clickHouseLogStore) ChannelIDs(ctx context.Context, filter logFilter) (
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	rows, err := s.db.QueryContext(ctx, "SELECT channel_id FROM "+s.table()+" WHERE "+where+" AND channel_id <> 0", args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 	ids := map[int]struct{}{}
-	for rows.Next() {
-		var id int
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
+	err = s.readLogs(ctx, func(ctx context.Context) error {
+		rows, err := s.db.QueryContext(ctx, "SELECT channel_id FROM "+s.table()+" WHERE "+where+" AND channel_id <> 0", args...)
+		if err != nil {
+			return err
 		}
-		ids[id] = struct{}{}
-	}
-	return ids, rows.Err()
+		defer rows.Close()
+		for rows.Next() {
+			var id int
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids[id] = struct{}{}
+		}
+		return rows.Err()
+	}, func(ctx context.Context) error {
+		ids = map[int]struct{}{}
+		filter.NonzeroChannel = true
+		tx, err := filter.sqlQuery(s.fallback.WithContext(ctx))
+		if err != nil {
+			return err
+		}
+		var values []int
+		if err := tx.Distinct("channel_id").Pluck("channel_id", &values).Error; err != nil {
+			return err
+		}
+		for _, id := range values {
+			ids[id] = struct{}{}
+		}
+		return nil
+	})
+	return ids, err
 }

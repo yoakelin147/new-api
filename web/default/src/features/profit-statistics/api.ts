@@ -51,7 +51,9 @@ export async function getProfitStatistics(params: {
     channel: params.filters.channel?.trim(),
     export: params.exportAll ? 'true' : undefined,
   })
-  const res = await api.get(`/api/profit_statistics/?${query}`)
+  const res = await api.get(`/api/profit_statistics/?${query}`, {
+    skipBusinessError: true,
+  })
   return res.data
 }
 

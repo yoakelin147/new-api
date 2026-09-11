@@ -11,7 +11,8 @@ import (
 )
 
 type CostStatisticsQuery struct {
-	UserId int
+	ReadState *LogReadState
+	UserId    int
 	// UserIds scopes a non-admin query to an explicit set of users. Nil keeps
 	// the legacy single-user behavior; an empty non-nil slice matches no logs.
 	UserIds        []int
@@ -138,6 +139,9 @@ type costStatisticsTokenAudit struct {
 }
 
 func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([]*CostStatisticsRow, int, CostStatisticsSummary, error) {
+	if query.ReadState == nil {
+		query.ReadState = &LogReadState{}
+	}
 	rowsByKey := make(map[costStatisticsKey]*CostStatisticsRow)
 	channelIds := make(map[int]struct{})
 	summary := CostStatisticsSummary{}

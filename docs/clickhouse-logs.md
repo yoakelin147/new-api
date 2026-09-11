@@ -96,7 +96,11 @@ ClickHouse 写入使用原有 `id` 字段生成整数 ID，限制在 JavaScript 
 - 启动时原库初始化成功、ClickHouse 不可用，同样进入降级模式。原日志表之后暂不可用而 ClickHouse 可用时，继续写 ClickHouse 并记录原日志表不可用信息。
 - 两个存储都写入失败时返回错误，并由现有日志调用方报告；不会把失败当作成功。
 
-查询和统计仍读取 ClickHouse。原库只保留原有历史和降级期间日志，无法代表启用 ClickHouse 后的完整记录，因此不会自动把查询切回原库。故障期间日志查询可以失败，但降级写入继续保存日志。
+日志明细、费用、利润和其他日志统计优先读取 ClickHouse；查询失败后读取原 SQL 库，并在 5 秒窗口内复用降级路径。窗口到期由下一次查询尝试恢复。查询和写入分别判断可用性，刷新页面不会代替实际日志写入。
+
+日志、费用和利润接口通过响应头 `X-Log-Source: original` 标记降级数据，正常读取 ClickHouse 时为 `clickhouse`。默认前端合并显示“当前显示备用日志记录，部分历史数据可能暂时不可见。”原库只有原有历史和降级期间日志，因此这些统计不能当作完整历史对账结果。用户过滤和权限范围保持不变。两边均不可读时，接口返回普通错误提示，连接地址和底层错误仅记录在服务端。
+
+同一份多步统计固定使用一个数据源。如果已经消费部分 ClickHouse 数据后连接中断，该次统计返回失败，不与原库结果拼接，以免重复计数；下一次请求可直接查询原库。历史删除仍作用于配置的 ClickHouse，不在连接失败时改删原库，避免删除待补迁日志。
 
 降级写入保留原业务字段和 `other`，使用原库自身的 ID 生成方式，避免与原有历史冲突。恢复后不自动回灌：ClickHouse 超时可能发生在服务端已经提交之后，此时两边可能都存在该条日志。降级日志继续留存在原库，后续补迁需要核对内容、去重并安排目标 ID；不能直接把两个库的 `id` 当作同一标识。库表字段没有新增。
 
@@ -136,3 +140,5 @@ TEST_CLICKHOUSE_DSN='clickhouse://newapi:12345678@127.0.0.1:9000/default' \
 TEST_LOG_PRIMARY_DSN='postgresql://user:password@127.0.0.1:5432/new_api_test' \
   go test ./model -run 'TestClickHouseRuntimeOriginal|TestClickHouseStartup|TestClickHouseClose|TestInitLogDB' -count=1
 ```
+
+`TestClickHouseOutagePersistsEveryRequestLog` 在 ClickHouse 断连期间并发写入 100 条日志，核对每条请求及全部业务字段，并确认恢复后原库记录继续保留。只有 ClickHouse 故障而原 SQL 库可写时，这一降级链路才能完成落盘；两边都失败时现有调用方记录写入错误，不能承诺该条日志已保存。自动补迁尚未实现。

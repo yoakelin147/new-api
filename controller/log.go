@@ -11,6 +11,7 @@ import (
 )
 
 func GetAllLogs(c *gin.Context) {
+	readState := &model.LogReadState{}
 	pageInfo := common.GetPageQuery(c)
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
@@ -23,18 +24,20 @@ func GetAllLogs(c *gin.Context) {
 	requestId := c.Query("request_id")
 	upstreamRequestId := c.Query("upstream_request_id")
 	streamStatus := c.Query("stream_status")
-	logs, total, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, upstreamRequestId, streamStatus)
+	logs, total, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, upstreamRequestId, streamStatus, readState)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
+	c.Header("X-Log-Source", readState.Source())
 	common.ApiSuccess(c, pageInfo)
 	return
 }
 
 func GetUserLogs(c *gin.Context) {
+	readState := &model.LogReadState{}
 	pageInfo := common.GetPageQuery(c)
 	userId := c.GetInt("id")
 	logType, _ := strconv.Atoi(c.Query("type"))
@@ -45,18 +48,20 @@ func GetUserLogs(c *gin.Context) {
 	group := c.Query("group")
 	requestId := c.Query("request_id")
 	upstreamRequestId := c.Query("upstream_request_id")
-	logs, total, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId)
+	logs, total, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId, readState)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
+	c.Header("X-Log-Source", readState.Source())
 	common.ApiSuccess(c, pageInfo)
 	return
 }
 
 func GetManagedUserLogs(c *gin.Context) {
+	readState := &model.LogReadState{}
 	pageInfo := common.GetPageQuery(c)
 	userIds, ok := getManagedLogUserIds(c)
 	if !ok {
@@ -77,6 +82,7 @@ func GetManagedUserLogs(c *gin.Context) {
 		c.Query("group"),
 		c.Query("request_id"),
 		c.Query("upstream_request_id"),
+		readState,
 	)
 	if err != nil {
 		common.ApiError(c, err)
@@ -84,6 +90,7 @@ func GetManagedUserLogs(c *gin.Context) {
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
+	c.Header("X-Log-Source", readState.Source())
 	common.ApiSuccess(c, pageInfo)
 }
 
@@ -142,6 +149,7 @@ func SearchUserLogs(c *gin.Context) {
 }
 
 func GetLogByKey(c *gin.Context) {
+	readState := &model.LogReadState{}
 	tokenId := c.GetInt("token_id")
 	if tokenId == 0 {
 		c.JSON(200, gin.H{
@@ -150,7 +158,7 @@ func GetLogByKey(c *gin.Context) {
 		})
 		return
 	}
-	logs, err := model.GetLogByTokenId(tokenId)
+	logs, err := model.GetLogByTokenId(tokenId, readState)
 	if err != nil {
 		c.JSON(200, gin.H{
 			"success": false,
@@ -158,6 +166,7 @@ func GetLogByKey(c *gin.Context) {
 		})
 		return
 	}
+	c.Header("X-Log-Source", readState.Source())
 	c.JSON(200, gin.H{
 		"success": true,
 		"message": "",
@@ -166,6 +175,7 @@ func GetLogByKey(c *gin.Context) {
 }
 
 func GetLogsStat(c *gin.Context) {
+	readState := &model.LogReadState{}
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
@@ -174,12 +184,13 @@ func GetLogsStat(c *gin.Context) {
 	modelName := c.Query("model_name")
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	group := c.Query("group")
-	stat, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, c.Query("stream_status"))
+	stat, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, c.Query("stream_status"), readState)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, "")
+	c.Header("X-Log-Source", readState.Source())
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -193,6 +204,7 @@ func GetLogsStat(c *gin.Context) {
 }
 
 func GetLogsSelfStat(c *gin.Context) {
+	readState := &model.LogReadState{}
 	username := c.GetString("username")
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
@@ -201,12 +213,13 @@ func GetLogsSelfStat(c *gin.Context) {
 	modelName := c.Query("model_name")
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	group := c.Query("group")
-	quotaNum, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, "")
+	quotaNum, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, "", readState)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, tokenName)
+	c.Header("X-Log-Source", readState.Source())
 	c.JSON(200, gin.H{
 		"success": true,
 		"message": "",
@@ -221,6 +234,7 @@ func GetLogsSelfStat(c *gin.Context) {
 }
 
 func GetManagedLogsStat(c *gin.Context) {
+	readState := &model.LogReadState{}
 	userIds, ok := getManagedLogUserIds(c)
 	if !ok {
 		return
@@ -234,11 +248,13 @@ func GetManagedLogsStat(c *gin.Context) {
 		c.Query("model_name"),
 		c.Query("token_name"),
 		c.Query("group"),
+		readState,
 	)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	c.Header("X-Log-Source", readState.Source())
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": stat})
 }
 

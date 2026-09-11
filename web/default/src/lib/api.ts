@@ -80,6 +80,20 @@ api.get = ((url: string, config: ApiRequestConfig = {}) => {
 api.interceptors.response.use(
   (response) => {
     const skipBusiness = response.config.skipBusinessError
+    if (
+      response.data?.success &&
+      response.headers['x-log-source'] === 'original'
+    ) {
+      toast.warning(
+        t(
+          'Showing backup log records. Some history may be temporarily unavailable.'
+        ),
+        {
+          id: 'log-fallback',
+          duration: 10000,
+        }
+      )
+    }
 
     // Unified business response format: { success, message, data }
     if (
@@ -91,7 +105,7 @@ api.interceptors.response.use(
       if (!response.data.success) {
         // Show error toast for business failures
         const msg = response.data.message || t('Request failed')
-        toast.error(msg)
+        toast.error(msg, { id: msg })
       }
     }
     return response

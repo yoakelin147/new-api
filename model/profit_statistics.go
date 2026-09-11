@@ -16,6 +16,7 @@ const (
 )
 
 type ProfitStatisticsQuery struct {
+	ReadState      *LogReadState
 	LogType        int
 	StartTimestamp int64
 	EndTimestamp   int64
@@ -81,6 +82,9 @@ type profitStatisticsAccumulator struct {
 }
 
 func GetProfitStatistics(query ProfitStatisticsQuery, startIdx int, pageSize int) ([]*ProfitStatisticsRow, int, ProfitStatisticsSummary, error) {
+	if query.ReadState == nil {
+		query.ReadState = &LogReadState{}
+	}
 	rowsByKey := make(map[profitStatisticsKey]*profitStatisticsAccumulator)
 	summary := ProfitStatisticsSummary{}
 	if err := validateLogTextPatterns(query.Username, query.ModelName); err != nil {

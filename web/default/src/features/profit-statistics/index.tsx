@@ -1395,7 +1395,9 @@ export function ProfitStatistics() {
         filters,
       })
       if (!result.success) {
-        toast.error(result.message || t('Failed to load profit statistics'))
+        toast.error(result.message || t('Failed to load profit statistics'), {
+          id: result.message || t('Failed to load profit statistics'),
+        })
         return DEFAULT_DATA
       }
       return result.data || DEFAULT_DATA
@@ -1534,7 +1536,9 @@ export function ProfitStatistics() {
           exportAll: true,
         })
         if (!result.success) {
-          toast.error(result.message || t('Failed to load profit statistics'))
+          toast.error(result.message || t('Failed to load profit statistics'), {
+            id: result.message || t('Failed to load profit statistics'),
+          })
           return
         }
         rows = result.data?.items || []

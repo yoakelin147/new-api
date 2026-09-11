@@ -164,8 +164,12 @@ func TestClickHouseRuntimeOriginalDatabaseFailover(t *testing.T) {
 	wantOne.Id, wantTwo.Id = backup[1].Id, backup[2].Id
 	require.Equal(t, []Log{history, wantOne, wantTwo}, backup)
 	require.Greater(t, backup[1].Id, history.Id)
-	_, _, err := s.Query(ctx, logFilter{}, 0, 10, logOrderID)
-	require.Error(t, err, "reads must not silently return partial backup history")
+	readState := &LogReadState{}
+	stored, originalTotal, err := s.Query(logReadContext(readState), logFilter{}, 0, 10, logOrderID)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), originalTotal)
+	require.Len(t, stored, 3)
+	require.Equal(t, "original", readState.Source())
 	proxy.SetBlocked(false)
 	time.Sleep(logFailoverRetryInterval + 10*time.Millisecond)
 	require.NoError(t, createLog(ctx, log("recovered")))
@@ -173,6 +177,11 @@ func TestClickHouseRuntimeOriginalDatabaseFailover(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(2), total)
 	require.Len(t, rows, 2)
+	readState = &LogReadState{}
+	_, recoveredTotal, err := s.Query(logReadContext(readState), logFilter{}, 0, 10, logOrderID)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), recoveredTotal)
+	require.Equal(t, "clickhouse", readState.Source())
 	var backupCount int64
 	require.NoError(t, fallback.Model(&Log{}).Count(&backupCount).Error)
 	require.Equal(t, int64(3), backupCount)
@@ -195,6 +204,56 @@ func TestClickHouseStartupCanUseOriginalDatabase(t *testing.T) {
 	_, total, err := direct.Query(context.Background(), logFilter{}, 0, 10, logOrderID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total)
+}
+
+func TestClickHouseOutagePersistsEveryRequestLog(t *testing.T) {
+	s, proxy, direct, fallback := failoverTestStore(t, false)
+	proxy.SetBlocked(true)
+	const count = 100
+	want := make([]Log, count)
+	errCh := make(chan error, count)
+	var wg sync.WaitGroup
+	for i := range want {
+		want[i] = Log{
+			UserId: 7, CreatedAt: time.Now().Unix(), Type: LogTypeConsume,
+			Content: "灾备落库校验", Username: "test-user", TokenName: "test-token",
+			ModelName: "test-model", Quota: 128, PromptTokens: 31, CompletionTokens: 17,
+			UseTime: 2, IsStream: true, ChannelId: 3, TokenId: 4, Group: "default",
+			Ip: "127.0.0.1", RequestId: fmt.Sprintf("outage-%03d", i),
+			UpstreamRequestId: fmt.Sprintf("upstream-%03d", i), Other: `{"token_audit":{"masked_key":"sk-test"},"model_ratio":1,"unknown":{"preserve":true}}`,
+		}
+		wg.Add(1)
+		go func(log Log) {
+			defer wg.Done()
+			errCh <- createLog(context.Background(), &log)
+		}(want[i])
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+	var saved []Log
+	require.NoError(t, fallback.Order("request_id").Find(&saved).Error)
+	require.Len(t, saved, count)
+	for i := range want {
+		require.Positive(t, saved[i].Id)
+		want[i].Id = saved[i].Id
+	}
+	require.Equal(t, want, saved, "every request and all business fields must survive the outage")
+	proxy.SetBlocked(false)
+	s.failover.mu.Lock()
+	s.failover.retryAt = time.Now().Add(-time.Second)
+	s.failover.mu.Unlock()
+	require.NoError(t, createLog(context.Background(), &Log{CreatedAt: time.Now().Unix(), RequestId: "after-recovery"}))
+	rows, total, err := direct.Query(context.Background(), logFilter{}, 0, 10, logOrderID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, "after-recovery", rows[0].RequestId)
+	var remaining int64
+	require.NoError(t, fallback.Model(&Log{}).Count(&remaining).Error)
+	require.Equal(t, int64(count), remaining, "recovery must retain SQL records for later migration")
+	t.Logf("verified %d/%d complete request logs in %s; recovery kept all SQL records", count, count, fallback.Dialector.Name())
 }
 
 func TestClickHouseCloseDoesNotCloseOriginalDatabase(t *testing.T) {

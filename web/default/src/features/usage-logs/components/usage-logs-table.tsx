@@ -137,7 +137,9 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       })
 
       if (!result?.success) {
-        toast.error(result?.message || t('Failed to load logs'))
+        toast.error(result?.message || t('Failed to load logs'), {
+          id: result?.message || t('Failed to load logs'),
+        })
         return DEFAULT_LOGS_DATA
       }
 

@@ -72,6 +72,7 @@ func handleCostStatisticsWithQuery(c *gin.Context, isAdmin bool, userIds []int) 
 	}
 
 	query := model.CostStatisticsQuery{
+		ReadState:      &model.LogReadState{},
 		UserId:         c.GetInt("id"),
 		UserIds:        userIds,
 		IsAdmin:        isAdmin,
@@ -100,6 +101,7 @@ func handleCostStatisticsWithQuery(c *gin.Context, isAdmin bool, userIds []int) 
 
 	pageInfo.SetTotal(total)
 	pageInfo.SetItems(rows)
+	c.Header("X-Log-Source", query.ReadState.Source())
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

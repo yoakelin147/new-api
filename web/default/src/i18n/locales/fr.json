@@ -5095,6 +5095,7 @@
     "Transparent pricing": "Tarification transparente",
     "稳定服务": "Service stable",
     "智能调度": "Ordonnancement intelligent",
-    "弹性保障": "Garantie élastique"
+    "弹性保障": "Garantie élastique",
+    "Showing backup log records. Some history may be temporarily unavailable.": "Affichage des journaux de secours. Certaines données historiques peuvent être temporairement indisponibles."
   }
 }

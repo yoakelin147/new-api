@@ -1439,7 +1439,9 @@ export function CostStatistics() {
           subject,
         })
         if (!result.success) {
-          toast.error(result.message || t('Failed to load cost statistics'))
+          toast.error(result.message || t('Failed to load cost statistics'), {
+            id: result.message || t('Failed to load cost statistics'),
+          })
           return DEFAULT_DATA
         }
         return result.data || DEFAULT_DATA
@@ -1528,7 +1530,9 @@ export function CostStatistics() {
           exportAll: true,
         })
         if (!result.success) {
-          toast.error(result.message || t('Failed to load cost statistics'))
+          toast.error(result.message || t('Failed to load cost statistics'), {
+            id: result.message || t('Failed to load cost statistics'),
+          })
           return
         }
         rows = result.data?.items || []
