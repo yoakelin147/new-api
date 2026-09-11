@@ -124,3 +124,49 @@ func TestInitLogDBEmptyClickHouseKeepsOriginalDatabase(t *testing.T) {
 	require.Same(t, DB, LOG_DB)
 	require.Nil(t, clickHouseLogs)
 }
+
+func TestInitLogDBClickHousePreservesOriginalLogConnection(t *testing.T) {
+	_, dsn := clickHouseTestDatabase(t)
+	t.Setenv("CLICKHOUSE_DSN", dsn)
+	t.Setenv("LOG_SQL_DSN", "")
+	t.Setenv("CLICKHOUSE_NODE_ID", "21")
+	oldLogs, oldStore, oldCH := LOG_DB, clickHouseLogs, common.UsingClickHouse
+	LOG_DB, clickHouseLogs = nil, nil
+	t.Cleanup(func() {
+		if clickHouseLogs != nil {
+			clickHouseLogs.Close()
+		}
+		LOG_DB, clickHouseLogs, common.UsingClickHouse = oldLogs, oldStore, oldCH
+	})
+	require.NoError(t, InitLogDB())
+	require.Same(t, DB, LOG_DB, "ClickHouse failover must reuse the original logs connection")
+}
+
+func TestClickHouseExistingDistributedTable(t *testing.T) {
+	s, dsn := clickHouseTestDatabase(t)
+	var localCluster uint64
+	require.NoError(t, s.db.QueryRow("SELECT count() FROM system.clusters WHERE cluster = 'default' AND is_local = 1").Scan(&localCluster))
+	if localCluster == 0 {
+		t.Skip("server has no default local cluster for the Distributed table test")
+	}
+	local := quoteClickHouseIdentifier(s.database) + ".`logs_local`"
+	_, err := s.db.Exec("RENAME TABLE " + s.table() + " TO " + local)
+	require.NoError(t, err)
+	_, err = s.db.Exec("CREATE TABLE " + s.table() + " AS " + local + " ENGINE = Distributed('default', '" + s.database + "', 'logs_local', rand())")
+	require.NoError(t, err)
+	var before, after string
+	require.NoError(t, s.db.QueryRow("SHOW CREATE TABLE "+s.table()).Scan(&before))
+	connected, err := newClickHouseLogStore(context.Background(), dsn, 35)
+	require.NoError(t, err)
+	defer connected.Close()
+	log := &Log{CreatedAt: time.Now().Unix(), Content: "existing Distributed entry", Other: `{"preserved":true}`}
+	require.NoError(t, connected.Create(context.Background(), log))
+	rows, total, err := connected.Query(context.Background(), logFilter{}, 0, 10, logOrderID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, []*Log{log}, rows)
+	_, err = connected.DeleteBefore(context.Background(), log.CreatedAt+1)
+	require.ErrorContains(t, err, "underlying tables")
+	require.NoError(t, s.db.QueryRow("SHOW CREATE TABLE "+s.table()).Scan(&after))
+	require.Equal(t, before, after)
+}

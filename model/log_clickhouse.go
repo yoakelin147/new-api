@@ -11,10 +11,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/QuantumNous/new-api/common"
+	"gorm.io/gorm"
 )
 
 // Set once during InitLogDB, before serving requests. A nil store preserves the
@@ -25,6 +27,10 @@ type clickHouseLogStore struct {
 	db       *sql.DB
 	database string
 	ids      *logIDGenerator
+	node     int
+	initMu   sync.Mutex
+	failover *logWriteFailover
+	engine   string
 }
 
 var clickHouseIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -36,6 +42,20 @@ func (s *clickHouseLogStore) table() string {
 }
 
 func newClickHouseLogStore(ctx context.Context, dsn string, node int) (*clickHouseLogStore, error) {
+	s, err := openClickHouseLogStore(dsn, node)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	if err := s.prepare(ctx); err != nil {
+		s.db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+func openClickHouseLogStore(dsn string, node int) (*clickHouseLogStore, error) {
 	// Validate without echoing the DSN: url.Parse errors can contain passwords.
 	u, err := url.Parse(strings.TrimSpace(dsn))
 	if err != nil || u == nil || (u.Scheme != "clickhouse" && u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -76,6 +96,9 @@ func newClickHouseLogStore(ctx context.Context, dsn string, node int) (*clickHou
 		options.Settings["async_insert_busy_timeout_ms"] = 100
 	}
 	options.Settings["wait_for_async_insert"] = 1
+	// A cluster entry must not acknowledge an insert before forwarding to its shard.
+	options.Settings["insert_distributed_sync"] = 1
+	options.Settings["skip_unavailable_shards"] = 0
 	options.Debug = false
 	if options.DialTimeout == 0 {
 		options.DialTimeout = 10 * time.Second
@@ -83,26 +106,61 @@ func newClickHouseLogStore(ctx context.Context, dsn string, node int) (*clickHou
 	// Connect to an existing database first, so the logs database can be created.
 	options.Auth.Database = "default"
 	db := clickhouse.OpenDB(options)
-	s := &clickHouseLogStore{db: db, database: database}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("connect ClickHouse logs: %w", err)
+	return &clickHouseLogStore{db: db, database: database, node: node}, nil
+}
+
+func (s *clickHouseLogStore) prepare(ctx context.Context) error {
+	s.initMu.Lock()
+	defer s.initMu.Unlock()
+	if s.ids != nil {
+		return nil
+	}
+	if err := s.db.PingContext(ctx); err != nil {
+		return fmt.Errorf("connect ClickHouse logs: %w", err)
 	}
 	if err := s.initialize(ctx); err != nil {
-		db.Close()
-		return nil, err
+		return err
 	}
 	var maxID int64
-	if err := db.QueryRowContext(ctx, "SELECT coalesce(max(id), 0) FROM "+s.table()).Scan(&maxID); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("read ClickHouse log ID maximum: %w", err)
+	if err := s.db.QueryRowContext(ctx, "SELECT coalesce(max(id), 0) FROM "+s.table()).Scan(&maxID); err != nil {
+		return fmt.Errorf("read ClickHouse log ID maximum: %w", err)
 	}
-	s.ids, err = newLogIDGenerator(node, maxID, time.Now)
+	ids, err := newLogIDGenerator(s.node, maxID, time.Now)
 	if err != nil {
-		db.Close()
+		return err
+	}
+	s.ids = ids
+	return nil
+}
+
+func newClickHouseLogStoreWithFallback(ctx context.Context, dsn string, node int, fallback *gorm.DB) (*clickHouseLogStore, error) {
+	if fallback == nil {
+		return nil, errors.New("original log database must be initialized before ClickHouse")
+	}
+	s, err := openClickHouseLogStore(dsn, node)
+	if err != nil {
 		return nil, err
+	}
+	// Reuse LOG_DB and its existing logs table; this store does not own the pool.
+	fallbackCtx, cancel := context.WithTimeout(ctx, logFailoverWriteTimeout)
+	var existing []Log
+	fallbackErr := fallback.WithContext(fallbackCtx).Select("id").Limit(1).Find(&existing).Error
+	cancel()
+	primaryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	primaryErr := s.prepare(primaryCtx)
+	cancel()
+	if primaryErr != nil && fallbackErr != nil {
+		s.Close()
+		return nil, errors.Join(fmt.Errorf("ClickHouse logs unavailable: %w", primaryErr), fmt.Errorf("original log database unavailable: %w", fallbackErr))
+	}
+	s.failover = newLogWriteFailover(s.createDirect, func(ctx context.Context, log *Log) error {
+		return saveLogToOriginalDatabase(ctx, fallback, log)
+	})
+	if primaryErr != nil {
+		s.failover.unavailable(primaryErr)
+	}
+	if fallbackErr != nil {
+		common.SysError("Original log database is not ready for failover; primary ClickHouse remains active: " + fallbackErr.Error())
 	}
 	return s, nil
 }
@@ -116,7 +174,7 @@ func initClickHouseLogs(dsn string) error {
 			return errors.New("invalid CLICKHOUSE_NODE_ID")
 		}
 	}
-	s, err := newClickHouseLogStore(context.Background(), dsn, node)
+	s, err := newClickHouseLogStoreWithFallback(context.Background(), dsn, node, LOG_DB)
 	if err != nil {
 		return err
 	}
@@ -126,7 +184,9 @@ func initClickHouseLogs(dsn string) error {
 	return nil
 }
 
-func (s *clickHouseLogStore) Close() error { return s.db.Close() }
+func (s *clickHouseLogStore) Close() error {
+	return s.db.Close()
+}
 
 func createLog(ctx context.Context, log *Log) error {
 	if clickHouseLogs != nil {

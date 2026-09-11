@@ -9,6 +9,12 @@ import (
 func (s *clickHouseLogStore) DeleteBefore(ctx context.Context, timestamp int64) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+	if err := s.prepare(ctx); err != nil {
+		return 0, err
+	}
+	if s.engine == "Distributed" {
+		return 0, fmt.Errorf("Distributed logs must be deleted through the ClickHouse service's underlying tables")
+	}
 	// Delete the IDs actually selected, rather than claiming a pre-count of an
 	// open-ended timestamp predicate is the number deleted under concurrent writes.
 	var upper int64

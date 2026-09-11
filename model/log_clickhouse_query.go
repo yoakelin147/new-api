@@ -136,8 +136,18 @@ func (f logFilter) where() (string, []any, error) {
 }
 
 func (s *clickHouseLogStore) Create(ctx context.Context, log *Log) error {
+	if s.failover != nil {
+		return s.failover.Write(ctx, log)
+	}
+	return s.createDirect(ctx, log)
+}
+
+func (s *clickHouseLogStore) createDirect(ctx context.Context, log *Log) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+	if err := s.prepare(ctx); err != nil {
+		return err
+	}
 	if log.Id == 0 {
 		id, err := s.ids.Next(ctx)
 		if err != nil {

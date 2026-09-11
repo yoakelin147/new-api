@@ -1,7 +1,7 @@
 # New API ClickHouse 日志接入
 
 `CLICKHOUSE_DSN` 为空时，保持原来的 `LOG_SQL_DSN` / 主库日志路径。
-配置后，Go 后端直接连接 ClickHouse，日志写入、明细、统计数据读取及删除使用同一日志库。
+配置后，Go 后端直接连接 ClickHouse，正常情况下日志写入、明细、统计数据读取及删除均使用 ClickHouse；写入故障时自动降级到原日志库的 `logs` 表。
 主库仍可以是 PostgreSQL、MySQL 或 SQLite，费用、利润、缓存命中和趋势处理继续在 Go 后端完成。
 
 ## 本地 Compose 启动
@@ -12,14 +12,14 @@
 
 ```yaml
 CLICKHOUSE_USER: newapi
-CLICKHOUSE_PASSWORD: "newapi-local-only"
+CLICKHOUSE_PASSWORD: "12345678"
 CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
 ```
 
 无需额外设置 `.env`。启用时，在 `new-api.environment` 中注释 `CLICKHOUSE_DSN=` 空值行，取消下面这行的注释：
 
 ```yaml
-- CLICKHOUSE_DSN=clickhouse://newapi:newapi-local-only@clickhouse:9000/logs
+- CLICKHOUSE_DSN=clickhouse://newapi:12345678@clickhouse:9000/logs
 - CLICKHOUSE_NODE_ID=0
 ```
 
@@ -34,15 +34,15 @@ docker compose up -d --build new-api
 支持 `clickhouse://host:9000/database` 和 HTTP(S) 连接；用户名和密码按示例放入 URL。
 地址需要显式端口。数据库名使用字母、数字和下划线，首字符为字母或下划线；省略库名时使用 `logs`。
 
-本次实现聚焦 MergeTree 日志表接入。不会部署或管理分片、副本、Keeper 和 Distributed 表。
+默认初始化 MergeTree 日志表，也可连接由外部团队预先提供的同字段 Distributed 表。不会部署或管理分片、副本和 Keeper。Distributed 表的历史删除需由 ClickHouse 服务端操作底层表，当前应用删除接口会明确报错。
 
 ## 启动初始化
 
-1. 先按原逻辑初始化主库。
+1. 先按原逻辑初始化主库及原日志库，保留现有 `logs` 表和连接；原库的初始化、迁移方式沿用项目现有逻辑。
 2. `CLICKHOUSE_DSN` 去除首尾空白后为空，继续原日志数据库逻辑。
 3. 有配置时连接 ClickHouse，检查目标库及 `logs` 表。
 4. 只创建不存在的库和表；已有表仅检查字段兼容性，不执行 AutoMigrate、不改字段、不清数据。
-5. 连接失败或已有表不兼容，返回明确初始化错误，不静默改用其他日志库。
+5. ClickHouse 无法连接或表暂不可用时，原日志库可用则允许启动并进入降级写入；后续写入会重试 ClickHouse 初始化。两边都不可用则返回错误。原主库仍是应用启动所必需的依赖。
 
 自动创建的表使用 `MergeTree`，按 UTC 月分区，按 `(created_at, id)` 排序。
 字段与 `model.Log` 对应：
@@ -68,8 +68,37 @@ ClickHouse 写入使用原有 `id` 字段生成整数 ID，限制在 JavaScript 
 这是 New API 写入实例的标识，不是数据库表字段。
 
 默认启用 ClickHouse 服务端异步插入批处理，但 `wait_for_async_insert=1`，Go 写入在服务端完成后才报告成功。
+对已有 Distributed 入口同时设置 `insert_distributed_sync=1`、`skip_unavailable_shards=0`，等待分片转发结果；上游返回的写入失败可触发原库降级。
 排查时可在 DSN 加 `?async_insert=0` 使用同步插入。
-写入失败沿用现有日志错误处理，没有新增应用侧双写或持久重试队列。
+启用 ClickHouse 后，运行中的写入失败会自动触发下述降级逻辑，无需增加灾备配置。
+
+## 第二层灾备：复用原日志库
+
+正常日志优先写 ClickHouse。ClickHouse 故障时，直接写回启用 ClickHouse 之前使用的 MySQL/PostgreSQL 的 `logs` 表。复用原来的 `LOG_DB` 连接，不增加备份数据库、容器、数据卷或连接参数；原 SQLite 部署也沿用相同逻辑。Go 不管理 ClickHouse 集群的分片和副本。
+
+原日志库的选择规则保持不变：
+
+| 已有配置 | ClickHouse 故障时写入位置 |
+| --- | --- |
+| MySQL 主库，未配置 `LOG_SQL_DSN` | 该 MySQL 主库原有的 `logs` 表 |
+| PostgreSQL 主库，未配置 `LOG_SQL_DSN` | 该 PostgreSQL 主库原有的 `logs` 表 |
+| 已配置 `LOG_SQL_DSN` | 该配置对应的原日志库的 `logs` 表 |
+| SQLite，未配置 `LOG_SQL_DSN` | 原 SQLite 数据库的 `logs` 表 |
+
+现有 Compose 默认使用 PostgreSQL，因此只需启用上面的 ClickHouse 连接，故障时就会自动写回现有 `postgres` 服务的 `logs` 表。使用现有 MySQL 配置时同理。
+
+运行行为：
+
+- 正常写 ClickHouse 成功，只保存到 ClickHouse。
+- ClickHouse 写入失败或超时，立即尝试原日志库；两次写入分别使用 5 秒超时，原库写入不受前一次超时取消影响。
+- 进入降级后，5 秒窗口内的新日志直接写原日志库，避免每条日志都等待不可用的 ClickHouse。
+- 窗口结束后的首条日志尝试 ClickHouse，成功则后续新日志恢复写入 ClickHouse；失败则继续使用原日志库。无新日志时不会额外执行后台探活。
+- 启动时原库初始化成功、ClickHouse 不可用，同样进入降级模式。原日志表之后暂不可用而 ClickHouse 可用时，继续写 ClickHouse 并记录原日志表不可用信息。
+- 两个存储都写入失败时返回错误，并由现有日志调用方报告；不会把失败当作成功。
+
+查询和统计仍读取 ClickHouse。原库只保留原有历史和降级期间日志，无法代表启用 ClickHouse 后的完整记录，因此不会自动把查询切回原库。故障期间日志查询可以失败，但降级写入继续保存日志。
+
+降级写入保留原业务字段和 `other`，使用原库自身的 ID 生成方式，避免与原有历史冲突。恢复后不自动回灌：ClickHouse 超时可能发生在服务端已经提交之后，此时两边可能都存在该条日志。降级日志继续留存在原库，后续补迁需要核对内容、去重并安排目标 ID；不能直接把两个库的 `id` 当作同一标识。库表字段没有新增。
 
 ## 查询及统计
 
@@ -97,5 +126,13 @@ TEST_CLICKHOUSE_DSN='clickhouse://user:password@127.0.0.1:9000/default' \
   go test ./model -run 'TestClickHouse|TestInitLogDB' -count=1
 ```
 
-测试覆盖缺库缺表初始化、已有表保持原样、全字段往返、历史 ID 后续生成、空用户范围、统计对账，以及超过 1,000 条日志的导出和删除。
+测试覆盖缺库缺表初始化、已有表保持原样、全字段往返、历史 ID 后续生成、空用户范围、统计对账，以及超过 1,000 条日志的导出和删除。测试服务器具有 `default` 本地集群配置时，还验证已有 Distributed 表的读写及表定义保留。
 可额外设置 `TEST_LOG_PRIMARY_DSN` 为 PostgreSQL 或 MySQL 的独立 `new_api_test` 数据库，验证关系库与 ClickHouse 返回的一致性；该测试会创建并清理该库中的三个测试表，勿指向业务数据库。
+
+灾备集成测试使用同一组测试参数，通过测试 TCP 代理中断 ClickHouse 连接，验证原 `logs` 表写入、原历史保留、运行中恢复、启动时故障和两边同时失败。分别使用 MySQL、PostgreSQL 的测试 DSN 运行：
+
+```sh
+TEST_CLICKHOUSE_DSN='clickhouse://newapi:12345678@127.0.0.1:9000/default' \
+TEST_LOG_PRIMARY_DSN='postgresql://user:password@127.0.0.1:5432/new_api_test' \
+  go test ./model -run 'TestClickHouseRuntimeOriginal|TestClickHouseStartup|TestClickHouseClose|TestInitLogDB' -count=1
+```

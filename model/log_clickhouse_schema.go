@@ -51,9 +51,10 @@ func (s *clickHouseLogStore) initialize(ctx context.Context) error {
 	if err := s.db.QueryRowContext(ctx, "SELECT engine FROM system.tables WHERE database = ? AND name = 'logs'", s.database).Scan(&engine); err != nil {
 		return err
 	}
-	if !strings.HasSuffix(engine, "MergeTree") {
-		return fmt.Errorf("unsupported ClickHouse logs engine %s: this adapter requires a MergeTree log table", engine)
+	if !strings.HasSuffix(engine, "MergeTree") && engine != "Distributed" {
+		return fmt.Errorf("unsupported ClickHouse logs engine %s", engine)
 	}
+	s.engine = engine
 	rows, err := s.db.QueryContext(ctx, "SELECT name, type FROM system.columns WHERE database = ? AND table = 'logs'", s.database)
 	if err != nil {
 		return err

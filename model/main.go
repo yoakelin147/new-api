@@ -203,9 +203,17 @@ func InitDB() (err error) {
 }
 
 func InitLogDB() (err error) {
+	// Keep the original logs connection ready for runtime ClickHouse failover.
+	if err = initSQLLogDB(); err != nil {
+		return err
+	}
 	if dsn := strings.TrimSpace(os.Getenv("CLICKHOUSE_DSN")); dsn != "" {
 		return initClickHouseLogs(dsn)
 	}
+	return nil
+}
+
+func initSQLLogDB() (err error) {
 	if os.Getenv("LOG_SQL_DSN") == "" {
 		LOG_DB = DB
 		return
