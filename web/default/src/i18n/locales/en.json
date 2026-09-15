@@ -1754,6 +1754,7 @@
     "Failed to enable channels": "Failed to enable channels",
     "Failed to enable model": "Failed to enable model",
     "Failed to enable tag channels": "Failed to enable tag channels",
+    "Failed to export logs": "Failed to export logs",
     "Failed to export model metadata configuration.": "Failed to export model metadata configuration.",
     "Failed to fetch channel key": "Failed to fetch channel key",
     "Failed to fetch checkin status": "Failed to fetch check-in status",

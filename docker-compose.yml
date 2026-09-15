@@ -38,9 +38,8 @@ services:
 #      - SQL_DSN=root:123456@tcp(mysql:3306)/new-api  # Point to the mysql service, uncomment if using MySQL
       - REDIS_CONN_STRING=redis://:123456@redis:6379 # ⚠️ IMPORTANT: Change the password in production!
       - TZ=Asia/Shanghai
-      # 默认沿用原日志库；启用 ClickHouse 时注释空值行，取消下一行注释。
-      - CLICKHOUSE_DSN=
-#      - CLICKHOUSE_DSN=clickhouse://newapi:12345678@clickhouse:9000/logs
+      # 默认沿用原日志库；启用 ClickHouse 时，取消注释。
+      # - CLICKHOUSE_DSN=clickhouse://newapi:12345678@clickhouse:9000/logs
       - CLICKHOUSE_NODE_ID=0
       # ClickHouse 写入失败时自动降级到原 MySQL/PostgreSQL 的 logs 表，无需额外配置。
       - ERROR_LOG_ENABLED=true # 是否启用错误日志记录 (Whether to enable error log recording)

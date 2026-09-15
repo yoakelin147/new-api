@@ -20,9 +20,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { type Table } from '@tanstack/react-table'
-import { Eye, EyeOff } from 'lucide-react'
+import { Download, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { formatLogQuota } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
@@ -40,14 +42,15 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { SearchableSubjectSelect } from '@/components/searchable-subject-select'
-import { getManagedLogUsers } from '../api'
+import { exportAllLogs, getManagedLogUsers } from '../api'
 import {
   LOG_TYPE_ALL_VALUE,
   LOG_TYPE_FILTERS,
   STREAM_STATUS_FILTERS,
 } from '../constants'
+import { buildUsageLogsXlsx, downloadUsageLogsXlsx } from '../lib/export-xlsx'
 import { buildSearchParams } from '../lib/filter'
-import { getDefaultTimeRange } from '../lib/utils'
+import { buildApiParams, getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters, StreamStatusFilter } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
@@ -114,6 +117,7 @@ export function CommonLogsFilterBar<TData>(
   })
   const [logType, setLogType] = useState<LogTypeValue>(LOG_TYPE_ALL_VALUE)
   const [streamStatus, setStreamStatus] = useState<StreamStatusValue>('all')
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     const { start, end } = getDefaultTimeRange()
@@ -208,6 +212,39 @@ export function CommonLogsFilterBar<TData>(
     },
     [handleApply]
   )
+
+  const handleExport = useCallback(async () => {
+    setExporting(true)
+    try {
+      const result = await exportAllLogs(
+        buildApiParams({
+          page: 1,
+          pageSize: 1,
+          searchParams,
+          isAdmin: true,
+          usernameOverride:
+            logSubject === 'self'
+              ? useAuthStore.getState().auth.user?.username
+              : undefined,
+        })
+      )
+      const logs = result.data || []
+      if (!result.success) {
+        toast.error(result.message || t('Failed to export logs'))
+        return
+      }
+      if (logs.length === 0) {
+        toast.warning(t('No data to export'))
+        return
+      }
+      downloadUsageLogsXlsx(buildUsageLogsXlsx(logs, formatLogQuota))
+      toast.success(t('Export completed'))
+    } catch {
+      toast.error(t('Failed to export logs'))
+    } finally {
+      setExporting(false)
+    }
+  }, [logSubject, searchParams, t])
 
   const hasExpandedFilters =
     !!filters.token ||
@@ -479,6 +516,23 @@ export function CommonLogsFilterBar<TData>(
     <LogsFilterToolbar
       table={props.table}
       stats={statsBar}
+      actions={
+        isAdmin ? (
+          <Button
+            type='button'
+            variant='outline'
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            {exporting ? (
+              <Loader2 data-icon='inline-start' className='animate-spin' />
+            ) : (
+              <Download data-icon='inline-start' />
+            )}
+            {t('Export XLSX')}
+          </Button>
+        ) : null
+      }
       primaryFilters={
         <>
           {subjectFilter}

@@ -1754,6 +1754,7 @@
     "Failed to enable channels": "Не удалось включить каналы",
     "Failed to enable model": "Не удалось включить модель",
     "Failed to enable tag channels": "Не удалось включить каналы тегов",
+    "Failed to export logs": "Не удалось экспортировать журналы",
     "Failed to export model metadata configuration.": "Не удалось экспортировать конфигурацию метаданных моделей.",
     "Failed to fetch channel key": "Не удалось получить ключ канала",
     "Failed to fetch checkin status": "Не удалось получить статус регистрации",

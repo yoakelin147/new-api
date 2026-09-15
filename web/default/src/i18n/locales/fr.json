@@ -1754,6 +1754,7 @@
     "Failed to enable channels": "Échec de l'activation des canaux",
     "Failed to enable model": "Échec de l'activation du modèle",
     "Failed to enable tag channels": "Échec de l'activation des canaux de tags",
+    "Failed to export logs": "Échec de l’exportation des journaux",
     "Failed to export model metadata configuration.": "Impossible d’exporter la configuration des métadonnées de modèles.",
     "Failed to fetch channel key": "Échec de la récupération de la clé du canal",
     "Failed to fetch checkin status": "Échec de la récupération du statut d'enregistrement",

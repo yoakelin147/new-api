@@ -1754,6 +1754,7 @@
     "Failed to enable channels": "Không thể kích hoạt các kênh",
     "Failed to enable model": "Không thể kích hoạt mô hình",
     "Failed to enable tag channels": "Không thể kích hoạt kênh thẻ",
+    "Failed to export logs": "Không thể xuất nhật ký",
     "Failed to export model metadata configuration.": "Không thể xuất cấu hình metadata model.",
     "Failed to fetch channel key": "Không thể lấy khóa kênh",
     "Failed to fetch checkin status": "Không thể tải trạng thái điểm danh",

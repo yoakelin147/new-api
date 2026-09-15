@@ -10,6 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const usageLogExportBatchSize = 10_000
+
 func GetAllLogs(c *gin.Context) {
 	readState := &model.LogReadState{}
 	pageInfo := common.GetPageQuery(c)
@@ -34,6 +36,43 @@ func GetAllLogs(c *gin.Context) {
 	c.Header("X-Log-Source", readState.Source())
 	common.ApiSuccess(c, pageInfo)
 	return
+}
+
+func ExportAllLogs(c *gin.Context) {
+	readState := &model.LogReadState{}
+	logType, _ := strconv.Atoi(c.Query("type"))
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	channel, _ := strconv.Atoi(c.Query("channel"))
+	var logs []*model.Log
+	for offset := 0; ; offset += usageLogExportBatchSize {
+		batch, total, err := model.GetAllLogs(
+			logType,
+			startTimestamp,
+			endTimestamp,
+			c.Query("model_name"),
+			c.Query("username"),
+			c.Query("token_name"),
+			offset,
+			usageLogExportBatchSize,
+			channel,
+			c.Query("group"),
+			c.Query("request_id"),
+			c.Query("upstream_request_id"),
+			c.Query("stream_status"),
+			readState,
+		)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		logs = append(logs, batch...)
+		if int64(len(logs)) >= total || len(batch) < usageLogExportBatchSize {
+			break
+		}
+	}
+	c.Header("X-Log-Source", readState.Source())
+	common.ApiSuccess(c, logs)
 }
 
 func GetUserLogs(c *gin.Context) {

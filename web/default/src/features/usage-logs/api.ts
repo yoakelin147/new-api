@@ -28,6 +28,7 @@ import type {
   UserInfo,
   ManagedLogUser,
   ApiResponse,
+  ExportLogsResponse,
 } from './types'
 
 // ============================================================================
@@ -75,6 +76,18 @@ async function fetchLogStats<T>(
 
 export const getAllLogs = (params: GetLogsParams = {}) =>
   fetchLogs('/api/log', params, true)
+
+export async function exportAllLogs(
+  params: GetLogsParams = {}
+): Promise<ExportLogsResponse> {
+  const queryParams = buildQueryParams(
+    params as unknown as Record<string, unknown>
+  )
+  const res = await api.get(`/api/log/export?${queryParams}`, {
+    skipBusinessError: true,
+  })
+  return res.data
+}
 
 export const getUserLogs = (
   params: Omit<GetLogsParams, 'username' | 'channel'> = {}

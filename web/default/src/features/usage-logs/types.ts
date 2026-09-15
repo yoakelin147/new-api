@@ -338,6 +338,8 @@ export interface GetLogsResponse {
   }
 }
 
+export type ExportLogsResponse = ApiResponse<UsageLog[]>
+
 export interface GetLogStatsParams {
   type?: number
   username?: string
