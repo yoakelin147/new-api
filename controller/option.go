@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/clickhousealert"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -164,6 +165,9 @@ func GetOptions(c *gin.Context) {
 			strings.HasSuffix(k, "Key") ||
 			strings.HasSuffix(k, "secret") ||
 			strings.HasSuffix(k, "api_key")
+		if k == "fault_handling.clickhouse_alert_webhook_url" {
+			isSensitiveKey = true
+		}
 		if isSensitiveKey {
 			continue
 		}
@@ -178,6 +182,10 @@ func GetOptions(c *gin.Context) {
 			}
 		}
 	}
+	options = append(options, &model.Option{
+		Key:   "fault_handling.clickhouse_alert_webhook_configured",
+		Value: strconv.FormatBool(operation_setting.IsClickHouseAlertWebhookConfigured()),
+	})
 	common.OptionMapRWMutex.Unlock()
 	options = append(options, &model.Option{
 		Key:   "CompletionRatioMeta",
@@ -216,6 +224,9 @@ func UpdateOption(c *gin.Context) {
 		option.Value = fmt.Sprintf("%v", option.Value)
 	}
 	switch option.Key {
+	case "fault_handling.clickhouse_alert_webhook_configured":
+		common.ApiErrorMsg(c, "企业微信 Webhook 配置状态不可直接修改")
+		return
 	case "QuotaForInviter", "QuotaForInvitee":
 		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
 			common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
@@ -455,4 +466,12 @@ func UpdateOption(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
+}
+
+func TestClickHouseAlertWebhook(c *gin.Context) {
+	if err := clickhousealert.SendTest(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
 }

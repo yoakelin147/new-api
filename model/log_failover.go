@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/clickhousealert"
 	"gorm.io/gorm"
 )
 
@@ -42,7 +43,7 @@ func (f *logWriteFailover) begin() (bool, uint64, error) {
 	return true, f.generation, f.lastError
 }
 
-func (f *logWriteFailover) unavailable(err error) {
+func (f *logWriteFailover) unavailable(err error) bool {
 	f.mu.Lock()
 	firstFailure := f.retryAt.IsZero()
 	f.generation++
@@ -52,9 +53,10 @@ func (f *logWriteFailover) unavailable(err error) {
 	if firstFailure {
 		common.SysError("ClickHouse log writes degraded to the original log database: " + err.Error())
 	}
+	return firstFailure
 }
 
-func (f *logWriteFailover) recovered(generation uint64) {
+func (f *logWriteFailover) recovered(generation uint64) bool {
 	f.mu.Lock()
 	recovered := generation == f.generation && !f.retryAt.IsZero()
 	if recovered {
@@ -65,6 +67,7 @@ func (f *logWriteFailover) recovered(generation uint64) {
 	if recovered {
 		common.SysLog("ClickHouse log writes recovered; outage logs remain in the original log database")
 	}
+	return recovered
 }
 
 func (f *logWriteFailover) Write(ctx context.Context, log *Log) error {
@@ -74,10 +77,14 @@ func (f *logWriteFailover) Write(ctx context.Context, log *Log) error {
 		primaryErr = f.primary(primaryCtx, log)
 		cancel()
 		if primaryErr == nil {
-			f.recovered(generation)
+			if f.recovered(generation) {
+				clickhousealert.Notify(clickhousealert.EventWriteRecovered, "ClickHouse 写入恢复")
+			}
 			return nil
 		}
-		f.unavailable(primaryErr)
+		if f.unavailable(primaryErr) {
+			clickhousealert.Notify(clickhousealert.EventWriteDegraded, "ClickHouse 写入失败或超时")
+		}
 	}
 	// A cancelled/expired primary call must not also cancel the disaster write.
 	backupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), logFailoverWriteTimeout)

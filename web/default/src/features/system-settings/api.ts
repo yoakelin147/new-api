@@ -46,6 +46,13 @@ export async function confirmPaymentCompliance() {
   return res.data
 }
 
+export async function testClickHouseAlertWebhook() {
+  const res = await api.post<UpdateOptionResponse>(
+    '/api/option/fault_handling/test_webhook'
+  )
+  return res.data
+}
+
 export async function deleteLogsBefore(targetTimestamp: number) {
   const res = await api.delete<DeleteLogsResponse>('/api/log/', {
     params: { target_timestamp: targetTimestamp },

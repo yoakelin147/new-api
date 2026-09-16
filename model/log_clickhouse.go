@@ -17,6 +17,8 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/clickhousealert"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"gorm.io/gorm"
 )
 
@@ -25,15 +27,16 @@ import (
 var clickHouseLogs *clickHouseLogStore
 
 type clickHouseLogStore struct {
-	db          *sql.DB
-	database    string
-	ids         *logIDGenerator
-	node        int
-	initMu      sync.Mutex
-	failover    *logWriteFailover
-	engine      string
-	fallback    *gorm.DB
-	readRetryAt atomic.Int64
+	db               *sql.DB
+	database         string
+	ids              *logIDGenerator
+	node             int
+	initMu           sync.Mutex
+	failover         *logWriteFailover
+	engine           string
+	fallback         *gorm.DB
+	readDegraded     atomic.Bool
+	readProbeRunning atomic.Bool
 }
 
 var clickHouseIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -106,6 +109,10 @@ func openClickHouseLogStore(dsn string, node int) (*clickHouseLogStore, error) {
 	if options.DialTimeout == 0 {
 		options.DialTimeout = 10 * time.Second
 	}
+	dialer := &net.Dialer{Timeout: options.DialTimeout}
+	options.DialContext = func(ctx context.Context, addr string) (net.Conn, error) {
+		return dialer.DialContext(ctx, "tcp", addr)
+	}
 	// Connect to an existing database first, so the logs database can be created.
 	options.Auth.Database = "default"
 	db := clickhouse.OpenDB(options)
@@ -162,6 +169,9 @@ func newClickHouseLogStoreWithFallback(ctx context.Context, dsn string, node int
 	})
 	if primaryErr != nil {
 		s.failover.unavailable(primaryErr)
+		s.readDegraded.Store(true)
+		clickhousealert.Notify(clickhousealert.EventWriteDegraded, "ClickHouse 启动时不可用")
+		clickhousealert.Notify(clickhousealert.EventReadDegraded, "ClickHouse 启动时读取不可用")
 	}
 	if fallbackErr != nil {
 		common.SysError("Original log database is not ready for failover; primary ClickHouse remains active: " + fallbackErr.Error())
@@ -197,4 +207,34 @@ func createLog(ctx context.Context, log *Log) error {
 		return clickHouseLogs.Create(ctx, log)
 	}
 	return LOG_DB.Create(log).Error
+}
+
+var clickHouseLogReadRecoveryTaskOnce sync.Once
+
+func StartClickHouseLogReadRecoveryTask() {
+	clickHouseLogReadRecoveryTaskOnce.Do(func() {
+		if clickHouseLogs == nil {
+			return
+		}
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			var lastProbe time.Time
+			for now := range ticker.C {
+				settings := operation_setting.GetFaultHandlingSetting()
+				if !settings.ClickHouseAutoRecoveryEnabled {
+					lastProbe = time.Time{}
+					continue
+				}
+				interval := time.Duration(settings.ClickHouseProbeIntervalSeconds) * time.Second
+				if !lastProbe.IsZero() && now.Sub(lastProbe) < interval {
+					continue
+				}
+				lastProbe = now
+				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(settings.ClickHouseProbeTimeoutMillis)*time.Millisecond)
+				clickHouseLogs.probeReadRecovery(ctx)
+				cancel()
+			}
+		}()
+	})
 }

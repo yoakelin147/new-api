@@ -5097,6 +5097,26 @@
     "稳定服务": "稳定服务",
     "智能调度": "智能调度",
     "弹性保障": "弹性保障",
-    "Showing backup log records. Some history may be temporarily unavailable.": "Showing backup log records. Some history may be temporarily unavailable."
+    "Showing backup log records. Some history may be temporarily unavailable.": "Showing backup log records. Some history may be temporarily unavailable.",
+    "故障处理": "Fault Handling",
+    "启用 ClickHouse 自动恢复探测": "Enable automatic ClickHouse recovery probes",
+    "后台任务按配置间隔探测 ClickHouse 可用性，业务查询不承担恢复探测": "A background task probes ClickHouse availability at the configured interval; business queries never perform recovery probes",
+    "自动探测间隔（秒）": "Automatic probe interval (seconds)",
+    "允许范围：5–3600 秒，默认 30 秒": "Allowed range: 5–3600 seconds; default: 30 seconds",
+    "单次探测超时（毫秒）": "Probe timeout (milliseconds)",
+    "允许范围：100–10000 毫秒，默认 1000 毫秒": "Allowed range: 100–10000 milliseconds; default: 1000 milliseconds",
+    "启用企业微信故障告警": "Enable WeCom failure alerts",
+    "只在日志读写切换或恢复时发送一次告警": "Send one alert only when log reads or writes switch or recover",
+    "企业微信机器人 Webhook": "WeCom bot Webhook",
+    "已配置，留空保持不变": "Configured; leave blank to keep it unchanged",
+    "粘贴企业微信 Webhook 地址": "Paste the WeCom Webhook URL",
+    "Webhook 已配置，地址不会回显": "Webhook is configured; the URL will not be shown",
+    "仅支持企业微信 https Webhook 地址": "Only WeCom HTTPS Webhook URLs are supported",
+    "清除 Webhook": "Clear Webhook",
+    "发送测试消息": "Send test message",
+    "测试消息已发送": "Test message sent",
+    "测试消息发送失败": "Failed to send test message",
+    "The probe interval must be between 5 and 3600 seconds": "The probe interval must be between 5 and 3600 seconds",
+    "The probe timeout must be between 100 and 10000 milliseconds": "The probe timeout must be between 100 and 10000 milliseconds"
   }
 }

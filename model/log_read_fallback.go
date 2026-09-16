@@ -2,11 +2,13 @@ package model
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/clickhousealert"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -40,28 +42,18 @@ func (s *clickHouseLogStore) readLogs(ctx context.Context, primary, fallback fun
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	retryAt := s.readRetryAt.Load()
-	attempt := state.source == "clickhouse" || (state.source != "original" && (retryAt == 0 || time.Now().UnixNano() >= retryAt))
-	if attempt {
-		// Only one reader probes recovery; other requests keep reading the original DB.
-		if retryAt != 0 && state.source == "" {
-			next := time.Now().Add(logFailoverRetryInterval).UnixNano()
-			attempt = s.readRetryAt.CompareAndSwap(retryAt, next)
-			retryAt = next
-		}
-	}
+	attempt := state.source == "clickhouse" || (state.source == "" && !s.readDegraded.Load())
 	if attempt {
 		if err := primary(ctx); err == nil {
-			s.readRetryAt.CompareAndSwap(retryAt, 0)
 			state.source = "clickhouse"
 			return nil
 		} else {
 			if s.fallback == nil {
 				return err
 			}
-			previous := s.readRetryAt.Swap(time.Now().Add(logFailoverRetryInterval).UnixNano())
-			if previous == 0 {
+			if s.readDegraded.CompareAndSwap(false, true) {
 				common.SysError("ClickHouse log reads degraded to the original database: " + err.Error())
+				clickhousealert.Notify(clickhousealert.EventReadDegraded, "ClickHouse 读取失败或超时")
 			}
 			// A streaming consumer or earlier query already used this source.
 			// Abort instead of mixing partial ClickHouse data with SQL aggregates.
@@ -79,6 +71,23 @@ func (s *clickHouseLogStore) readLogs(ctx context.Context, primary, fallback fun
 		return errLogReadUnavailable
 	}
 	return nil
+}
+
+func (s *clickHouseLogStore) probeReadRecovery(ctx context.Context) {
+	if !s.readProbeRunning.CompareAndSwap(false, true) {
+		return
+	}
+	defer s.readProbeRunning.Store(false)
+
+	var ready int
+	err := s.db.QueryRowContext(ctx, "SELECT 1 FROM "+s.table()+" LIMIT 1").Scan(&ready)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	if err == nil && s.readDegraded.CompareAndSwap(true, false) {
+		common.SysLog("ClickHouse log reads recovered; new queries use ClickHouse")
+		clickhousealert.Notify(clickhousealert.EventReadRecovered, "ClickHouse 读取恢复")
+	}
 }
 
 func (f logFilter) sqlQuery(db *gorm.DB) (*gorm.DB, error) {

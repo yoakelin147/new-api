@@ -30,6 +30,10 @@ export type RoleValue = (typeof ROLE)[keyof typeof ROLE]
 
 const DEFAULT_ROLE = ROLE.GUEST
 
+export function isAdminRole(role?: number): boolean {
+  return (role ?? ROLE.GUEST) >= ROLE.ADMIN
+}
+
 const ROLE_LABEL_KEYS: Record<RoleValue, string> = {
   [ROLE.SUPER_ADMIN]: 'Super Admin',
   [ROLE.ADMIN]: 'Admin',

@@ -5097,6 +5097,26 @@
     "稳定服务": "稳定服务",
     "智能调度": "智能调度",
     "弹性保障": "弹性保障",
-    "Showing backup log records. Some history may be temporarily unavailable.": "当前显示备用日志记录，部分历史数据可能暂时不可见。"
+    "Showing backup log records. Some history may be temporarily unavailable.": "当前显示备用日志记录，部分历史数据可能暂时不可见。",
+    "故障处理": "故障处理",
+    "启用 ClickHouse 自动恢复探测": "启用 ClickHouse 自动恢复探测",
+    "后台任务按配置间隔探测 ClickHouse 可用性，业务查询不承担恢复探测": "后台任务按配置间隔探测 ClickHouse 可用性，业务查询不承担恢复探测",
+    "自动探测间隔（秒）": "自动探测间隔（秒）",
+    "允许范围：5–3600 秒，默认 30 秒": "允许范围：5–3600 秒，默认 30 秒",
+    "单次探测超时（毫秒）": "单次探测超时（毫秒）",
+    "允许范围：100–10000 毫秒，默认 1000 毫秒": "允许范围：100–10000 毫秒，默认 1000 毫秒",
+    "启用企业微信故障告警": "启用企业微信故障告警",
+    "只在日志读写切换或恢复时发送一次告警": "只在日志读写切换或恢复时发送一次告警",
+    "企业微信机器人 Webhook": "企业微信机器人 Webhook",
+    "已配置，留空保持不变": "已配置，留空保持不变",
+    "粘贴企业微信 Webhook 地址": "粘贴企业微信 Webhook 地址",
+    "Webhook 已配置，地址不会回显": "Webhook 已配置，地址不会回显",
+    "仅支持企业微信 https Webhook 地址": "仅支持企业微信 https Webhook 地址",
+    "清除 Webhook": "清除 Webhook",
+    "发送测试消息": "发送测试消息",
+    "测试消息已发送": "测试消息已发送",
+    "测试消息发送失败": "测试消息发送失败",
+    "The probe interval must be between 5 and 3600 seconds": "探测间隔必须在 5–3600 秒之间",
+    "The probe timeout must be between 100 and 10000 milliseconds": "探测超时必须在 100–10000 毫秒之间"
   }
 }

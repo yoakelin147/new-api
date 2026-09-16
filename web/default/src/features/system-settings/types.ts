@@ -290,6 +290,11 @@ export type OperationsSettings = {
   'upstream_circuit_breaker.retry_before_first_response_only': boolean
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
+  'fault_handling.clickhouse_auto_recovery_enabled': boolean
+  'fault_handling.clickhouse_probe_interval_seconds': number
+  'fault_handling.clickhouse_probe_timeout_milliseconds': number
+  'fault_handling.clickhouse_alert_enabled': boolean
+  'fault_handling.clickhouse_alert_webhook_configured': boolean
   SMTPServer: string
   SMTPPort: string
   SMTPAccount: string

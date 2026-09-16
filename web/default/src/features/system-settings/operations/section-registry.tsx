@@ -20,6 +20,7 @@ import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
 import { MonitoringSettingsSection } from '../integrations/monitoring-settings-section'
 import { WorkerSettingsSection } from '../integrations/worker-settings-section'
+import { FaultHandlingSection } from '../maintenance/fault-handling-section'
 import { LogSettingsSection } from '../maintenance/log-settings-section'
 import { PerformanceSection } from '../maintenance/performance-section'
 import { UpdateCheckerSection } from '../maintenance/update-checker-section'
@@ -100,6 +101,28 @@ const OPERATIONS_SECTIONS = [
           WorkerValidKey: settings.WorkerValidKey,
           WorkerAllowHttpImageRequestEnabled:
             settings.WorkerAllowHttpImageRequestEnabled,
+        }}
+      />
+    ),
+  },
+  {
+    id: 'fault-handling',
+    titleKey: '故障处理',
+    build: (settings: OperationsSettings) => (
+      <FaultHandlingSection
+        defaultValues={{
+          'fault_handling.clickhouse_auto_recovery_enabled':
+            settings['fault_handling.clickhouse_auto_recovery_enabled'] ?? true,
+          'fault_handling.clickhouse_probe_interval_seconds':
+            settings['fault_handling.clickhouse_probe_interval_seconds'] ?? 30,
+          'fault_handling.clickhouse_probe_timeout_milliseconds':
+            settings['fault_handling.clickhouse_probe_timeout_milliseconds'] ??
+            1000,
+          'fault_handling.clickhouse_alert_enabled':
+            settings['fault_handling.clickhouse_alert_enabled'] ?? false,
+          'fault_handling.clickhouse_alert_webhook_configured':
+            settings['fault_handling.clickhouse_alert_webhook_configured'] ??
+            false,
         }}
       />
     ),

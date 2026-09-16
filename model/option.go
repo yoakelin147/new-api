@@ -205,6 +205,9 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	if err := operation_setting.ValidateFaultHandlingOption(key, value); err != nil {
+		return err
+	}
 	if key == operation_setting.ToolPriceOptionKey {
 		if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
 			return err
@@ -235,6 +238,9 @@ func UpdateOptionsBulk(values map[string]string) error {
 		return nil
 	}
 	for key, value := range values {
+		if err := operation_setting.ValidateFaultHandlingOption(key, value); err != nil {
+			return err
+		}
 		if key == operation_setting.ToolPriceOptionKey {
 			if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
 				return err
@@ -628,6 +634,8 @@ func handleConfigUpdate(key, value string) bool {
 		ratio_setting.InvalidateExposedDataCache()
 	} else if configName == "theme" {
 		system_setting.UpdateAndSyncTheme()
+	} else if configName == "fault_handling" {
+		operation_setting.UpdateFaultHandlingSetting()
 	}
 
 	return true // 已处理

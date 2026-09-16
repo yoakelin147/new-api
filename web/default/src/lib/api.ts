@@ -20,6 +20,7 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { t } from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { isAdminRole } from '@/lib/roles'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -82,7 +83,8 @@ api.interceptors.response.use(
     const skipBusiness = response.config.skipBusinessError
     if (
       response.data?.success &&
-      response.headers['x-log-source'] === 'original'
+      response.headers['x-log-source'] === 'original' &&
+      isAdminRole(useAuthStore.getState().auth.user?.role)
     ) {
       toast.warning(
         t(

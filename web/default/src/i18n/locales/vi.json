@@ -5097,6 +5097,26 @@
     "稳定服务": "Dịch vụ ổn định",
     "智能调度": "Điều phối thông minh",
     "弹性保障": "Đảm bảo linh hoạt",
-    "Showing backup log records. Some history may be temporarily unavailable.": "Đang hiển thị nhật ký dự phòng. Một phần lịch sử có thể tạm thời không khả dụng."
+    "Showing backup log records. Some history may be temporarily unavailable.": "Đang hiển thị nhật ký dự phòng. Một phần lịch sử có thể tạm thời không khả dụng.",
+    "故障处理": "Xử lý sự cố",
+    "启用 ClickHouse 自动恢复探测": "Bật thăm dò khôi phục ClickHouse tự động",
+    "后台任务按配置间隔探测 ClickHouse 可用性，业务查询不承担恢复探测": "Tác vụ nền kiểm tra khả dụng ClickHouse theo khoảng thời gian đã cấu hình; truy vấn nghiệp vụ không thực hiện thăm dò khôi phục",
+    "自动探测间隔（秒）": "Khoảng thăm dò tự động (giây)",
+    "允许范围：5–3600 秒，默认 30 秒": "Phạm vi cho phép: 5–3600 giây; mặc định: 30 giây",
+    "单次探测超时（毫秒）": "Thời gian chờ thăm dò (mili giây)",
+    "允许范围：100–10000 毫秒，默认 1000 毫秒": "Phạm vi cho phép: 100–10000 mili giây; mặc định: 1000 mili giây",
+    "启用企业微信故障告警": "Bật cảnh báo sự cố WeCom",
+    "只在日志读写切换或恢复时发送一次告警": "Chỉ gửi một cảnh báo khi việc đọc/ghi nhật ký chuyển đổi hoặc khôi phục",
+    "企业微信机器人 Webhook": "Webhook bot WeCom",
+    "已配置，留空保持不变": "Đã cấu hình; để trống để giữ nguyên",
+    "粘贴企业微信 Webhook 地址": "Dán URL Webhook WeCom",
+    "Webhook 已配置，地址不会回显": "Webhook đã được cấu hình; URL sẽ không được hiển thị",
+    "仅支持企业微信 https Webhook 地址": "Chỉ hỗ trợ URL Webhook HTTPS của WeCom",
+    "清除 Webhook": "Xóa Webhook",
+    "发送测试消息": "Gửi tin nhắn thử nghiệm",
+    "测试消息已发送": "Đã gửi tin nhắn thử nghiệm",
+    "测试消息发送失败": "Không thể gửi tin nhắn thử nghiệm",
+    "The probe interval must be between 5 and 3600 seconds": "Khoảng thăm dò phải từ 5 đến 3600 giây",
+    "The probe timeout must be between 100 and 10000 milliseconds": "Thời gian chờ thăm dò phải từ 100 đến 10000 mili giây"
   }
 }

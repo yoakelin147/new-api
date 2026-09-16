@@ -5097,6 +5097,26 @@
     "稳定服务": "Service stable",
     "智能调度": "Ordonnancement intelligent",
     "弹性保障": "Garantie élastique",
-    "Showing backup log records. Some history may be temporarily unavailable.": "Affichage des journaux de secours. Certaines données historiques peuvent être temporairement indisponibles."
+    "Showing backup log records. Some history may be temporarily unavailable.": "Affichage des journaux de secours. Certaines données historiques peuvent être temporairement indisponibles.",
+    "故障处理": "Gestion des pannes",
+    "启用 ClickHouse 自动恢复探测": "Activer les sondes automatiques de récupération ClickHouse",
+    "后台任务按配置间隔探测 ClickHouse 可用性，业务查询不承担恢复探测": "Une tâche en arrière-plan vérifie la disponibilité de ClickHouse selon l’intervalle configuré ; les requêtes métier ne font jamais de sondage de récupération",
+    "自动探测间隔（秒）": "Intervalle de sondage automatique (secondes)",
+    "允许范围：5–3600 秒，默认 30 秒": "Plage autorisée : 5–3600 secondes ; valeur par défaut : 30 secondes",
+    "单次探测超时（毫秒）": "Délai d’expiration du sondage (millisecondes)",
+    "允许范围：100–10000 毫秒，默认 1000 毫秒": "Plage autorisée : 100–10000 millisecondes ; valeur par défaut : 1000 millisecondes",
+    "启用企业微信故障告警": "Activer les alertes de panne WeCom",
+    "只在日志读写切换或恢复时发送一次告警": "Envoyer une seule alerte lors du basculement ou du rétablissement des journaux",
+    "企业微信机器人 Webhook": "Webhook du bot WeCom",
+    "已配置，留空保持不变": "Configuré ; laisser vide pour conserver la valeur actuelle",
+    "粘贴企业微信 Webhook 地址": "Collez l’URL du Webhook WeCom",
+    "Webhook 已配置，地址不会回显": "Webhook configuré ; l’URL ne sera pas affichée",
+    "仅支持企业微信 https Webhook 地址": "Seules les URL Webhook HTTPS WeCom sont prises en charge",
+    "清除 Webhook": "Effacer le Webhook",
+    "发送测试消息": "Envoyer un message de test",
+    "测试消息已发送": "Message de test envoyé",
+    "测试消息发送失败": "Échec de l’envoi du message de test",
+    "The probe interval must be between 5 and 3600 seconds": "L’intervalle de sondage doit être compris entre 5 et 3600 secondes",
+    "The probe timeout must be between 100 and 10000 milliseconds": "Le délai d’expiration du sondage doit être compris entre 100 et 10000 millisecondes"
   }
 }

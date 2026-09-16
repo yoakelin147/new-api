@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,4 +59,35 @@ func TestLogReadFallbackDoesNotMixPartiallyConsumedData(t *testing.T) {
 	})
 	require.ErrorIs(t, err, errLogReadUnavailable)
 	require.Equal(t, 1, count)
+}
+
+func TestDegradedLogReadNeverProbesClickHouse(t *testing.T) {
+	s := &clickHouseLogStore{fallback: DB}
+	s.readDegraded.Store(true)
+	var primaryCalls atomic.Int32
+	fallbackCalls := 0
+
+	err := s.readLogs(logReadContext(), func(context.Context) error {
+		primaryCalls.Add(1)
+		return errors.New("business request probed ClickHouse")
+	}, func(context.Context) error {
+		fallbackCalls++
+		return nil
+	})
+
+	require.NoError(t, err)
+	require.Zero(t, primaryCalls.Load())
+	require.Equal(t, 1, fallbackCalls)
+}
+
+func TestLogReadRecoveryProbeClearsDegradedState(t *testing.T) {
+	db := failoverSQLTestDB(t)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	s := &clickHouseLogStore{db: sqlDB, database: "main"}
+	s.readDegraded.Store(true)
+
+	s.probeReadRecovery(context.Background())
+
+	require.False(t, s.readDegraded.Load())
 }
