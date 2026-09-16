@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -23,14 +24,28 @@ import (
 type Adaptor struct {
 }
 
+const ginKeyResponsesViaChatCompletions = "responses_via_chat_completions"
+
 func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dto.GeminiChatRequest) (any, error) {
 	//TODO implement me
 	return nil, errors.New("not implemented")
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, req *dto.ClaudeRequest) (any, error) {
-	adaptor := claude.Adaptor{}
-	return adaptor.ConvertClaudeRequest(c, info, req)
+	if info != nil {
+		if _, ok := channelconstant.ChannelSpecialBases[info.ChannelBaseUrl]; ok {
+			adaptor := claude.Adaptor{}
+			return adaptor.ConvertClaudeRequest(c, info, req)
+		}
+	}
+	request, err := service.ClaudeToOpenAIRequest(*req, info)
+	if err != nil {
+		return nil, err
+	}
+	if info.SupportStreamOptions && info.IsStream {
+		request.StreamOptions = &dto.StreamOptions{IncludeUsage: true}
+	}
+	return a.ConvertOpenAIRequest(c, info, request)
 }
 
 func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {
@@ -49,15 +64,15 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	baseURL := info.ChannelBaseUrl
 	if specialPlan, ok := channelconstant.ChannelSpecialBases[baseURL]; ok {
-		if info.RelayFormat == types.RelayFormatClaude {
+		switch info.GetFinalRequestRelayFormat() {
+		case types.RelayFormatClaude:
 			return fmt.Sprintf("%s/v1/messages", specialPlan.ClaudeBaseURL), nil
-		}
-		if info.RelayFormat == types.RelayFormatOpenAI {
+		case types.RelayFormatOpenAI:
 			return fmt.Sprintf("%s/chat/completions", specialPlan.OpenAIBaseURL), nil
 		}
 	}
 
-	switch info.RelayFormat {
+	switch info.GetFinalRequestRelayFormat() {
 	case types.RelayFormatClaude:
 		return fmt.Sprintf("%s/anthropic/v1/messages", info.ChannelBaseUrl), nil
 	default:
@@ -105,7 +120,24 @@ func isTemperatureOneOnlyModel(model string) bool {
 }
 
 func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
-	// TODO implement me
+	if info != nil &&
+		info.RelayMode == constant.RelayModeResponses &&
+		service.ShouldResponsesUseChatCompletionsGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		chatRequest, err := service.ResponsesRequestToChatCompletionsRequest(&request)
+		if err != nil {
+			return nil, err
+		}
+		converted, err := a.ConvertOpenAIRequest(c, info, chatRequest)
+		if err != nil {
+			return nil, err
+		}
+		info.RequestURLPath = "/v1/chat/completions"
+		info.FinalRequestRelayFormat = types.RelayFormatOpenAI
+		if c != nil {
+			c.Set(ginKeyResponsesViaChatCompletions, true)
+		}
+		return converted, nil
+	}
 	return nil, errors.New("not implemented")
 }
 
@@ -122,7 +154,7 @@ func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.Rela
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
-	switch info.RelayFormat {
+	switch info.GetFinalRequestRelayFormat() {
 	case types.RelayFormatClaude:
 		adaptor := claude.Adaptor{}
 		return adaptor.DoResponse(c, resp, info)
