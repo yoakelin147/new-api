@@ -18,18 +18,33 @@ import (
 // One request owns this state; it must not be shared between requests.
 type LogReadState struct {
 	source string
+	ctx    context.Context
 }
 
 func (s *LogReadState) Source() string { return s.source }
 
+func NewLogReadState(ctx context.Context) *LogReadState {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return &LogReadState{ctx: ctx}
+}
+
+func firstLogReadState(states ...*LogReadState) *LogReadState {
+	if len(states) > 0 && states[0] != nil {
+		return states[0]
+	}
+	return NewLogReadState(context.Background())
+}
+
 type logReadStateKey struct{}
 
 func logReadContext(states ...*LogReadState) context.Context {
-	state := &LogReadState{}
-	if len(states) > 0 && states[0] != nil {
-		state = states[0]
+	state := firstLogReadState(states...)
+	if state.ctx == nil {
+		state.ctx = context.Background()
 	}
-	return context.WithValue(context.Background(), logReadStateKey{}, state)
+	return context.WithValue(state.ctx, logReadStateKey{}, state)
 }
 
 var errLogReadUnavailable = errors.New("日志暂时无法查询，请稍后重试")
@@ -48,6 +63,9 @@ func (s *clickHouseLogStore) readLogs(ctx context.Context, primary, fallback fun
 			state.source = "clickhouse"
 			return nil
 		} else {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			if s.fallback == nil {
 				return err
 			}
@@ -57,7 +75,7 @@ func (s *clickHouseLogStore) readLogs(ctx context.Context, primary, fallback fun
 			}
 			// A streaming consumer or earlier query already used this source.
 			// Abort instead of mixing partial ClickHouse data with SQL aggregates.
-			if state.source == "clickhouse" || s.fallback == nil || ctx.Err() != nil {
+			if state.source == "clickhouse" || s.fallback == nil {
 				return errLogReadUnavailable
 			}
 		}
@@ -146,4 +164,91 @@ func (f logFilter) sqlQuery(db *gorm.DB) (*gorm.DB, error) {
 		tx = tx.Where("token_id <> 0 OR token_name <> ''")
 	}
 	return applyStreamStatusFilter(tx, f.StreamStatus)
+}
+
+func queryLogs(state *LogReadState, filter logFilter, offset, limit int, order logOrder) ([]*Log, int64, error) {
+	if offset < 0 || limit <= 0 {
+		return nil, 0, errors.New("invalid log pagination")
+	}
+	if order != logOrderID && order != logOrderCreated {
+		return nil, 0, errors.New("invalid log order")
+	}
+	state = firstLogReadState(state)
+	ctx := logReadContext(state)
+	if clickHouseLogs != nil {
+		return clickHouseLogs.Query(ctx, filter, offset, limit, order)
+	}
+	state.source = "sql"
+	return querySQLLogs(ctx, LOG_DB, filter, offset, limit, order)
+}
+
+func forEachLogs(state *LogReadState, filter logFilter, visit func(Log) error) error {
+	state = firstLogReadState(state)
+	ctx := logReadContext(state)
+	if clickHouseLogs != nil {
+		return clickHouseLogs.Scan(ctx, filter, visit)
+	}
+	state.source = "sql"
+	return scanFilteredSQLLogs(ctx, LOG_DB, filter, visit)
+}
+
+func listLogChannelIDs(state *LogReadState, filter logFilter) (map[int]struct{}, error) {
+	state = firstLogReadState(state)
+	ctx := logReadContext(state)
+	if clickHouseLogs != nil {
+		return clickHouseLogs.ChannelIDs(ctx, filter)
+	}
+	state.source = "sql"
+	return listSQLLogChannelIDs(ctx, LOG_DB, filter)
+}
+
+func querySQLLogs(ctx context.Context, db *gorm.DB, filter logFilter, offset, limit int, order logOrder) ([]*Log, int64, error) {
+	tx, err := filter.sqlQuery(db.WithContext(ctx))
+	if err != nil {
+		return nil, 0, err
+	}
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	logs := make([]*Log, 0)
+	err = tx.Order(string(order)).Offset(offset).Limit(limit).Find(&logs).Error
+	return logs, total, err
+}
+
+func scanFilteredSQLLogs(ctx context.Context, db *gorm.DB, filter logFilter, visit func(Log) error) error {
+	tx, err := filter.sqlQuery(db.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	return scanSQLLogs(tx, visit)
+}
+
+func scanSQLLogs(tx *gorm.DB, visit func(Log) error) error {
+	var batch []Log
+	return tx.FindInBatches(&batch, 1000, func(_ *gorm.DB, _ int) error {
+		for _, log := range batch {
+			if err := visit(log); err != nil {
+				return err
+			}
+		}
+		return nil
+	}).Error
+}
+
+func listSQLLogChannelIDs(ctx context.Context, db *gorm.DB, filter logFilter) (map[int]struct{}, error) {
+	filter.NonzeroChannel = true
+	tx, err := filter.sqlQuery(db.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	var values []int
+	if err := tx.Distinct("channel_id").Pluck("channel_id", &values).Error; err != nil {
+		return nil, err
+	}
+	ids := make(map[int]struct{}, len(values))
+	for _, id := range values {
+		ids[id] = struct{}{}
+	}
+	return ids, nil
 }

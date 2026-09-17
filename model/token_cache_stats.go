@@ -1,17 +1,15 @@
 package model
 
 import (
-	"context"
-	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/types"
 )
 
 type TokenCacheHitStatsQuery struct {
+	ReadState       *LogReadState
 	StartTimestamp  int64
 	EndTimestamp    int64
 	ModelName       string
@@ -286,42 +284,18 @@ func GetTokenCacheHitTrendStats(params TokenCacheHitStatsQuery) ([]*TokenCacheHi
 }
 
 func queryTokenCacheLogRows(params TokenCacheHitStatsQuery) ([]tokenCacheLogRow, error) {
-	if clickHouseLogs != nil {
-		filter := clickHouseUsageFilter(params.StartTimestamp, params.EndTimestamp)
-		filter.NonzeroChannel = true
-		filter.ModelName, filter.ModelContains = params.ModelName, true
-		if params.ChannelId > 0 {
-			filter.ChannelID = params.ChannelId
-		}
-		rows := make([]tokenCacheLogRow, 0)
-		err := clickHouseLogs.Scan(context.Background(), filter, func(log Log) error {
-			rows = append(rows, tokenCacheLogRow{ModelName: log.ModelName, Group: log.Group, ChannelId: log.ChannelId, CreatedAt: log.CreatedAt, PromptTokens: int64(log.PromptTokens), CompletionTokens: int64(log.CompletionTokens), Other: log.Other})
-			return nil
-		})
-		return rows, err
-	}
-	query := LOG_DB.Table("logs").
-		Select(fmt.Sprintf("model_name, %s, channel_id, created_at, prompt_tokens, completion_tokens, other", logGroupCol)).
-		Where("type = ? and channel_id <> 0", LogTypeConsume)
-
-	if params.ModelName != "" {
-		query = query.Where("model_name LIKE ? ESCAPE '!'", fuzzyTokenCacheModelPattern(params.ModelName))
-	}
-	if params.StartTimestamp > 0 {
-		query = query.Where("created_at >= ?", params.StartTimestamp)
-	}
-	if params.EndTimestamp > 0 {
-		query = query.Where("created_at <= ?", params.EndTimestamp)
-	}
+	filter := logUsageFilter(params.StartTimestamp, params.EndTimestamp)
+	filter.NonzeroChannel = true
+	filter.ModelName, filter.ModelContains = params.ModelName, true
 	if params.ChannelId > 0 {
-		query = query.Where("channel_id = ?", params.ChannelId)
+		filter.ChannelID = params.ChannelId
 	}
-
-	var rows []tokenCacheLogRow
-	if err := query.Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	return rows, nil
+	rows := make([]tokenCacheLogRow, 0)
+	err := forEachLogs(firstLogReadState(params.ReadState), filter, func(log Log) error {
+		rows = append(rows, tokenCacheLogRow{ModelName: log.ModelName, Group: log.Group, ChannelId: log.ChannelId, CreatedAt: log.CreatedAt, PromptTokens: int64(log.PromptTokens), CompletionTokens: int64(log.CompletionTokens), Other: log.Other})
+		return nil
+	})
+	return rows, err
 }
 
 func normalizeTokenCacheGranularity(granularity string) string {
@@ -364,13 +338,6 @@ func tokenCacheBucketTimestamp(timestamp int64, granularity string) int64 {
 	default:
 		return timestamp - timestamp%3600
 	}
-}
-
-func fuzzyTokenCacheModelPattern(input string) string {
-	input = strings.ReplaceAll(input, "!", "!!")
-	input = strings.ReplaceAll(input, "%", "!%")
-	input = strings.ReplaceAll(input, `_`, `!_`)
-	return "%" + input + "%"
 }
 
 func extractTokenCacheUsage(other string, promptTokens int64) tokenCacheUsage {

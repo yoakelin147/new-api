@@ -1,11 +1,8 @@
 package model
 
-import (
-	"context"
-	"sort"
-)
+import "sort"
 
-func clickHouseUsageFilter(start, end int64) logFilter {
+func logUsageFilter(start, end int64) logFilter {
 	f := logFilter{Types: []int{LogTypeConsume}}
 	if start > 0 {
 		f.Start = start
@@ -16,8 +13,8 @@ func clickHouseUsageFilter(start, end int64) logFilter {
 	return f
 }
 
-func clickHouseChannelSeries(start, end int64) ([]*ChannelQuotaData, error) {
-	filter := clickHouseUsageFilter(start, end)
+func logChannelSeries(state *LogReadState, start, end int64) ([]*ChannelQuotaData, error) {
+	filter := logUsageFilter(start, end)
 	filter.NonzeroChannel = true
 	type key struct {
 		channel int
@@ -25,7 +22,7 @@ func clickHouseChannelSeries(start, end int64) ([]*ChannelQuotaData, error) {
 	}
 	byKey := map[key]*ChannelQuotaData{}
 	ids := map[int]bool{}
-	err := clickHouseLogs.Scan(context.Background(), filter, func(log Log) error {
+	err := forEachLogs(state, filter, func(log Log) error {
 		k := key{log.ChannelId, log.CreatedAt - log.CreatedAt%3600}
 		row := byKey[k]
 		if row == nil {
@@ -70,8 +67,8 @@ const (
 	tokenSeriesUsers
 )
 
-func clickHouseTokenSeries(userID int, start, end int64, kind tokenSeriesKind) ([]*UserTokenQuotaData, error) {
-	filter := clickHouseUsageFilter(start, end)
+func logTokenSeries(state *LogReadState, userID int, start, end int64, kind tokenSeriesKind) ([]*UserTokenQuotaData, error) {
+	filter := logUsageFilter(start, end)
 	filter.HasToken = true
 	if kind == tokenSeriesSelf || userID > 0 {
 		filter.UserIDs = []int{userID}
@@ -84,7 +81,7 @@ func clickHouseTokenSeries(userID int, start, end int64, kind tokenSeriesKind) (
 		hour                int64
 	}
 	byKey := map[key]*UserTokenQuotaData{}
-	err := clickHouseLogs.Scan(context.Background(), filter, func(log Log) error {
+	err := forEachLogs(state, filter, func(log Log) error {
 		username := log.Username
 		if kind == tokenSeriesSelf {
 			username = ""

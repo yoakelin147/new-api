@@ -168,139 +168,24 @@ func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*Quota
 	return quotaDatas, err
 }
 
-func GetQuotaDataGroupByChannel(startTime int64, endTime int64) ([]*ChannelQuotaData, error) {
-	if clickHouseLogs != nil {
-		return clickHouseChannelSeries(startTime, endTime)
-	}
-	var quotaDatas []*ChannelQuotaData
-	bucketExpr := quotaDataBucketExpr()
-	query := LOG_DB.Table("logs").
-		Select(fmt.Sprintf("channel_id, %s as created_at, count(*) as count, sum(quota) as quota, sum(prompt_tokens) + sum(completion_tokens) as token_used", bucketExpr)).
-		Where("type = ? and channel_id <> 0", LogTypeConsume).
-		Group(fmt.Sprintf("channel_id, %s", bucketExpr)).
-		Order("created_at asc")
-	if startTime > 0 {
-		query = query.Where("created_at >= ?", startTime)
-	}
-	if endTime > 0 {
-		query = query.Where("created_at <= ?", endTime)
-	}
-	if err := query.Find(&quotaDatas).Error; err != nil {
-		return nil, err
-	}
-
-	channelIds := make([]int, 0)
-	channelSeen := make(map[int]struct{})
-	for _, quotaData := range quotaDatas {
-		if quotaData.ChannelId == 0 {
-			continue
-		}
-		if _, ok := channelSeen[quotaData.ChannelId]; ok {
-			continue
-		}
-		channelSeen[quotaData.ChannelId] = struct{}{}
-		channelIds = append(channelIds, quotaData.ChannelId)
-	}
-	if len(channelIds) == 0 {
-		return quotaDatas, nil
-	}
-
-	channelNames := make(map[int]string, len(channelIds))
-	if common.MemoryCacheEnabled {
-		missingChannelIds := make([]int, 0)
-		for _, channelId := range channelIds {
-			cacheChannel, err := CacheGetChannel(channelId)
-			if err == nil && cacheChannel != nil {
-				channelNames[channelId] = cacheChannel.Name
-				continue
-			}
-			missingChannelIds = append(missingChannelIds, channelId)
-		}
-		channelIds = missingChannelIds
-	}
-	if len(channelIds) > 0 {
-		var channels []struct {
-			Id   int    `gorm:"column:id"`
-			Name string `gorm:"column:name"`
-		}
-		if err := DB.Table("channels").Select("id, name").Where("id IN ?", channelIds).Find(&channels).Error; err != nil {
-			return quotaDatas, err
-		}
-		for _, channel := range channels {
-			channelNames[channel.Id] = channel.Name
-		}
-	}
-	for _, quotaData := range quotaDatas {
-		quotaData.ChannelName = channelNames[quotaData.ChannelId]
-	}
-
-	return quotaDatas, nil
+func GetQuotaDataGroupByChannel(startTime int64, endTime int64, readState ...*LogReadState) ([]*ChannelQuotaData, error) {
+	return logChannelSeries(firstLogReadState(readState...), startTime, endTime)
 }
 
-func GetQuotaDataGroupByToken(userId int, startTime int64, endTime int64) ([]*TokenQuotaData, error) {
-	if clickHouseLogs != nil {
-		rows, err := clickHouseTokenSeries(userId, startTime, endTime, tokenSeriesSelf)
-		if err != nil {
-			return nil, err
-		}
-		result := make([]*TokenQuotaData, 0, len(rows))
-		for _, row := range rows {
-			result = append(result, &TokenQuotaData{TokenId: row.TokenId, TokenName: row.TokenName, CreatedAt: row.CreatedAt, TokenUsed: row.TokenUsed, Count: row.Count, Quota: row.Quota})
-		}
-		return result, nil
-	}
-	var quotaDatas []*TokenQuotaData
-	bucketExpr := quotaDataBucketExpr()
-	query := LOG_DB.Table("logs").
-		Select(fmt.Sprintf("token_id, token_name, %s as created_at, count(*) as count, sum(quota) as quota, sum(prompt_tokens) + sum(completion_tokens) as token_used", bucketExpr)).
-		Where("type = ? and user_id = ? and (token_id <> 0 or token_name <> '')", LogTypeConsume, userId).
-		Group(fmt.Sprintf("token_id, token_name, %s", bucketExpr)).
-		Order("created_at asc, token_id asc, token_name asc")
-	if startTime > 0 {
-		query = query.Where("created_at >= ?", startTime)
-	}
-	if endTime > 0 {
-		query = query.Where("created_at <= ?", endTime)
-	}
-	if err := query.Find(&quotaDatas).Error; err != nil {
+func GetQuotaDataGroupByToken(userId int, startTime int64, endTime int64, readState ...*LogReadState) ([]*TokenQuotaData, error) {
+	rows, err := logTokenSeries(firstLogReadState(readState...), userId, startTime, endTime, tokenSeriesSelf)
+	if err != nil {
 		return nil, err
 	}
-	return quotaDatas, nil
+	result := make([]*TokenQuotaData, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, &TokenQuotaData{TokenId: row.TokenId, TokenName: row.TokenName, CreatedAt: row.CreatedAt, TokenUsed: row.TokenUsed, Count: row.Count, Quota: row.Quota})
+	}
+	return result, nil
 }
 
-func GetQuotaDataGroupByUserToken(userId int, startTime int64, endTime int64) ([]*UserTokenQuotaData, error) {
-	if clickHouseLogs != nil {
-		return clickHouseTokenSeries(userId, startTime, endTime, tokenSeriesUsers)
-	}
-	var quotaDatas []*UserTokenQuotaData
-	bucketExpr := quotaDataBucketExpr()
-	query := LOG_DB.Table("logs").
-		Select(fmt.Sprintf("user_id, username, token_id, token_name, %s as created_at, count(*) as count, sum(quota) as quota, sum(prompt_tokens) + sum(completion_tokens) as token_used", bucketExpr)).
-		Where("type = ? and (token_id <> 0 or token_name <> '')", LogTypeConsume).
-		Group(fmt.Sprintf("user_id, username, token_id, token_name, %s", bucketExpr)).
-		Order("created_at asc, user_id asc, token_id asc, token_name asc")
-	if userId > 0 {
-		query = query.Where("user_id = ?", userId)
-	} else {
-		query = query.Where("user_id <> 0")
-	}
-	if startTime > 0 {
-		query = query.Where("created_at >= ?", startTime)
-	}
-	if endTime > 0 {
-		query = query.Where("created_at <= ?", endTime)
-	}
-	if err := query.Find(&quotaDatas).Error; err != nil {
-		return nil, err
-	}
-	return quotaDatas, nil
-}
-
-func quotaDataBucketExpr() string {
-	if common.UsingMySQL {
-		return "FLOOR(created_at / 3600) * 3600"
-	}
-	return "(created_at / 3600) * 3600"
+func GetQuotaDataGroupByUserToken(userId int, startTime int64, endTime int64, readState ...*LogReadState) ([]*UserTokenQuotaData, error) {
+	return logTokenSeries(firstLogReadState(readState...), userId, startTime, endTime, tokenSeriesUsers)
 }
 
 func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaData []*QuotaData, err error) {

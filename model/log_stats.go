@@ -1,9 +1,6 @@
 package model
 
-import (
-	"context"
-	"time"
-)
+import "time"
 
 func filterLogType(logType int) []int {
 	if logType == LogTypeUnknown {
@@ -12,8 +9,8 @@ func filterLogType(logType int) []int {
 	return []int{logType}
 }
 
-func getClickHouseAdminLogs(ctx context.Context, filter logFilter, offset, limit int) ([]*Log, int64, error) {
-	logs, total, err := clickHouseLogs.Query(ctx, filter, offset, limit, logOrderCreated)
+func getAdminLogs(state *LogReadState, filter logFilter, offset, limit int) ([]*Log, int64, error) {
+	logs, total, err := queryLogs(state, filter, offset, limit, logOrderCreated)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -33,9 +30,9 @@ func getClickHouseAdminLogs(ctx context.Context, filter logFilter, offset, limit
 	return logs, total, nil
 }
 
-func sumClickHouseQuota(ctx context.Context, filter logFilter) (stat Stat, err error) {
+func sumLogQuota(state *LogReadState, filter logFilter) (stat Stat, err error) {
 	filter.Types = []int{LogTypeConsume}
-	err = clickHouseLogs.Scan(ctx, filter, func(log Log) error {
+	err = forEachLogs(state, filter, func(log Log) error {
 		stat.Quota += log.Quota
 		return nil
 	})
@@ -44,7 +41,7 @@ func sumClickHouseQuota(ctx context.Context, filter logFilter) (stat Stat, err e
 	}
 	filter.Start = time.Now().Add(-60 * time.Second).Unix()
 	filter.End = 0
-	err = clickHouseLogs.Scan(ctx, filter, func(log Log) error {
+	err = forEachLogs(state, filter, func(log Log) error {
 		stat.Rpm++
 		stat.Tpm += log.PromptTokens + log.CompletionTokens
 		return nil

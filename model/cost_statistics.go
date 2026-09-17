@@ -140,7 +140,7 @@ type costStatisticsTokenAudit struct {
 
 func GetCostStatistics(query CostStatisticsQuery, startIdx int, pageSize int) ([]*CostStatisticsRow, int, CostStatisticsSummary, error) {
 	if query.ReadState == nil {
-		query.ReadState = &LogReadState{}
+		query.ReadState = NewLogReadState(nil)
 	}
 	rowsByKey := make(map[costStatisticsKey]*CostStatisticsRow)
 	channelIds := make(map[int]struct{})

@@ -47,6 +47,7 @@ func GetQuotaDatesByUser(c *gin.Context) {
 }
 
 func GetQuotaDatesByChannel(c *gin.Context) {
+	readState := model.NewLogReadState(c.Request.Context())
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	if endTimestamp == 0 {
@@ -69,11 +70,12 @@ func GetQuotaDatesByChannel(c *gin.Context) {
 		})
 		return
 	}
-	dates, err := model.GetQuotaDataGroupByChannel(startTimestamp, endTimestamp)
+	dates, err := model.GetQuotaDataGroupByChannel(startTimestamp, endTimestamp, readState)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	c.Header("X-Log-Source", readState.Source())
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -82,6 +84,7 @@ func GetQuotaDatesByChannel(c *gin.Context) {
 }
 
 func GetQuotaDatesByToken(c *gin.Context) {
+	readState := model.NewLogReadState(c.Request.Context())
 	userId := c.GetInt("id")
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
@@ -105,11 +108,12 @@ func GetQuotaDatesByToken(c *gin.Context) {
 		})
 		return
 	}
-	dates, err := model.GetQuotaDataGroupByToken(userId, startTimestamp, endTimestamp)
+	dates, err := model.GetQuotaDataGroupByToken(userId, startTimestamp, endTimestamp, readState)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	c.Header("X-Log-Source", readState.Source())
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -118,6 +122,7 @@ func GetQuotaDatesByToken(c *gin.Context) {
 }
 
 func GetQuotaDatesByUserToken(c *gin.Context) {
+	readState := model.NewLogReadState(c.Request.Context())
 	userId, _ := strconv.Atoi(c.Query("user_id"))
 	if userId <= 0 {
 		userId = c.GetInt("id")
@@ -144,11 +149,12 @@ func GetQuotaDatesByUserToken(c *gin.Context) {
 		})
 		return
 	}
-	dates, err := model.GetQuotaDataGroupByUserToken(userId, startTimestamp, endTimestamp)
+	dates, err := model.GetQuotaDataGroupByUserToken(userId, startTimestamp, endTimestamp, readState)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	c.Header("X-Log-Source", readState.Source())
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -167,6 +173,7 @@ func GetTokenCacheHitStats(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	c.Header("X-Log-Source", params.ReadState.Source())
 	common.ApiSuccess(c, stats)
 }
 
@@ -181,6 +188,7 @@ func GetTokenCacheHitGroupStats(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	c.Header("X-Log-Source", params.ReadState.Source())
 	common.ApiSuccess(c, stats)
 }
 
@@ -195,6 +203,7 @@ func GetTokenCacheHitTrendStats(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	c.Header("X-Log-Source", params.ReadState.Source())
 	common.ApiSuccess(c, stats)
 }
 
@@ -224,6 +233,7 @@ func parseTokenCacheHitStatsQuery(c *gin.Context) (model.TokenCacheHitStatsQuery
 
 	channelId, _ := strconv.Atoi(c.Query("channel_id"))
 	return model.TokenCacheHitStatsQuery{
+		ReadState:       model.NewLogReadState(c.Request.Context()),
 		StartTimestamp:  startTimestamp,
 		EndTimestamp:    endTimestamp,
 		ModelName:       c.Query("model_name"),

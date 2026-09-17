@@ -13,7 +13,7 @@ import (
 const usageLogExportBatchSize = 10_000
 
 func GetAllLogs(c *gin.Context) {
-	readState := &model.LogReadState{}
+	readState := model.NewLogReadState(c.Request.Context())
 	pageInfo := common.GetPageQuery(c)
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
@@ -39,7 +39,7 @@ func GetAllLogs(c *gin.Context) {
 }
 
 func ExportAllLogs(c *gin.Context) {
-	readState := &model.LogReadState{}
+	readState := model.NewLogReadState(c.Request.Context())
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
@@ -76,7 +76,7 @@ func ExportAllLogs(c *gin.Context) {
 }
 
 func GetUserLogs(c *gin.Context) {
-	readState := &model.LogReadState{}
+	readState := model.NewLogReadState(c.Request.Context())
 	pageInfo := common.GetPageQuery(c)
 	userId := c.GetInt("id")
 	logType, _ := strconv.Atoi(c.Query("type"))
@@ -100,7 +100,7 @@ func GetUserLogs(c *gin.Context) {
 }
 
 func GetManagedUserLogs(c *gin.Context) {
-	readState := &model.LogReadState{}
+	readState := model.NewLogReadState(c.Request.Context())
 	pageInfo := common.GetPageQuery(c)
 	userIds, ok := getManagedLogUserIds(c)
 	if !ok {
@@ -188,7 +188,7 @@ func SearchUserLogs(c *gin.Context) {
 }
 
 func GetLogByKey(c *gin.Context) {
-	readState := &model.LogReadState{}
+	readState := model.NewLogReadState(c.Request.Context())
 	tokenId := c.GetInt("token_id")
 	if tokenId == 0 {
 		c.JSON(200, gin.H{
@@ -214,7 +214,7 @@ func GetLogByKey(c *gin.Context) {
 }
 
 func GetLogsStat(c *gin.Context) {
-	readState := &model.LogReadState{}
+	readState := model.NewLogReadState(c.Request.Context())
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
@@ -243,7 +243,7 @@ func GetLogsStat(c *gin.Context) {
 }
 
 func GetLogsSelfStat(c *gin.Context) {
-	readState := &model.LogReadState{}
+	readState := model.NewLogReadState(c.Request.Context())
 	username := c.GetString("username")
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
@@ -273,7 +273,7 @@ func GetLogsSelfStat(c *gin.Context) {
 }
 
 func GetManagedLogsStat(c *gin.Context) {
-	readState := &model.LogReadState{}
+	readState := model.NewLogReadState(c.Request.Context())
 	userIds, ok := getManagedLogUserIds(c)
 	if !ok {
 		return

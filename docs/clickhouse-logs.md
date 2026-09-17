@@ -135,11 +135,19 @@ https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...
 
 集群部署时，告警开关和 Webhook 地址来自共享 `options` 配置；`NODE_NAME`、`NODE_HOST_IP` 和 `CLICKHOUSE_NODE_ID` 来自每个实例自己的环境变量。这样多个服务器可以共用一个告警机器人，同时准确识别是哪一个 New API 实例发生了切库。
 
-日志、费用和利润接口通过响应头 `X-Log-Source: original` 标记降级数据，正常读取 ClickHouse 时为 `clickhouse`。默认前端合并显示“当前显示备用日志记录，部分历史数据可能暂时不可见。”原库只有原有历史和降级期间日志，因此这些统计不能当作完整历史对账结果。用户过滤和权限范围保持不变。两边均不可读时，接口返回普通错误提示，连接地址和底层错误仅记录在服务端。
+日志、费用和利润接口通过响应头标记数据来源：未配置 ClickHouse 时为 `X-Log-Source: sql`，正常读取 ClickHouse 时为 `clickhouse`，故障降级读取原库时为 `original`。默认前端只在 `original` 状态下合并显示“当前显示备用日志记录，部分历史数据可能暂时不可见。”原库只有原有历史和降级期间日志，因此这些统计不能当作完整历史对账结果。用户过滤和权限范围保持不变。两边均不可读时，接口返回普通错误提示，连接地址和底层错误仅记录在服务端。
 
 同一份多步统计固定使用一个数据源。如果已经消费部分 ClickHouse 数据后连接中断，该次统计返回失败，不与原库结果拼接，以免重复计数；下一次请求可直接查询原库。历史删除仍作用于配置的 ClickHouse，不在连接失败时改删原库，避免删除待补迁日志。
 
 降级写入保留原业务字段和 `other`，使用原库自身的 ID 生成方式，避免与原有历史冲突。恢复后不自动回灌：ClickHouse 超时可能发生在服务端已经提交之后，此时两边可能都存在该条日志。降级日志继续留存在原库，后续补迁需要核对内容、去重并安排目标 ID；不能直接把两个库的 `id` 当作同一标识。库表字段没有新增。
+
+## 新增日志读取功能
+
+Model 层基于 `logs` 表新增明细或聚合功能时，只能使用 `queryLogs`、`forEachLogs`、`listLogChannelIDs` 三类统一入口。业务函数负责构造结构化 `logFilter` 和处理结果，不再直接判断 `clickHouseLogs`，也不直接使用 `LOG_DB` 查询 `logs` 表。
+
+Controller 应通过 `NewLogReadState(c.Request.Context())` 为一次请求创建读取状态，并让该请求中的所有日志读取共享此状态；这样可以保留请求取消信号，并保证多步统计不会混用两个数据源。成功响应继续通过 `X-Log-Source` 标明实际来源：未配置 ClickHouse 时为 `sql`，正常读取 ClickHouse 时为 `clickhouse`，故障降级读取原库时为 `original`。
+
+`quota_data` 继续保留在主关系库中，现有缓存聚合、定时落库和读取方式均不修改。只有实际从 `logs` 聚合的 `/api/data/channels`、`/api/data/tokens/*` 和 `/api/data/token_cache_hits*` 接口使用统一日志入口。
 
 ## 查询及统计
 

@@ -5,12 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/types"
-
 	"github.com/gin-gonic/gin"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -139,16 +136,10 @@ func formatUserLogs(logs []*Log, startIdx int) {
 }
 
 func GetLogByTokenId(tokenId int, readState ...*LogReadState) (logs []*Log, err error) {
-	if clickHouseLogs != nil {
-		logs, _, err = clickHouseLogs.Query(logReadContext(readState...), logFilter{TokenID: &tokenId}, 0, common.MaxRecentItems, logOrderID)
-		if err == nil {
-			formatUserLogs(logs, 0)
-		}
-		return logs, err
+	logs, _, err = queryLogs(firstLogReadState(readState...), logFilter{TokenID: &tokenId}, 0, common.MaxRecentItems, logOrderID)
+	if err == nil {
+		formatUserLogs(logs, 0)
 	}
-
-	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
-	formatUserLogs(logs, 0)
 	return logs, err
 }
 
@@ -468,210 +459,28 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 }
 
 func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, streamStatus string, readState ...*LogReadState) (logs []*Log, total int64, err error) {
-	if clickHouseLogs != nil {
-		return getClickHouseAdminLogs(logReadContext(readState...), logFilter{Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId, StreamStatus: streamStatus}, startIdx, num)
-	}
-
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB
-	} else {
-		tx = LOG_DB.Where("logs.type = ?", logType)
-	}
-
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
-		return nil, 0, err
-	}
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.username", username); err != nil {
-		return nil, 0, err
-	}
-	if tokenName != "" {
-		tx = tx.Where("logs.token_name = ?", tokenName)
-	}
-	if requestId != "" {
-		tx = tx.Where("logs.request_id = ?", requestId)
-	}
-	if upstreamRequestId != "" {
-		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if channel != 0 {
-		tx = tx.Where("logs.channel_id = ?", channel)
-	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
-	}
-	if tx, err = applyStreamStatusFilter(tx, streamStatus); err != nil {
-		return nil, 0, err
-	}
-	err = tx.Model(&Log{}).Count(&total).Error
-	if err != nil {
-		return nil, 0, err
-	}
-	err = tx.Order("logs.created_at desc, logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
-	if err != nil {
-		return nil, 0, err
-	}
-
-	channelIds := types.NewSet[int]()
-	for _, log := range logs {
-		if log.ChannelId != 0 {
-			channelIds.Add(log.ChannelId)
-		}
-	}
-
-	if channelIds.Len() > 0 {
-		var channels []struct {
-			Id   int    `gorm:"column:id"`
-			Name string `gorm:"column:name"`
-		}
-		if common.MemoryCacheEnabled {
-			// Cache get channel
-			for _, channelId := range channelIds.Items() {
-				if cacheChannel, err := CacheGetChannel(channelId); err == nil {
-					channels = append(channels, struct {
-						Id   int    `gorm:"column:id"`
-						Name string `gorm:"column:name"`
-					}{
-						Id:   channelId,
-						Name: cacheChannel.Name,
-					})
-				}
-			}
-		} else {
-			// Bulk query channels from DB
-			if err = DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
-				return logs, total, err
-			}
-		}
-		channelMap := make(map[int]string, len(channels))
-		for _, channel := range channels {
-			channelMap[channel.Id] = channel.Name
-		}
-		for i := range logs {
-			logs[i].ChannelName = channelMap[logs[i].ChannelId]
-		}
-	}
-
-	return logs, total, err
+	return getAdminLogs(firstLogReadState(readState...), logFilter{Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId, StreamStatus: streamStatus}, startIdx, num)
 }
 
-const logSearchCountLimit = 10000
-
 func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, readState ...*LogReadState) (logs []*Log, total int64, err error) {
-	if clickHouseLogs != nil {
-		logs, total, err = clickHouseLogs.Query(logReadContext(readState...), logFilter{UserIDs: []int{userId}, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
-		if err != nil {
-			return nil, 0, errors.New("查询日志失败")
-		}
-		formatUserLogs(logs, startIdx)
-		return logs, total, nil
-	}
-
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB.Where("logs.user_id = ?", userId)
-	} else {
-		tx = LOG_DB.Where("logs.user_id = ? and logs.type = ?", userId, logType)
-	}
-
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
-		return nil, 0, err
-	}
-	if tokenName != "" {
-		tx = tx.Where("logs.token_name = ?", tokenName)
-	}
-	if requestId != "" {
-		tx = tx.Where("logs.request_id = ?", requestId)
-	}
-	if upstreamRequestId != "" {
-		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
-	}
-	err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error
+	logs, total, err = queryLogs(firstLogReadState(readState...), logFilter{UserIDs: []int{userId}, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
 	if err != nil {
-		common.SysError("failed to count user logs: " + err.Error())
+		common.SysError("failed to query user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
 	}
-	err = tx.Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
-	if err != nil {
-		common.SysError("failed to search user logs: " + err.Error())
-		return nil, 0, errors.New("查询日志失败")
-	}
-
 	formatUserLogs(logs, startIdx)
-	return logs, total, err
+	return logs, total, nil
 }
 
 func GetManagedUserLogs(userIds []int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, readState ...*LogReadState) (logs []*Log, total int64, err error) {
-	if clickHouseLogs != nil {
-		if len(userIds) == 0 {
-			return []*Log{}, 0, nil
-		}
-		logs, total, err = clickHouseLogs.Query(logReadContext(readState...), logFilter{UserIDs: userIds, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
-		if err != nil {
-			return nil, 0, errors.New("查询日志失败")
-		}
-		formatUserLogs(logs, startIdx)
-		for _, log := range logs {
-			log.ChannelId = 0
-			log.ChannelName = ""
-			log.Ip = ""
-			log.TokenId = 0
-		}
-		return logs, total, nil
-	}
-
 	if len(userIds) == 0 {
 		return []*Log{}, 0, nil
 	}
-	tx := LOG_DB.Where("logs.user_id IN ?", userIds)
-	if logType != LogTypeUnknown {
-		tx = tx.Where("logs.type = ?", logType)
-	}
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
-		return nil, 0, err
-	}
-	if tokenName != "" {
-		tx = tx.Where("logs.token_name = ?", tokenName)
-	}
-	if requestId != "" {
-		tx = tx.Where("logs.request_id = ?", requestId)
-	}
-	if upstreamRequestId != "" {
-		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
-	}
-	if err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error; err != nil {
-		common.SysError("failed to count managed user logs: " + err.Error())
-		return nil, 0, errors.New("查询日志失败")
-	}
-	if err = tx.Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error; err != nil {
+	logs, total, err = queryLogs(firstLogReadState(readState...), logFilter{UserIDs: userIds, Types: filterLogType(logType), Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId}, startIdx, num, logOrderID)
+	if err != nil {
 		common.SysError("failed to query managed user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
 	}
-
 	formatUserLogs(logs, startIdx)
 	for _, log := range logs {
 		log.ChannelId = 0
@@ -689,155 +498,34 @@ type Stat struct {
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, streamStatus string, readState ...*LogReadState) (stat Stat, err error) {
-	if clickHouseLogs != nil {
-		stat, err = sumClickHouseQuota(logReadContext(readState...), logFilter{Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, StreamStatus: streamStatus})
-		if err != nil {
-			common.SysError("failed to query ClickHouse log stat: " + err.Error())
-			return stat, errors.New("查询统计数据失败")
-		}
-		return stat, nil
-	}
-
-	tx := LOG_DB.Table("logs").Select("sum(quota) quota")
-
-	// 为rpm和tpm创建单独的查询
-	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, sum(prompt_tokens) + sum(completion_tokens) tpm")
-
-	if tx, err = applyExplicitLogTextFilter(tx, "username", username); err != nil {
-		return stat, err
-	}
-	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "username", username); err != nil {
-		return stat, err
-	}
-	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
-		rpmTpmQuery = rpmTpmQuery.Where("token_name = ?", tokenName)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
-	}
-	if tx, err = applyExplicitLogTextFilter(tx, "model_name", modelName); err != nil {
-		return stat, err
-	}
-	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "model_name", modelName); err != nil {
-		return stat, err
-	}
-	if channel != 0 {
-		tx = tx.Where("channel_id = ?", channel)
-		rpmTpmQuery = rpmTpmQuery.Where("channel_id = ?", channel)
-	}
-	if group != "" {
-		tx = tx.Where(logGroupCol+" = ?", group)
-		rpmTpmQuery = rpmTpmQuery.Where(logGroupCol+" = ?", group)
-	}
-	if tx, err = applyStreamStatusFilter(tx, streamStatus); err != nil {
-		return stat, err
-	}
-	if rpmTpmQuery, err = applyStreamStatusFilter(rpmTpmQuery, streamStatus); err != nil {
-		return stat, err
-	}
-
-	tx = tx.Where("type = ?", LogTypeConsume)
-	rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
-
-	// 只统计最近60秒的rpm和tpm
-	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
-
-	// 执行查询
-	if err := tx.Scan(&stat).Error; err != nil {
+	stat, err = sumLogQuota(firstLogReadState(readState...), logFilter{Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ChannelID: channel, Group: group, StreamStatus: streamStatus})
+	if err != nil {
 		common.SysError("failed to query log stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
-	if err := rpmTpmQuery.Scan(&stat).Error; err != nil {
-		common.SysError("failed to query rpm/tpm stat: " + err.Error())
-		return stat, errors.New("查询统计数据失败")
-	}
-
 	return stat, nil
 }
 
 func SumUsedQuotaByUserIds(userIds []int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, group string, readState ...*LogReadState) (stat Stat, err error) {
-	if clickHouseLogs != nil {
-		if len(userIds) == 0 {
-			return stat, nil
-		}
-		stat, err = sumClickHouseQuota(logReadContext(readState...), logFilter{UserIDs: userIds, Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group})
-		if err != nil {
-			return stat, errors.New("查询统计数据失败")
-		}
-		return stat, nil
-	}
-
 	if len(userIds) == 0 {
 		return stat, nil
 	}
-	tx := LOG_DB.Table("logs").Select("sum(quota) quota").Where("user_id IN ?", userIds)
-	rpmTpmQuery := LOG_DB.Table("logs").
-		Select("count(*) rpm, sum(prompt_tokens) + sum(completion_tokens) tpm").
-		Where("user_id IN ?", userIds)
-	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
-		rpmTpmQuery = rpmTpmQuery.Where("token_name = ?", tokenName)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
-	}
-	if tx, err = applyExplicitLogTextFilter(tx, "model_name", modelName); err != nil {
-		return stat, err
-	}
-	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "model_name", modelName); err != nil {
-		return stat, err
-	}
-	if group != "" {
-		tx = tx.Where(logGroupCol+" = ?", group)
-		rpmTpmQuery = rpmTpmQuery.Where(logGroupCol+" = ?", group)
-	}
-	tx = tx.Where("type = ?", LogTypeConsume)
-	rpmTpmQuery = rpmTpmQuery.
-		Where("type = ?", LogTypeConsume).
-		Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
-	if err := tx.Scan(&stat).Error; err != nil {
-		return stat, errors.New("查询统计数据失败")
-	}
-	if err := rpmTpmQuery.Scan(&stat).Error; err != nil {
+	stat, err = sumLogQuota(firstLogReadState(readState...), logFilter{UserIDs: userIds, Start: startTimestamp, End: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group})
+	if err != nil {
 		return stat, errors.New("查询统计数据失败")
 	}
 	return stat, nil
 }
 
 func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string) (token int) {
-	if clickHouseLogs != nil {
-		err := clickHouseLogs.Scan(context.Background(), logFilter{Types: []int{LogTypeConsume}, Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ExactText: true}, func(log Log) error { token += log.PromptTokens + log.CompletionTokens; return nil })
-		if err != nil {
-			common.SysError("failed to query ClickHouse token usage: " + err.Error())
-			return 0
-		}
-		return token
+	err := forEachLogs(NewLogReadState(context.Background()), logFilter{Types: []int{LogTypeConsume}, Start: startTimestamp, End: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, ExactText: true}, func(log Log) error {
+		token += log.PromptTokens + log.CompletionTokens
+		return nil
+	})
+	if err != nil {
+		common.SysError("failed to query token usage: " + err.Error())
+		return 0
 	}
-
-	tx := LOG_DB.Table("logs").Select("ifnull(sum(prompt_tokens),0) + ifnull(sum(completion_tokens),0)")
-	if username != "" {
-		tx = tx.Where("username = ?", username)
-	}
-	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
-	}
-	if modelName != "" {
-		tx = tx.Where("model_name = ?", modelName)
-	}
-	tx.Where("type = ?", LogTypeConsume).Scan(&token)
 	return token
 }
 

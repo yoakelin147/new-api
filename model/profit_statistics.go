@@ -83,7 +83,7 @@ type profitStatisticsAccumulator struct {
 
 func GetProfitStatistics(query ProfitStatisticsQuery, startIdx int, pageSize int) ([]*ProfitStatisticsRow, int, ProfitStatisticsSummary, error) {
 	if query.ReadState == nil {
-		query.ReadState = &LogReadState{}
+		query.ReadState = NewLogReadState(nil)
 	}
 	rowsByKey := make(map[profitStatisticsKey]*profitStatisticsAccumulator)
 	summary := ProfitStatisticsSummary{}

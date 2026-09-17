@@ -61,6 +61,23 @@ func TestLogReadFallbackDoesNotMixPartiallyConsumedData(t *testing.T) {
 	require.Equal(t, 1, count)
 }
 
+func TestLogReadFallbackPreservesCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := &clickHouseLogStore{fallback: DB}
+	fallbackCalled := false
+
+	err := s.readLogs(logReadContext(NewLogReadState(ctx)), func(ctx context.Context) error {
+		return ctx.Err()
+	}, func(context.Context) error {
+		fallbackCalled = true
+		return nil
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.False(t, fallbackCalled)
+}
+
 func TestDegradedLogReadNeverProbesClickHouse(t *testing.T) {
 	s := &clickHouseLogStore{fallback: DB}
 	s.readDegraded.Store(true)

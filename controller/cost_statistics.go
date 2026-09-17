@@ -72,7 +72,7 @@ func handleCostStatisticsWithQuery(c *gin.Context, isAdmin bool, userIds []int) 
 	}
 
 	query := model.CostStatisticsQuery{
-		ReadState:      &model.LogReadState{},
+		ReadState:      model.NewLogReadState(c.Request.Context()),
 		UserId:         c.GetInt("id"),
 		UserIds:        userIds,
 		IsAdmin:        isAdmin,

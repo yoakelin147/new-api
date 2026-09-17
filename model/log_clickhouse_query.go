@@ -222,15 +222,9 @@ func (s *clickHouseLogStore) Query(ctx context.Context, filter logFilter, offset
 		}
 		return s.scanQuery(ctx, "WHERE "+where+" ORDER BY "+string(order)+" LIMIT ? OFFSET ?", append(args, limit, offset), func(log Log) error { logs = append(logs, &log); return nil })
 	}, func(ctx context.Context) error {
-		logs, total = make([]*Log, 0), 0
-		tx, err := filter.sqlQuery(s.fallback.WithContext(ctx))
-		if err != nil {
-			return err
-		}
-		if err := tx.Count(&total).Error; err != nil {
-			return err
-		}
-		return tx.Order(string(order)).Offset(offset).Limit(limit).Find(&logs).Error
+		var err error
+		logs, total, err = querySQLLogs(ctx, s.fallback, filter, offset, limit, order)
+		return err
 	})
 	if err != nil {
 		return nil, 0, err
@@ -250,11 +244,7 @@ func (s *clickHouseLogStore) Scan(ctx context.Context, filter logFilter, visit f
 			return visit(log)
 		})
 	}, func(ctx context.Context) error {
-		tx, err := filter.sqlQuery(s.fallback.WithContext(ctx))
-		if err != nil {
-			return err
-		}
-		return scanSQLLogs(tx, visit)
+		return scanFilteredSQLLogs(ctx, s.fallback, filter, visit)
 	})
 }
 
@@ -279,20 +269,9 @@ func (s *clickHouseLogStore) ChannelIDs(ctx context.Context, filter logFilter) (
 		}
 		return rows.Err()
 	}, func(ctx context.Context) error {
-		ids = map[int]struct{}{}
-		filter.NonzeroChannel = true
-		tx, err := filter.sqlQuery(s.fallback.WithContext(ctx))
-		if err != nil {
-			return err
-		}
-		var values []int
-		if err := tx.Distinct("channel_id").Pluck("channel_id", &values).Error; err != nil {
-			return err
-		}
-		for _, id := range values {
-			ids[id] = struct{}{}
-		}
-		return nil
+		var err error
+		ids, err = listSQLLogChannelIDs(ctx, s.fallback, filter)
+		return err
 	})
 	return ids, err
 }

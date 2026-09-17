@@ -33,16 +33,16 @@ ClickHouse 读取失败
 
 ClickHouse 故障期间写入原日志库的记录只代表降级期间新增数据，原日志库不保证包含 ClickHouse 中的全部历史记录。统一访问层不得将两个库的结果自动拼接成一个“完整历史”。
 
-## 3. 当前实现问题
+## 3. 实施前问题
 
-当前已有以下基础能力：
+实施前已有以下基础能力：
 
 - `createLog` 统一处理日志写入和写入故障降级；
 - `clickHouseLogStore.readLogs` 统一处理一次读取中的 ClickHouse/原日志库回退；
 - 日志列表、费用统计、利润统计、渠道趋势、Token 趋势和 Token Cache 统计已经接入部分 ClickHouse 读取逻辑；
 - `LogReadState` 可以让同一次多步统计固定使用同一个数据源。
 
-但上层 Model 仍然存在多处：
+实施前上层 Model 仍然存在多处：
 
 ```go
 if clickHouseLogs != nil {
@@ -92,6 +92,8 @@ ListLogChannelIDs(ctx, filter)
 
 本阶段不增加通用 `SUM`、`COUNT`、`GROUP BY` 聚合 API。费用、利润、趋势等业务聚合继续在 Go 中通过流式遍历完成。只有经过实际性能测量确认某一类聚合存在瓶颈时，才为该场景增加明确的专用聚合能力，不提前建设通用查询 DSL。
 
+当前实现采用 Model 包内部的 `queryLogs`、`forEachLogs`、`listLogChannelIDs`，分别对应上述三类能力。它们是业务 Model 的统一边界，不直接暴露给 Controller。
+
 业务代码不应直接依赖 `clickHouseLogs` 或直接为 `logs` 表编写第二套数据源判断。
 
 ### 4.2 统一写入入口
@@ -134,7 +136,7 @@ ClickHouse 和 MySQL/PostgreSQL/SQLite 的过滤实现可以不同，但对外�
 - 请求首次回退原日志库后，后续同一请求继续使用原日志库；
 - 同一次费用或利润统计不得前半段读取 ClickHouse、后半段读取原库；
 - ClickHouse 流式扫描已经向调用方交付部分记录后发生错误时，不得自动改用原库继续累计；
-- Controller 继续通过 `X-Log-Source` 返回本次结果的实际来源；
+- Controller 继续通过 `X-Log-Source` 返回本次结果的实际来源：未配置 ClickHouse 时为 `sql`，正常读取 ClickHouse 时为 `clickhouse`，ClickHouse 故障后读取原库时为 `original`；
 - 统一入口应保留调用方的取消和超时上下文，不能用新的 `context.Background()` 丢失请求取消信号。
 
 ### 4.5 统一聚合扩展方式
@@ -244,6 +246,8 @@ func GetNewLogStatistics(query NewLogStatisticsQuery) (..., error) {
 本需求不要求重做 ClickHouse 表结构、ID 生成、写入降级、企业微信告警、后台故障处理页面或日志导出格式。
 
 ## 8. 验收标准
+
+当前实现已完成三类统一入口及既有调用方迁移；以下条目同时作为后续变更的回归标准。
 
 ### 功能验收
 

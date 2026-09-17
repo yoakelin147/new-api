@@ -31,7 +31,7 @@ func GetProfitStatistics(c *gin.Context) {
 		modelName = "%" + modelName + "%"
 	}
 	query := model.ProfitStatisticsQuery{
-		ReadState:      &model.LogReadState{},
+		ReadState:      model.NewLogReadState(c.Request.Context()),
 		LogType:        parseCostStatisticsLogType(c.Query("type")),
 		StartTimestamp: startTimestamp,
 		EndTimestamp:   endTimestamp,
