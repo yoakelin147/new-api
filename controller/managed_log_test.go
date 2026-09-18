@@ -293,6 +293,43 @@ func performUpdateUserControllerRequest(t *testing.T, operatorRole int, body str
 	return recorder
 }
 
+func performCreateUserControllerRequest(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodPost, "/api/user/", strings.NewReader(body))
+	context.Set("id", 99)
+	context.Set("username", "operator")
+	context.Set("role", common.RoleRootUser)
+	CreateUser(context)
+	return recorder
+}
+
+func TestCreateUserCanBindOptionalEmail(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	withManagedLogControllerDatabase(t)
+
+	created := performCreateUserControllerRequest(t, `{"username":"customer","display_name":"Customer","password":"password123","role":1,"email":" customer@example.com "}`)
+	require.Equal(t, http.StatusOK, created.Code)
+	require.Contains(t, created.Body.String(), `"success":true`)
+
+	var customer model.User
+	require.NoError(t, model.DB.Where("username = ?", "customer").First(&customer).Error)
+	require.Equal(t, "customer@example.com", customer.Email)
+
+	invalid := performCreateUserControllerRequest(t, `{"username":"invalid-email","password":"password123","role":1,"email":"not-an-email"}`)
+	require.Equal(t, http.StatusOK, invalid.Code)
+	require.Contains(t, invalid.Body.String(), `"success":false`)
+
+	duplicate := performCreateUserControllerRequest(t, `{"username":"duplicate-email","password":"password123","role":1,"email":"customer@example.com"}`)
+	require.Equal(t, http.StatusOK, duplicate.Code)
+	require.Contains(t, duplicate.Body.String(), `"success":false`)
+
+	withoutEmail := performCreateUserControllerRequest(t, `{"username":"without-email","password":"password123","role":1}`)
+	require.Equal(t, http.StatusOK, withoutEmail.Code)
+	require.Contains(t, withoutEmail.Body.String(), `"success":true`)
+}
+
 func TestAdminCanSwitchCommonUserToSalesButCannotPromoteToAdmin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	withManagedLogControllerDatabase(t)

@@ -28,6 +28,14 @@ import { type UserFormData, type User } from '../types'
 export const userFormSchema = z.object({
   username: z.string().min(1, 'Username is required'),
   display_name: z.string().optional(),
+  email: z
+    .string()
+    .trim()
+    .max(50)
+    .refine((value) => value === '' || z.email().safeParse(value).success, {
+      message: 'Please enter a valid email address',
+    })
+    .optional(),
   password: z.string().optional(),
   role: z.number().optional(),
   quota_dollars: z.number().min(0).optional(),
@@ -44,6 +52,7 @@ export type UserFormValues = z.infer<typeof userFormSchema>
 export const USER_FORM_DEFAULT_VALUES: UserFormValues = {
   username: '',
   display_name: '',
+  email: '',
   password: '',
   role: 1, // Default to common user
   quota_dollars: 0,
@@ -71,6 +80,7 @@ export function transformFormDataToPayload(
   // For create: only send required fields
   if (userId === undefined) {
     payload.role = data.role || 1 // Default to common user
+    payload.email = data.email || undefined
   } else {
     // For update: quota is adjusted atomically via /api/user/manage, not sent here
     payload.role = data.role
@@ -89,6 +99,7 @@ export function transformUserToFormDefaults(user: User): UserFormValues {
   return {
     username: user.username,
     display_name: user.display_name,
+    email: user.email || '',
     password: '',
     role: user.role,
     quota_dollars: quotaUnitsToDollars(user.quota),
