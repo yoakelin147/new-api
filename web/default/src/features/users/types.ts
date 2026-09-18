@@ -101,6 +101,7 @@ export interface SearchUsersParams {
 export interface UserFormData {
   username: string
   display_name: string
+  email?: string
   password?: string
   role?: number // Used when creating a user or switching common/sales roles
   quota?: number // Only used when updating user

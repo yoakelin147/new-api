@@ -311,6 +311,29 @@ export function UsersMutateDrawer({
                   )}
                 />
 
+                {!isUpdate && (
+                  <FormField
+                    control={form.control}
+                    name='email'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          {t('Email')} ({t('Optional')})
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type='email'
+                            autoComplete='email'
+                            placeholder={t('Email')}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
                 <FormField
                   control={form.control}
                   name='password'
