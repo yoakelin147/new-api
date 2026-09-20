@@ -90,6 +90,10 @@ Powered by [expr-lang/expr](https://github.com/expr-lang/expr). Expressions are 
 | `ceil` | `ceil(x) → float64` | Ceiling |
 | `floor` | `floor(x) → float64` | Floor |
 
+Time functions use the request start time. The same frozen instant is reused
+during pre-consume and settlement, so a request crossing a pricing boundary
+does not switch rates after it has already been authorized.
+
 ### Expression Examples
 
 ```
@@ -106,7 +110,21 @@ tier("base", p * 2 + c * 8 + img * 2.5)
 
 # Multimodal with audio
 tier("base", p * 0.43 + c * 3.06 + img * 0.78 + ai * 3.81 + ao * 15.11)
+
+# DeepSeek Flash peak/off-peak pricing (USD per 1M tokens, Asia/Shanghai)
+weekday("Asia/Shanghai") >= 1 && weekday("Asia/Shanghai") < 6
+  && ((hour("Asia/Shanghai") >= 9 && hour("Asia/Shanghai") < 12)
+    || (hour("Asia/Shanghai") >= 14 && hour("Asia/Shanghai") < 18))
+  ? tier("peak", p * 0.3 + c * 1.2 + cr * 0.006)
+  : tier("off_peak", p * 0.15 + c * 0.6 + cr * 0.003)
 ```
+
+The DeepSeek example follows the official pricing schedule published at
+https://api-docs.deepseek.com/quick_start/pricing. Provider prices and peak
+hours may change; verify the source before applying the expression in production.
+For DeepSeek V4 Pro, use the same condition with
+`tier("peak", p * 1.32 + c * 3.96 + cr * 0.044)` and
+`tier("off_peak", p * 0.66 + c * 1.98 + cr * 0.022)`.
 
 ### Request Rules (appended after `|||`)
 
@@ -156,7 +174,7 @@ On save, the expression is validated:
 
 When a request arrives and the model uses `tiered_expr` billing:
 1. Loads expression from `billing_setting.GetBillingExpr()`
-2. Builds `RequestInput` (headers + body) for `param()` / `header()` functions
+2. Builds `RequestInput` (headers + body + frozen request start time) for request and time functions
 3. Runs expression with estimated tokens: `RunExprWithRequest(expr, {P, C}, requestInput)`
 4. Converts output to quota: `rawCost / 1,000,000 * QuotaPerUnit`
 5. Creates `BillingSnapshot` (frozen state for settlement) and stores on `RelayInfo`

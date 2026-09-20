@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -27,14 +28,17 @@ func TestResolveIncomingBillingExprRequestInput(t *testing.T) {
 	ctx.Request.Body = io.NopCloser(bytes.NewReader(body))
 	ctx.Set(common.KeyRequestBody, body)
 
+	startedAt := time.Date(2026, 9, 21, 1, 0, 0, 0, time.UTC)
 	info := &relaycommon.RelayInfo{
 		RequestHeaders: map[string]string{"Content-Type": "application/json"},
+		StartTime:      startedAt,
 	}
 
 	input, err := ResolveIncomingBillingExprRequestInput(ctx, info)
 	require.NoError(t, err)
 	require.Equal(t, body, input.Body)
 	require.Equal(t, "application/json", input.Headers["Content-Type"])
+	require.Equal(t, startedAt, input.EvaluatedAt)
 }
 
 func TestBuildBillingExprRequestInputFromRequest(t *testing.T) {
@@ -60,4 +64,5 @@ func TestBuildBillingExprRequestInputFromRequest(t *testing.T) {
 	require.True(t, gjson.GetBytes(input.Body, "stream").Bool())
 	require.Equal(t, "user", gjson.GetBytes(input.Body, "messages.0.role").String())
 	require.Equal(t, float64(3000), gjson.GetBytes(input.Body, "max_tokens").Float())
+	require.False(t, input.EvaluatedAt.IsZero())
 }

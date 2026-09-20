@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -131,6 +132,36 @@ func TestTryTieredSettleUsesFrozenRequestInput(t *testing.T) {
 	}
 	if result == nil || result.MatchedTier != "fast" {
 		t.Fatalf("matched tier = %v, want fast", result)
+	}
+}
+
+func TestTryTieredSettleUsesFrozenRequestTime(t *testing.T) {
+	exprStr := `weekday("Asia/Shanghai") >= 1 && weekday("Asia/Shanghai") < 6 && hour("Asia/Shanghai") >= 9 && hour("Asia/Shanghai") < 12 ? tier("peak", p * 0.3 + c * 1.2) : tier("off_peak", p * 0.15 + c * 0.6)`
+	relayInfo := &relaycommon.RelayInfo{
+		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
+			BillingMode:  "tiered_expr",
+			ExprString:   exprStr,
+			ExprHash:     billingexpr.ExprHashString(exprStr),
+			GroupRatio:   1,
+			QuotaPerUnit: testQuotaPerUnit,
+		},
+		BillingRequestInput: &billingexpr.RequestInput{
+			EvaluatedAt: time.Date(2026, 9, 21, 1, 0, 0, 0, time.UTC),
+		},
+	}
+
+	ok, quota, result := TryTieredSettle(relayInfo, billingexpr.TokenParams{
+		P: 1_000_000,
+		C: 1_000_000,
+	})
+	if !ok {
+		t.Fatal("expected tiered settle to apply")
+	}
+	if quota != 750_000 {
+		t.Fatalf("quota = %d, want 750000", quota)
+	}
+	if result == nil || result.MatchedTier != "peak" {
+		t.Fatalf("matched tier = %v, want peak", result)
 	}
 }
 

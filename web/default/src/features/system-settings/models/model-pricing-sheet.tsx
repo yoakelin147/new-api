@@ -166,6 +166,7 @@ export const ModelPricingEditorPanel = forwardRef<
   })
   const [billingExpr, setBillingExpr] = useState('')
   const [requestRuleExpr, setRequestRuleExpr] = useState('')
+  const [editorRevision, setEditorRevision] = useState(0)
   const isEditMode = !!editData
   const shouldLockModelName = lockModelName ?? isEditMode
 
@@ -228,6 +229,7 @@ export const ModelPricingEditorPanel = forwardRef<
     setPromptPrice(nextLaneState.promptPrice)
     setLanePrices(nextLaneState.prices)
     setLaneEnabled(nextLaneState.enabled)
+    setEditorRevision((revision) => revision + 1)
   }, [editData, form])
 
   const setFormValue = (field: keyof ModelPricingFormValues, value: string) => {
@@ -653,6 +655,7 @@ export const ModelPricingEditorPanel = forwardRef<
                   <TabsContent value='tiered_expr' className='pt-0'>
                     <FieldGroup className='gap-5'>
                       <TieredPricingEditor
+                        key={editorRevision}
                         modelName={watchedValues.name}
                         billingExpr={billingExpr}
                         requestRuleExpr={requestRuleExpr}

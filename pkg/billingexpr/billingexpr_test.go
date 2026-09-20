@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 )
@@ -936,6 +937,34 @@ func TestTimeFunctions_WeekdayRange(t *testing.T) {
 	// weekday is always 0-6, so multiplier is always 1
 	if cost != 100 {
 		t.Errorf("cost = %f, want 100", cost)
+	}
+}
+
+func TestTimeFunctions_UseFrozenRequestTime(t *testing.T) {
+	exprStr := `weekday("Asia/Shanghai") >= 1 && weekday("Asia/Shanghai") < 6 && hour("Asia/Shanghai") >= 9 && hour("Asia/Shanghai") < 12 ? tier("peak", p * 0.3 + c * 1.2) : tier("off_peak", p * 0.15 + c * 0.6)`
+	params := billingexpr.TokenParams{P: 1_000_000, C: 1_000_000}
+
+	peakCost, peakTrace, err := billingexpr.RunExprWithRequest(exprStr, params, billingexpr.RequestInput{
+		EvaluatedAt: time.Date(2026, 9, 21, 1, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	offPeakCost, offPeakTrace, err := billingexpr.RunExprWithRequest(exprStr, params, billingexpr.RequestInput{
+		EvaluatedAt: time.Date(2026, 9, 21, 4, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if peakCost != 1_500_000 {
+		t.Errorf("peak cost = %f, want 1500000", peakCost)
+	}
+	if offPeakCost != 750_000 {
+		t.Errorf("off-peak cost = %f, want 750000", offPeakCost)
+	}
+	if peakTrace.MatchedTier != "peak" || offPeakTrace.MatchedTier != "off_peak" {
+		t.Errorf("tiers = %q/%q, want peak/off_peak", peakTrace.MatchedTier, offPeakTrace.MatchedTier)
 	}
 }
 

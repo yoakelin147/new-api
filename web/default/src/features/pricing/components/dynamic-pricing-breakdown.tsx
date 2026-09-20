@@ -39,7 +39,6 @@ import {
   type ParsedTier,
   type RequestCondition,
   type RequestRuleGroup,
-  type TierCondition,
 } from '../lib/billing-expr'
 
 type DynamicPricingBreakdownProps = {
@@ -91,10 +90,51 @@ function formatTokenHint(value: string | number): string {
 }
 
 function formatConditionSummary(
-  conditions: TierCondition[],
+  tier: ParsedTier,
   t: (key: string) => string
 ): string {
-  return conditions
+  if (tier.isFallback) return t('Other times')
+  if (tier.conditionText) {
+    const condition = tier.conditionText.replace(/\s+/g, ' ').trim()
+    const zones = [
+      ...condition.matchAll(/\b(?:hour|weekday)\("([^"]+)"\)/g),
+    ].map((match) => match[1])
+    const timezone = zones[0]
+    const hourRanges = [
+      ...condition.matchAll(
+        /hour\("([^"]+)"\)\s*>=\s*(\d+)\s*&&\s*hour\("\1"\)\s*<\s*(\d+)/g
+      ),
+    ]
+    const escapedTimezone = timezone?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const isWeekdayRange =
+      escapedTimezone != null &&
+      new RegExp(`weekday\\("${escapedTimezone}"\\)\\s*>=\\s*1`).test(
+        condition
+      ) &&
+      new RegExp(`weekday\\("${escapedTimezone}"\\)\\s*<\\s*6`).test(condition)
+    const onlySupportedTimeParts =
+      zones.length === 2 + hourRanges.length * 2 &&
+      zones.every((zone) => zone === timezone) &&
+      condition
+        .replace(/weekday\("[^"]+"\)\s*>=\s*1/g, '')
+        .replace(/weekday\("[^"]+"\)\s*<\s*6/g, '')
+        .replace(
+          /hour\("([^"]+)"\)\s*>=\s*\d+\s*&&\s*hour\("\1"\)\s*<\s*\d+/g,
+          ''
+        )
+        .replace(/[()\s&|]/g, '') === ''
+    if (isWeekdayRange && onlySupportedTimeParts && hourRanges.length > 0) {
+      const periods = hourRanges
+        .map(
+          (match) =>
+            `${match[2].padStart(2, '0')}:00–${match[3].padStart(2, '0')}:00`
+        )
+        .join('、')
+      return `${t('Monday to Friday')} ${periods} (${timezone})`
+    }
+    return condition
+  }
+  return tier.conditions
     .map((c) => {
       const varLabel = t(VAR_LABELS[c.var] || c.var)
       const hint = formatTokenHint(c.value)
@@ -243,7 +283,7 @@ export function DynamicPricingBreakdown({
           </div>
           <div className='space-y-1.5 sm:hidden'>
             {tiers.map((tier, i) => {
-              const condSummary = formatConditionSummary(tier.conditions, t)
+              const condSummary = formatConditionSummary(tier, t)
               const isMatched =
                 matchedTierLabel != null &&
                 matchedTierLabel !== '' &&
@@ -322,7 +362,7 @@ export function DynamicPricingBreakdown({
                 className: 'text-muted-foreground py-2 font-medium',
                 cellClassName: 'py-2.5 align-top',
                 cell: (tier) => {
-                  const condSummary = formatConditionSummary(tier.conditions, t)
+                  const condSummary = formatConditionSummary(tier, t)
                   const isMatched =
                     normalizedMatchedTierLabel !== '' &&
                     normalizeTierLabel(tier.label) ===
