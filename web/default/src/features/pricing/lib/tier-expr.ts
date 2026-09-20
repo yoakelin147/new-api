@@ -268,11 +268,71 @@ export type EvalResult = {
   error: string | null
 }
 
+type BillingTimeValues = {
+  hour: number
+  minute: number
+  weekday: number
+  month: number
+  day: number
+}
+
+function timeValuesAt(now: Date, timezone: string): BillingTimeValues {
+  if (!Number.isFinite(now.getTime())) {
+    throw new Error('invalid billing evaluation time')
+  }
+  const utc = {
+    hour: now.getUTCHours(),
+    minute: now.getUTCMinutes(),
+    weekday: now.getUTCDay(),
+    month: now.getUTCMonth() + 1,
+    day: now.getUTCDate(),
+  }
+  const zone = timezone.trim() || 'UTC'
+  if (zone === 'Local') {
+    throw new Error('server Local timezone cannot be previewed in the browser')
+  }
+  try {
+    if (!/^[A-Z][A-Za-z0-9_+-]*(?:\/[A-Z][A-Za-z0-9_+-]*)*$/.test(zone)) {
+      throw new RangeError('timezone')
+    }
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      calendar: 'gregory',
+      numberingSystem: 'latn',
+      hourCycle: 'h23',
+      hour: 'numeric',
+      minute: 'numeric',
+      weekday: 'short',
+      month: 'numeric',
+      day: 'numeric',
+    })
+    const resolved = formatter.resolvedOptions().timeZone
+    if (resolved.toLowerCase() === zone.toLowerCase() && resolved !== zone) {
+      throw new RangeError('timezone')
+    }
+    const parts = Object.fromEntries(
+      formatter.formatToParts(now).map((part) => [part.type, part.value])
+    )
+    return {
+      hour: Number(parts.hour),
+      minute: Number(parts.minute),
+      weekday: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(
+        parts.weekday
+      ),
+      month: Number(parts.month),
+      day: Number(parts.day),
+    }
+  } catch {
+    return utc
+  }
+}
+
 export function evalExprLocally(
   exprStr: string,
   promptTokens: number,
   completionTokens: number,
-  extraTokenValues: ExtraTokenValues
+  extraTokenValues: ExtraTokenValues,
+  now = new Date()
 ): EvalResult {
   try {
     if (!exprStr || !exprStr.trim()) {
@@ -288,6 +348,15 @@ export function evalExprLocally(
     const cacheCreate1hTokens = extraTokenValues.cacheCreate1hTokens || 0
     const len =
       promptTokens + cacheReadTokens + cacheCreateTokens + cacheCreate1hTokens
+    const timeCache = new Map<string, BillingTimeValues>()
+    const timeValue = (timezone: string, key: keyof BillingTimeValues) => {
+      let values = timeCache.get(timezone)
+      if (!values) {
+        values = timeValuesAt(now, timezone)
+        timeCache.set(timezone, values)
+      }
+      return values[key]
+    }
     const env: Record<string, unknown> = {
       p: promptTokens,
       c: completionTokens,
@@ -298,6 +367,16 @@ export function evalExprLocally(
       abs: Math.abs,
       ceil: Math.ceil,
       floor: Math.floor,
+      hour: (timezone: string) => timeValue(timezone, 'hour'),
+      minute: (timezone: string) => timeValue(timezone, 'minute'),
+      weekday: (timezone: string) => timeValue(timezone, 'weekday'),
+      month: (timezone: string) => timeValue(timezone, 'month'),
+      day: (timezone: string) => timeValue(timezone, 'day'),
+      nil: null,
+      param: () => null,
+      header: () => '',
+      has: (source: unknown, text: string) =>
+        source != null && text !== '' && String(source).includes(text),
     }
     for (const field of ESTIMATOR_VARS) {
       env[field.var] = extraTokenValues[field.stateKey] || 0

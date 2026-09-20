@@ -2,6 +2,7 @@ package helper
 
 import (
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -11,8 +12,15 @@ import (
 )
 
 func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.RelayInfo) (billingexpr.RequestInput, error) {
+	evaluatedAt := time.Now()
+	if info != nil && !info.StartTime.IsZero() {
+		evaluatedAt = info.StartTime
+	}
 	if info != nil && info.BillingRequestInput != nil {
 		input := cloneRequestInput(*info.BillingRequestInput)
+		if input.EvaluatedAt.IsZero() {
+			input.EvaluatedAt = evaluatedAt
+		}
 		merged := cloneStringMap(info.RequestHeaders)
 		for k, v := range input.Headers {
 			merged[k] = v
@@ -21,7 +29,7 @@ func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.Re
 		return input, nil
 	}
 
-	input := billingexpr.RequestInput{}
+	input := billingexpr.RequestInput{EvaluatedAt: evaluatedAt}
 	if info != nil {
 		input.Headers = cloneStringMap(info.RequestHeaders)
 	}
@@ -36,7 +44,8 @@ func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.Re
 
 func BuildBillingExprRequestInputFromRequest(request dto.Request, headers map[string]string) (billingexpr.RequestInput, error) {
 	input := billingexpr.RequestInput{
-		Headers: cloneStringMap(headers),
+		Headers:     cloneStringMap(headers),
+		EvaluatedAt: time.Now(),
 	}
 	if request == nil {
 		return input, nil
@@ -63,7 +72,8 @@ func readIncomingBillingExprBody(c *gin.Context) ([]byte, error) {
 
 func cloneRequestInput(src billingexpr.RequestInput) billingexpr.RequestInput {
 	input := billingexpr.RequestInput{
-		Headers: cloneStringMap(src.Headers),
+		Headers:     cloneStringMap(src.Headers),
+		EvaluatedAt: src.EvaluatedAt,
 	}
 	if len(src.Body) > 0 {
 		input.Body = append([]byte(nil), src.Body...)

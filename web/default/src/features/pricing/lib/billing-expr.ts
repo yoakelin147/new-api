@@ -237,7 +237,25 @@ export type TierCondition = {
 export type ParsedTier = {
   label: string
   conditions: TierCondition[]
+  conditionText?: string
+  isFallback?: boolean
   [field: string]: unknown
+}
+
+export type TimeTierPrice = {
+  label: string
+  inputPrice: number
+  outputPrice: number
+  cacheReadPrice: number
+}
+
+export type TimeTierVisualConfig = {
+  timezone: string
+  weekdayStart: number
+  weekdayEnd: number
+  ranges: { start: number; end: number }[]
+  matched: TimeTierPrice
+  fallback: TimeTierPrice
 }
 
 // ---------------------------------------------------------------------------
@@ -251,24 +269,204 @@ function stripExprVersion(exprStr: string): { version: number; body: string } {
   return { version: 1, body: exprStr }
 }
 
-function parseTierBody(bodyStr: string): Record<string, number> {
+function parseTierBody(bodyStr: string): Record<string, number> | null {
   const coeffs: Record<string, number> = {}
   const re = new RegExp(BILLING_VAR_REGEX.source, 'g')
+  let end = 0
   let m
   while ((m = re.exec(bodyStr)) !== null) {
-    if (!(m[1] in coeffs)) coeffs[m[1]] = Number(m[2])
+    const separator = bodyStr.slice(end, m.index).trim()
+    const value = Number(m[2])
+    if (
+      separator !== (end === 0 ? '' : '+') ||
+      !NUMERIC_LITERAL_REGEX.test(m[2]) ||
+      !Number.isFinite(value) ||
+      value < 0 ||
+      Object.hasOwn(coeffs, m[1])
+    ) {
+      return null
+    }
+    coeffs[m[1]] = value
+    end = re.lastIndex
   }
+  if (end === 0 || bodyStr.slice(end).trim()) return null
   const tier: Record<string, number> = {}
   for (const [varName, field] of Object.entries(BILLING_VAR_KEY_TO_FIELD)) {
-    tier[field] = coeffs[varName] || 0
+    if (Object.hasOwn(coeffs, varName)) tier[field] = coeffs[varName]
   }
   return tier
+}
+
+function findTopLevelTernary(
+  expression: string
+): { condition: string; yes: string; no: string } | null {
+  let depth = 0
+  let quoted = false
+  let escaped = false
+  let questionIndex = -1
+  let nestedTernaries = 0
+
+  for (let index = 0; index < expression.length; index += 1) {
+    const char = expression[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') quoted = false
+      continue
+    }
+    if (char === '"') {
+      quoted = true
+      continue
+    }
+    if (char === '(') depth += 1
+    else if (char === ')') depth -= 1
+    else if (depth === 0 && char === '?') {
+      if (questionIndex < 0) questionIndex = index
+      else nestedTernaries += 1
+    } else if (depth === 0 && char === ':' && questionIndex >= 0) {
+      if (nestedTernaries > 0) {
+        nestedTernaries -= 1
+        continue
+      }
+      return {
+        condition: expression.slice(0, questionIndex).trim(),
+        yes: expression.slice(questionIndex + 1, index).trim(),
+        no: expression.slice(index + 1).trim(),
+      }
+    }
+  }
+  return null
+}
+
+function parseNamedTier(
+  expression: string,
+  conditionText?: string,
+  isFallback = false
+): ParsedTier | null {
+  const match = unwrapOuterParens(expression.trim()).match(
+    /^tier\(\s*("(?:[^"\\]|\\.)*")\s*,\s*([\s\S]+)\)$/
+  )
+  if (!match) return null
+  const prices = parseTierBody(match[2])
+  if (!prices) return null
+  const label = JSON.parse(match[1]) as string
+  return {
+    ...prices,
+    label,
+    conditions: [],
+    ...(conditionText ? { conditionText } : {}),
+    ...(isFallback ? { isFallback: true } : {}),
+  }
+}
+
+function parseTimeConditionalTiers(expression: string): ParsedTier[] | null {
+  const ternary = findTopLevelTernary(unwrapOuterParens(expression.trim()))
+  if (
+    !ternary ||
+    !/\b(?:hour|minute|weekday|month|day)\s*\(/.test(ternary.condition)
+  ) {
+    return null
+  }
+  const conditionText = ternary.condition.replace(/\s+/g, ' ').trim()
+  const matched = parseNamedTier(ternary.yes, conditionText)
+  const fallback = parseNamedTier(ternary.no, undefined, true)
+  return matched && fallback ? [fallback, matched] : null
+}
+
+function parseTimeSchedule(
+  condition: string
+): Pick<
+  TimeTierVisualConfig,
+  'timezone' | 'weekdayStart' | 'weekdayEnd' | 'ranges'
+> | null {
+  const calls = [...condition.matchAll(/\b(?:hour|weekday)\("([^"]+)"\)/g)]
+  const timezone = calls[0]?.[1]
+  if (!timezone || calls.some((call) => call[1] !== timezone)) return null
+  const escapedTimezone = timezone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const weekdayStartMatch = condition.match(
+    new RegExp(`weekday\\("${escapedTimezone}"\\)\\s*>=\\s*(\\d+)`)
+  )
+  const weekdayEndMatch = condition.match(
+    new RegExp(`weekday\\("${escapedTimezone}"\\)\\s*<\\s*(\\d+)`)
+  )
+  if (!weekdayStartMatch || !weekdayEndMatch) return null
+  const ranges = [
+    ...condition.matchAll(
+      /hour\("([^"]+)"\)\s*>=\s*(\d+)\s*&&\s*hour\("\1"\)\s*<\s*(\d+)/g
+    ),
+  ].map((match) => ({ start: Number(match[2]), end: Number(match[3]) }))
+  if (ranges.length === 0) return null
+  const remainder = condition
+    .replace(/weekday\("[^"]+"\)\s*>=\s*\d+/g, '')
+    .replace(/weekday\("[^"]+"\)\s*<\s*\d+/g, '')
+    .replace(/hour\("([^"]+)"\)\s*>=\s*\d+\s*&&\s*hour\("\1"\)\s*<\s*\d+/g, '')
+    .replace(/[()\s&|]/g, '')
+  if (remainder) return null
+  return {
+    timezone,
+    weekdayStart: Number(weekdayStartMatch[1]),
+    weekdayEnd: Number(weekdayEndMatch[1]),
+    ranges,
+  }
+}
+
+function parsedTierToTimePrice(tier: ParsedTier): TimeTierPrice | null {
+  const allowedFields = new Set(['inputPrice', 'outputPrice', 'cacheReadPrice'])
+  const unsupported = BILLING_PRICING_VARS.some(
+    (variable) =>
+      variable.field &&
+      tier[variable.field] !== undefined &&
+      !allowedFields.has(variable.field)
+  )
+  if (unsupported) return null
+  return {
+    label: tier.label,
+    inputPrice: Number(tier.inputPrice ?? 0),
+    outputPrice: Number(tier.outputPrice ?? 0),
+    cacheReadPrice: Number(tier.cacheReadPrice ?? 0),
+  }
+}
+
+export function tryParseTimeTierVisualConfig(
+  expression: string
+): TimeTierVisualConfig | null {
+  const ternary = findTopLevelTernary(unwrapOuterParens(expression.trim()))
+  if (!ternary) return null
+  const schedule = parseTimeSchedule(ternary.condition)
+  const matchedTier = parseNamedTier(ternary.yes)
+  const fallbackTier = parseNamedTier(ternary.no)
+  if (!schedule || !matchedTier || !fallbackTier) return null
+  const matched = parsedTierToTimePrice(matchedTier)
+  const fallback = parsedTierToTimePrice(fallbackTier)
+  return matched && fallback ? { ...schedule, matched, fallback } : null
+}
+
+function validExpressionNumber(value: number): number {
+  return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function buildTimeTierPrice(price: TimeTierPrice): string {
+  return `tier(${JSON.stringify(price.label)}, p * ${validExpressionNumber(price.inputPrice)} + c * ${validExpressionNumber(price.outputPrice)} + cr * ${validExpressionNumber(price.cacheReadPrice)})`
+}
+
+export function generateTimeTierExpr(config: TimeTierVisualConfig): string {
+  const timezone = JSON.stringify(config.timezone || 'UTC')
+  const ranges = config.ranges
+    .map(
+      (range) =>
+        `(hour(${timezone}) >= ${range.start} && hour(${timezone}) < ${range.end})`
+    )
+    .join(' || ')
+  const condition = `weekday(${timezone}) >= ${config.weekdayStart} && weekday(${timezone}) < ${config.weekdayEnd} && (${ranges})`
+  return `${condition} ? ${buildTimeTierPrice(config.matched)} : ${buildTimeTierPrice(config.fallback)}`
 }
 
 export function parseTiersFromExpr(exprStr: string): ParsedTier[] {
   if (!exprStr) return []
   try {
     const { body } = stripExprVersion(exprStr)
+    const timeTiers = parseTimeConditionalTiers(body)
+    if (timeTiers) return timeTiers
     const condGroup =
       `((?:(?:p|c|len)\\s*(?:<|<=|>|>=)\\s*[\\d.eE+]+)` +
       `(?:\\s*&&\\s*(?:p|c|len)\\s*(?:<|<=|>|>=)\\s*[\\d.eE+]+)*)`
@@ -277,8 +475,11 @@ export function parseTiersFromExpr(exprStr: string): ParsedTier[] {
       'g'
     )
     const tiers: ParsedTier[] = []
+    let end = 0
     let m
     while ((m = tierRe.exec(body)) !== null) {
+      if (body.slice(end, m.index).trim() !== (end === 0 ? '' : ':')) return []
+      if (tiers.length > 0 && tiers.at(-1)?.conditions.length === 0) return []
       const condStr = m[1] || ''
       const conditions: TierCondition[] = []
       if (condStr) {
@@ -293,11 +494,14 @@ export function parseTiersFromExpr(exprStr: string): ParsedTier[] {
           }
         }
       }
-      const tier = parseTierBody(m[3]) as ParsedTier
+      const tier = parseTierBody(m[3]) as ParsedTier | null
+      if (!tier) return []
       tier.label = m[2]
       tier.conditions = conditions
       tiers.push(tier)
+      end = tierRe.lastIndex
     }
+    if (body.slice(end).trim() || tiers.at(-1)?.conditions.length) return []
     return tiers
   } catch {
     return []
@@ -317,40 +521,49 @@ export function normalizeTierLabel(label: string | undefined): string {
 // Request rule parser
 // ---------------------------------------------------------------------------
 
-function splitTopLevelMultiply(expr: string): string[] {
+function splitTopLevelOperator(expr: string, operator: '*' | '&&'): string[] {
   const parts: string[] = []
   let start = 0
   let depth = 0
+  let quoted = false
+  let escaped = false
   for (let index = 0; index < expr.length; index += 1) {
     const char = expr[index]
+    if (quoted) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === '"') {
+        quoted = false
+      }
+      continue
+    }
+    if (char === '"') {
+      quoted = true
+      continue
+    }
     if (char === '(') depth += 1
     if (char === ')') depth -= 1
-    if (depth === 0 && expr.slice(index, index + 3) === ' * ') {
+    if (
+      depth === 0 &&
+      expr.slice(index, index + operator.length) === operator
+    ) {
       parts.push(expr.slice(start, index).trim())
-      start = index + 3
-      index += 2
+      start = index + operator.length
+      index += operator.length - 1
     }
   }
   parts.push(expr.slice(start).trim())
   return parts.filter(Boolean)
 }
 
+function splitTopLevelMultiply(expr: string): string[] {
+  return splitTopLevelOperator(expr, '*')
+}
+
 function splitTopLevelAnd(expr: string): string[] {
-  const parts: string[] = []
-  let start = 0
-  let depth = 0
-  for (let i = 0; i < expr.length; i += 1) {
-    const c = expr[i]
-    if (c === '(') depth += 1
-    if (c === ')') depth -= 1
-    if (depth === 0 && expr.slice(i, i + 4) === ' && ') {
-      parts.push(expr.slice(start, i).trim())
-      start = i + 4
-      i += 3
-    }
-  }
-  parts.push(expr.slice(start).trim())
-  return parts.filter(Boolean)
+  return splitTopLevelOperator(expr, '&&')
 }
 
 function parseExprLiteral(raw: string): string | null {
@@ -364,25 +577,39 @@ function parseExprLiteral(raw: string): string | null {
   }
 }
 
+const TIME_FUNC_RANGES: Record<TimeFunc, [number, number]> = {
+  hour: [0, 23],
+  minute: [0, 59],
+  weekday: [0, 6],
+  month: [1, 12],
+  day: [1, 31],
+}
+
+function isTimeValueInRange(timeFunc: TimeFunc, text: string): boolean {
+  if (!NUMERIC_LITERAL_REGEX.test(text)) return false
+  const value = Number(text)
+  if (!Number.isInteger(value)) return false
+  const [min, max] = TIME_FUNC_RANGES[timeFunc]
+  return value >= min && value <= max
+}
+
 function tryParseTimeCondition(expr: string): RequestCondition | null {
   let m = expr.match(
-    /^(hour|minute|weekday|month|day)\("([^"]+)"\) >= ([\d.eE+-]+) \|\| \1\("\2"\) < ([\d.eE+-]+)$/
+    /^(hour|minute|weekday|month|day)\("([^"]+)"\) >= ([\d.eE+-]+) (&&|\|\|) \1\("\2"\) < ([\d.eE+-]+)$/
   )
-  if (m) {
-    return {
-      source: 'time',
-      timeFunc: m[1] as TimeFunc,
-      timezone: m[2],
-      mode: MATCH_RANGE,
-      value: '',
-      rangeStart: m[3],
-      rangeEnd: m[4],
-    }
+  if (!m) {
+    m = expr.match(
+      /^\((hour|minute|weekday|month|day)\("([^"]+)"\) >= ([\d.eE+-]+) (&&|\|\|) \1\("\2"\) < ([\d.eE+-]+)\)$/
+    )
   }
-  m = expr.match(
-    /^\((hour|minute|weekday|month|day)\("([^"]+)"\) >= ([\d.eE+-]+) \|\| \1\("\2"\) < ([\d.eE+-]+)\)$/
-  )
   if (m) {
+    if (
+      !isTimeValueInRange(m[1] as TimeFunc, m[3]) ||
+      !isTimeValueInRange(m[1] as TimeFunc, m[5]) ||
+      (Number(m[3]) > Number(m[5]) && m[4] !== '||')
+    ) {
+      return null
+    }
     return {
       source: 'time',
       timeFunc: m[1] as TimeFunc,
@@ -390,13 +617,14 @@ function tryParseTimeCondition(expr: string): RequestCondition | null {
       mode: MATCH_RANGE,
       value: '',
       rangeStart: m[3],
-      rangeEnd: m[4],
+      rangeEnd: m[5],
     }
   }
   m = expr.match(
     /^(hour|minute|weekday|month|day)\("([^"]+)"\) (==|>=|<) ([\d.eE+-]+)$/
   )
   if (m) {
+    if (!isTimeValueInRange(m[1] as TimeFunc, m[4])) return null
     const opMap: Record<string, string> = {
       '==': MATCH_EQ,
       '>=': MATCH_GTE,
@@ -413,6 +641,53 @@ function tryParseTimeCondition(expr: string): RequestCondition | null {
     }
   }
   return null
+}
+
+function tryParseTimeRangePair(
+  lower: string,
+  upper: string
+): RequestCondition | null {
+  const a = tryParseTimeCondition(lower)
+  const b = tryParseTimeCondition(upper)
+  if (!a || !b || a.source !== SOURCE_TIME || b.source !== SOURCE_TIME) {
+    return null
+  }
+  if (a.timeFunc !== b.timeFunc || a.timezone !== b.timezone) return null
+  if (a.mode !== MATCH_GTE || b.mode !== MATCH_LT) return null
+  if (Number(a.value) > Number(b.value)) return null
+  return {
+    source: SOURCE_TIME,
+    timeFunc: a.timeFunc,
+    timezone: a.timezone,
+    mode: MATCH_RANGE,
+    value: '',
+    rangeStart: a.value,
+    rangeEnd: b.value,
+  }
+}
+
+function tryParseRequestConditions(
+  conditionStr: string
+): RequestCondition[] | null {
+  const wholeTimeCondition = tryParseTimeCondition(conditionStr.trim())
+  if (wholeTimeCondition) return [wholeTimeCondition]
+
+  const parts = splitTopLevelAnd(conditionStr)
+  const conditions: RequestCondition[] = []
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index].trim()
+    const next = index + 1 < parts.length ? parts[index + 1].trim() : ''
+    const range = next ? tryParseTimeRangePair(part, next) : null
+    if (range) {
+      conditions.push(range)
+      index += 1
+      continue
+    }
+    const condition = tryParseRequestCondition(part)
+    if (!condition) return null
+    conditions.push(condition)
+  }
+  return conditions.length > 0 ? conditions : null
 }
 
 function tryParseRequestCondition(expr: string): RequestCondition | null {
@@ -480,14 +755,8 @@ function tryParseRuleGroupFactor(part: string): RequestRuleGroup | null {
   const conditionStr = m[1]
   const multiplier = m[2]
 
-  const andParts = splitTopLevelAnd(conditionStr)
-  const conditions: RequestCondition[] = []
-  for (const ap of andParts) {
-    const cond = tryParseRequestCondition(ap.trim())
-    if (!cond) return null
-    conditions.push(cond)
-  }
-  if (conditions.length === 0) return null
+  const conditions = tryParseRequestConditions(conditionStr)
+  if (!conditions) return null
   return { conditions, multiplier }
 }
 
@@ -704,13 +973,15 @@ function buildTimeConditionExpr(cond: TimeCondition): string {
   if (mode === MATCH_RANGE) {
     const s = normalized.rangeStart.trim()
     const e = normalized.rangeEnd.trim()
-    if (!NUMERIC_LITERAL_REGEX.test(s) || !NUMERIC_LITERAL_REGEX.test(e)) {
+    if (!isTimeValueInRange(timeFunc, s) || !isTimeValueInRange(timeFunc, e)) {
       return ''
     }
-    return `${fn} >= ${s} || ${fn} < ${e}`
+    return Number(s) > Number(e)
+      ? `${fn} >= ${s} || ${fn} < ${e}`
+      : `${fn} >= ${s} && ${fn} < ${e}`
   }
   const v = normalized.value.trim()
-  if (!NUMERIC_LITERAL_REGEX.test(v)) return ''
+  if (!isTimeValueInRange(timeFunc, v)) return ''
   const opMap: Record<string, string> = {
     [MATCH_EQ]: '==',
     [MATCH_GTE]: '>=',
@@ -762,9 +1033,9 @@ function buildRequestConditionExpr(cond: RequestCondition): string {
 function buildRuleGroupFactor(group: RequestRuleGroup): string {
   const multiplier = (group.multiplier || '').trim()
   if (!NUMERIC_LITERAL_REGEX.test(multiplier)) return ''
-  const condExprs = (group.conditions || [])
-    .map(buildRequestConditionExpr)
-    .filter(Boolean)
+  const conditions = group.conditions || []
+  const condExprs = conditions.map(buildRequestConditionExpr)
+  if (condExprs.some((condition) => !condition)) return ''
   if (condExprs.length === 0) return ''
 
   const combined =
@@ -775,5 +1046,7 @@ function buildRuleGroupFactor(group: RequestRuleGroup): string {
 }
 
 export function buildRequestRuleExpr(groups: RequestRuleGroup[]): string {
-  return (groups || []).map(buildRuleGroupFactor).filter(Boolean).join(' * ')
+  const factors = (groups || []).map(buildRuleGroupFactor)
+  if (factors.some((factor) => !factor)) return ''
+  return factors.join(' * ')
 }
