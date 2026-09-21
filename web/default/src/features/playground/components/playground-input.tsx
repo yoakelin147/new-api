@@ -50,7 +50,13 @@ import {
 } from '@/components/ai-elements/prompt-input'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { ModelGroupSelector } from '@/components/model-group-selector'
-import type { ModelOption, GroupOption } from '../types'
+import type {
+  ModelOption,
+  GroupOption,
+  ParameterEnabled,
+  PlaygroundConfig,
+} from '../types'
+import { PlaygroundParameters } from './playground-parameters'
 
 interface PlaygroundInputProps {
   onSubmit: (text: string) => void
@@ -64,6 +70,17 @@ interface PlaygroundInputProps {
   groups: GroupOption[]
   groupValue: string
   onGroupChange: (value: string) => void
+  config: PlaygroundConfig
+  parameterEnabled: ParameterEnabled
+  onConfigChange: <K extends keyof PlaygroundConfig>(
+    key: K,
+    value: PlaygroundConfig[K]
+  ) => void
+  onParameterEnabledChange: (
+    key: keyof ParameterEnabled,
+    value: boolean
+  ) => void
+  onResetConfig: () => void
 }
 
 const suggestions = [
@@ -87,6 +104,11 @@ export function PlaygroundInput({
   groups,
   groupValue,
   onGroupChange,
+  config,
+  parameterEnabled,
+  onConfigChange,
+  onParameterEnabledChange,
+  onResetConfig,
 }: PlaygroundInputProps) {
   const { t } = useTranslation()
   const [text, setText] = useState('')
@@ -183,6 +205,14 @@ export function PlaygroundInput({
           </PromptInputTools>
 
           <div className='flex items-center gap-1.5 md:gap-2'>
+            <PlaygroundParameters
+              config={config}
+              parameterEnabled={parameterEnabled}
+              disabled={disabled}
+              onConfigChange={onConfigChange}
+              onParameterEnabledChange={onParameterEnabledChange}
+              onReset={onResetConfig}
+            />
             <ModelGroupSelector
               selectedModel={modelValue}
               models={models}
@@ -190,7 +220,8 @@ export function PlaygroundInput({
               selectedGroup={groupValue}
               groups={groups}
               onGroupChange={onGroupChange}
-              disabled={isModelSelectDisabled || isGroupSelectDisabled}
+              modelDisabled={isModelSelectDisabled}
+              groupDisabled={isGroupSelectDisabled}
             />
 
             {isGenerating && onStop ? (
@@ -206,7 +237,13 @@ export function PlaygroundInput({
             ) : (
               <PromptInputButton
                 className='text-foreground font-medium'
-                disabled={disabled || !text.trim()}
+                disabled={
+                  disabled ||
+                  isModelLoading ||
+                  !modelValue ||
+                  !text.trim() ||
+                  models.length === 0
+                }
                 type='submit'
                 variant='secondary'
               >

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -580,6 +581,22 @@ func GetUserModels(c *gin.Context) {
 		return
 	}
 	groups := service.GetUserUsableGroups(user.Group)
+	requestedGroup := strings.TrimSpace(c.Query("group"))
+	if requestedGroup != "" {
+		if _, ok := groups[requestedGroup]; !ok {
+			common.ApiError(c, errors.New("无权使用该分组"))
+			return
+		}
+		if requestedGroup == "auto" {
+			autoGroups := service.GetUserAutoGroup(user.Group)
+			groups = make(map[string]string, len(autoGroups))
+			for _, group := range autoGroups {
+				groups[group] = ""
+			}
+		} else {
+			groups = map[string]string{requestedGroup: groups[requestedGroup]}
+		}
+	}
 	var models []string
 	for group := range groups {
 		for _, g := range model.GetGroupEnabledModels(group) {
@@ -588,6 +605,7 @@ func GetUserModels(c *gin.Context) {
 			}
 		}
 	}
+	sort.Strings(models)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
