@@ -100,11 +100,22 @@ export function usePlaygroundState() {
     updateMessages([])
   }, [updateMessages])
 
-  // Reset config to defaults
-  const resetConfig = useCallback(() => {
-    setConfig(DEFAULT_CONFIG)
+  const resetParameters = useCallback(() => {
+    setConfig((prev) => {
+      const updated = {
+        ...prev,
+        temperature: DEFAULT_CONFIG.temperature,
+        top_p: DEFAULT_CONFIG.top_p,
+        max_tokens: DEFAULT_CONFIG.max_tokens,
+        frequency_penalty: DEFAULT_CONFIG.frequency_penalty,
+        presence_penalty: DEFAULT_CONFIG.presence_penalty,
+        seed: DEFAULT_CONFIG.seed,
+        stream: DEFAULT_CONFIG.stream,
+      }
+      saveConfig(updated)
+      return updated
+    })
     setParameterEnabled(DEFAULT_PARAMETER_ENABLED)
-    saveConfig(DEFAULT_CONFIG)
     saveParameterEnabled(DEFAULT_PARAMETER_ENABLED)
   }, [])
 
@@ -125,6 +136,6 @@ export function usePlaygroundState() {
     updateParameterEnabled,
     updateMessages,
     clearMessages,
-    resetConfig,
+    resetParameters,
   }
 }

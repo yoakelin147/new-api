@@ -39,6 +39,8 @@ export function Playground() {
     setModels,
     setGroups,
     updateConfig,
+    updateParameterEnabled,
+    resetParameters,
   } = usePlaygroundState()
 
   const { sendChat, stopGeneration, isGenerating } = useChatHandler({
@@ -52,39 +54,44 @@ export function Playground() {
     null
   )
 
-  // Load models
-  const { data: modelsData, isLoading: isLoadingModels } = useQuery({
-    queryKey: ['playground-models'],
-    queryFn: async () => {
-      try {
-        return await getUserModels()
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t('Failed to load playground models')
-        )
-        return []
-      }
-    },
+  // Load groups
+  const { data: groupsData, error: groupsError } = useQuery({
+    queryKey: ['playground-groups'],
+    queryFn: getUserGroups,
+  })
+  const isSelectedGroupAvailable = Boolean(
+    groupsData?.some((group) => group.value === config.group)
+  )
+
+  // Load models available in the selected group
+  const {
+    data: modelsData,
+    error: modelsError,
+    isLoading: isLoadingModels,
+  } = useQuery({
+    queryKey: ['playground-models', config.group],
+    queryFn: () => getUserModels(config.group),
+    enabled: isSelectedGroupAvailable,
   })
 
-  // Load groups
-  const { data: groupsData } = useQuery({
-    queryKey: ['playground-groups'],
-    queryFn: async () => {
-      try {
-        return await getUserGroups()
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t('Failed to load playground groups')
-        )
-        return []
-      }
-    },
-  })
+  useEffect(() => {
+    if (!groupsError) return
+    toast.error(
+      groupsError instanceof Error
+        ? groupsError.message
+        : t('Failed to load playground groups')
+    )
+  }, [groupsError, t])
+
+  useEffect(() => {
+    if (!modelsError) return
+    setModels([])
+    toast.error(
+      modelsError instanceof Error
+        ? modelsError.message
+        : t('Failed to load playground models')
+    )
+  }, [modelsError, setModels, t])
 
   // Update models when data changes
   useEffect(() => {
@@ -218,6 +225,11 @@ export function Playground() {
           models={models}
           onGroupChange={(value) => updateConfig('group', value)}
           onModelChange={(value) => updateConfig('model', value)}
+          config={config}
+          parameterEnabled={parameterEnabled}
+          onConfigChange={updateConfig}
+          onParameterEnabledChange={updateParameterEnabled}
+          onResetConfig={resetParameters}
           onStop={stopGeneration}
           onSubmit={handleSendMessage}
         />
