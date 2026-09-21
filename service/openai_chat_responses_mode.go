@@ -16,3 +16,7 @@ func ShouldChatCompletionsUseResponsesGlobal(channelID int, channelType int, mod
 func ShouldResponsesUseChatCompletionsGlobal(channelID int, channelType int, model string) bool {
 	return relayconvert.ShouldResponsesUseChatCompletionsGlobal(channelID, channelType, model)
 }
+
+func ShouldMessagesUseChatCompletionsGlobal(channelID int, channelType int, model string) bool {
+	return relayconvert.ShouldMessagesUseChatCompletionsGlobal(channelID, channelType, model)
+}

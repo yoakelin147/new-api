@@ -11,6 +11,8 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/relay/channel/moonshot"
+	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
@@ -149,6 +151,17 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		return nil
 	}
 
+	messagesViaChat := !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
+		!info.ChannelSetting.PassThroughBodyEnabled &&
+		service.ShouldMessagesUseChatCompletionsGlobal(info.ChannelId, info.ChannelType, info.OriginModelName)
+	originalRelayFormat := info.RelayFormat
+	if messagesViaChat {
+		info.RelayFormat = types.RelayFormatOpenAI
+		info.FinalRequestRelayFormat = types.RelayFormatOpenAI
+		info.RequestURLPath = "/v1/chat/completions"
+		defer func() { info.RelayFormat = originalRelayFormat }()
+	}
+
 	var requestBody io.Reader
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
 		storage, err := common.GetBodyStorage(c)
@@ -157,7 +170,22 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 		requestBody = common.NewReplayableBodyReader(storage)
 	} else {
-		convertedRequest, err := adaptor.ConvertClaudeRequest(c, info, request)
+		var convertedRequest any
+		var err error
+		if messagesViaChat {
+			openAIRequest, convertErr := service.ClaudeToOpenAIRequest(*request, info)
+			if convertErr != nil {
+				return types.NewError(convertErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			if info.ApiType == constant.APITypeMoonshot {
+				if convertErr := moonshot.ApplyKimiMessagesCompatibility(request, openAIRequest); convertErr != nil {
+					return types.NewErrorWithStatusCode(convertErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+				}
+			}
+			convertedRequest, err = adaptor.ConvertOpenAIRequest(c, info, openAIRequest)
+		} else {
+			convertedRequest, err = adaptor.ConvertClaudeRequest(c, info, request)
+		}
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
@@ -194,6 +222,9 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 	var httpResp *http.Response
 	resp, err := adaptor.DoRequest(c, info, requestBody)
+	if messagesViaChat {
+		info.RelayFormat = originalRelayFormat
+	}
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
@@ -209,7 +240,12 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
-	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	var usage any
+	if messagesViaChat {
+		usage, newAPIError = (&openai.Adaptor{}).DoResponse(c, httpResp, info)
+	} else {
+		usage, newAPIError = adaptor.DoResponse(c, httpResp, info)
+	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)

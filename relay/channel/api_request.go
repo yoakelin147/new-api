@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -315,10 +316,70 @@ func applyHeaderOverrideToRequest(req *http.Request, headerOverride map[string]s
 	}
 }
 
+func applyRequestPathRewrite(c *gin.Context, info *common.RelayInfo, requestURL string) (string, error) {
+	if c == nil || c.Request == nil || info == nil || len(info.ChannelSetting.RequestPathRewrite) == 0 {
+		return requestURL, nil
+	}
+	requestPath := c.Request.URL.Path
+	switch info.GetFinalRequestRelayFormat() {
+	case types.RelayFormatOpenAI:
+		requestPath = "/v1/chat/completions"
+	case types.RelayFormatOpenAIResponses, types.RelayFormatOpenAIResponsesCompaction:
+		requestPath = "/v1/responses"
+	case types.RelayFormatClaude:
+		requestPath = "/v1/messages"
+	}
+	var target string
+	for _, rule := range info.ChannelSetting.RequestPathRewrite {
+		if len(rule.Conditions) == 0 {
+			continue
+		}
+		matched := true
+		for condition, value := range rule.Conditions {
+			switch condition {
+			case "request_path":
+				matched = requestPath == strings.TrimSpace(value)
+			default:
+				matched = false
+			}
+			if !matched {
+				break
+			}
+		}
+		if matched {
+			target = rule.TargetPath
+			break
+		}
+	}
+	if target == "" {
+		return requestURL, nil
+	}
+	target = strings.TrimSpace(target)
+	if target == "" || !strings.HasPrefix(target, "/") {
+		return "", errors.New("request path rewrite target must start with '/'")
+	}
+	targetURL, err := url.ParseRequestURI(target)
+	if err != nil || targetURL.IsAbs() || targetURL.Host != "" || targetURL.Fragment != "" {
+		return "", fmt.Errorf("invalid request path rewrite target %q", target)
+	}
+	upstreamURL, err := url.Parse(requestURL)
+	if err != nil {
+		return "", fmt.Errorf("parse upstream request url failed: %w", err)
+	}
+	upstreamURL.Path = targetURL.Path
+	upstreamURL.RawPath = targetURL.RawPath
+	upstreamURL.RawQuery = targetURL.RawQuery
+	return upstreamURL.String(), nil
+}
+
 func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (*http.Response, error) {
 	fullRequestURL, err := a.GetRequestURL(info)
 	if err != nil {
 		return nil, fmt.Errorf("get request url failed: %w", err)
+	}
+	fullRequestURL, err = applyRequestPathRewrite(c, info, fullRequestURL)
+	if err != nil {
+		return nil, err
 	}
 	logger.LogDebug(c, "fullRequestURL: %s", fullRequestURL)
 	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
@@ -349,6 +410,10 @@ func DoFormRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBod
 	fullRequestURL, err := a.GetRequestURL(info)
 	if err != nil {
 		return nil, fmt.Errorf("get request url failed: %w", err)
+	}
+	fullRequestURL, err = applyRequestPathRewrite(c, info, fullRequestURL)
+	if err != nil {
+		return nil, err
 	}
 	logger.LogDebug(c, "fullRequestURL: %s", fullRequestURL)
 	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
@@ -381,6 +446,10 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	fullRequestURL, err := a.GetRequestURL(info)
 	if err != nil {
 		return nil, fmt.Errorf("get request url failed: %w", err)
+	}
+	fullRequestURL, err = applyRequestPathRewrite(c, info, fullRequestURL)
+	if err != nil {
+		return nil, err
 	}
 	targetHeader := http.Header{}
 	err = a.SetupRequestHeader(c, &targetHeader, info)

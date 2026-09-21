@@ -25,7 +25,7 @@ type ClaudeMediaMessage struct {
 	PartialJson  *string              `json:"partial_json,omitempty"`
 	Role         string               `json:"role,omitempty"`
 	Thinking     *string              `json:"thinking,omitempty"`
-	Signature    string               `json:"signature,omitempty"`
+	Signature    *string              `json:"signature,omitempty"`
 	Delta        string               `json:"delta,omitempty"`
 	CacheControl json.RawMessage      `json:"cache_control,omitempty"`
 	// tool_calls
@@ -560,10 +560,31 @@ type ClaudeUsage struct {
 	CacheReadInputTokens     int                       `json:"cache_read_input_tokens"`
 	OutputTokens             int                       `json:"output_tokens"`
 	CacheCreation            *ClaudeCacheCreationUsage `json:"cache_creation,omitempty"`
+	OutputTokensDetails      *ClaudeOutputTokenDetails `json:"output_tokens_details,omitempty"`
 	// claude cache 1h
 	ClaudeCacheCreation5mTokens int                  `json:"claude_cache_creation_5_m_tokens"`
 	ClaudeCacheCreation1hTokens int                  `json:"claude_cache_creation_1_h_tokens"`
 	ServerToolUse               *ClaudeServerToolUse `json:"server_tool_use,omitempty"`
+	HideLegacyCacheFields       bool                 `json:"-"`
+}
+
+func (u ClaudeUsage) MarshalJSON() ([]byte, error) {
+	type alias ClaudeUsage
+	data, err := common.Marshal(alias(u))
+	if err != nil || !u.HideLegacyCacheFields {
+		return data, err
+	}
+	var value map[string]any
+	if err := common.Unmarshal(data, &value); err != nil {
+		return nil, err
+	}
+	delete(value, "claude_cache_creation_5_m_tokens")
+	delete(value, "claude_cache_creation_1_h_tokens")
+	return common.Marshal(value)
+}
+
+type ClaudeOutputTokenDetails struct {
+	ThinkingTokens int `json:"thinking_tokens"`
 }
 
 type ClaudeCacheCreationUsage struct {

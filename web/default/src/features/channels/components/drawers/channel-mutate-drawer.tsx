@@ -153,6 +153,7 @@ import {
   type MissingModelsAction,
 } from '../dialogs/missing-models-confirmation-dialog'
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
+import { RequestPathRewriteEditorDialog } from '../dialogs/request-path-rewrite-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
 import {
@@ -204,6 +205,7 @@ function readAdvancedSettingsPreference(): boolean {
 function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
   return Boolean(
     values.param_override?.trim() ||
+    values.request_path_rewrite?.trim() ||
     values.header_override?.trim() ||
     values.status_code_mapping?.trim() ||
     values.tag?.trim() ||
@@ -298,6 +300,8 @@ export function ChannelMutateDrawer({
   >(null)
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
   const [paramOverrideEditorOpen, setParamOverrideEditorOpen] = useState(false)
+  const [requestPathRewriteEditorOpen, setRequestPathRewriteEditorOpen] =
+    useState(false)
 
   const isEditing = Boolean(currentRow)
   const channelId = currentRow?.id ?? null
@@ -2785,6 +2789,61 @@ export function ChannelMutateDrawer({
 
                         <FormField
                           control={form.control}
+                          name='request_path_rewrite'
+                          render={({ field }) => (
+                            <FormItem className='space-y-3 border-t pt-4'>
+                              <div className='flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between'>
+                                <div className='space-y-1'>
+                                  <FormLabel>
+                                    {t('Request Path Rewrite')}
+                                  </FormLabel>
+                                  <FormDescription>
+                                    {t(
+                                      'Rewrite the upstream path according to the effective request path after protocol conversion. The first matching rule wins.'
+                                    )}
+                                  </FormDescription>
+                                </div>
+                                <div className='flex flex-wrap gap-2'>
+                                  <Button
+                                    type='button'
+                                    variant='outline'
+                                    size='sm'
+                                    onClick={() =>
+                                      setRequestPathRewriteEditorOpen(true)
+                                    }
+                                  >
+                                    <Wand2 className='mr-2 h-4 w-4' />
+                                    {t('Visual edit')}
+                                  </Button>
+                                  <Button
+                                    type='button'
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => field.onChange('')}
+                                  >
+                                    {t('Clear')}
+                                  </Button>
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Textarea
+                                  value={field.value || ''}
+                                  onChange={(event) =>
+                                    field.onChange(event.target.value)
+                                  }
+                                  disabled={isSubmitting}
+                                  rows={8}
+                                  className='max-h-72 min-h-40 resize-y overflow-auto font-mono text-xs'
+                                  placeholder='[{"conditions":{"request_path":"/v1/messages"},"target_path":"/apps/anthropic/v1/messages"}]'
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
                           name='header_override'
                           render={({ field }) => (
                             <FormItem className='space-y-3 border-t pt-4'>
@@ -3416,6 +3475,20 @@ export function ChannelMutateDrawer({
           onOpenChange={setParamOverrideEditorOpen}
           onSave={(nextValue) => {
             form.setValue('param_override', nextValue, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }}
+        />
+      )}
+
+      {requestPathRewriteEditorOpen && (
+        <RequestPathRewriteEditorDialog
+          open={requestPathRewriteEditorOpen}
+          value={form.watch('request_path_rewrite') || ''}
+          onOpenChange={setRequestPathRewriteEditorOpen}
+          onSave={(nextValue) => {
+            form.setValue('request_path_rewrite', nextValue, {
               shouldDirty: true,
               shouldValidate: true,
             })

@@ -37,6 +37,7 @@ type GlobalSettings struct {
 	ThinkingModelBlacklist           []string                         `json:"thinking_model_blacklist"`
 	ChatCompletionsToResponsesPolicy ChatCompletionsToResponsesPolicy `json:"chat_completions_to_responses_policy"`
 	ResponsesToChatCompletionsPolicy ChatCompletionsToResponsesPolicy `json:"responses_to_chat_completions_policy"`
+	MessagesToChatCompletionsPolicy  ChatCompletionsToResponsesPolicy `json:"messages_to_chat_completions_policy"`
 }
 
 // 默认配置
@@ -51,6 +52,10 @@ var defaultOpenaiSettings = GlobalSettings{
 		AllChannels: true,
 	},
 	ResponsesToChatCompletionsPolicy: ChatCompletionsToResponsesPolicy{
+		Enabled:     false,
+		AllChannels: true,
+	},
+	MessagesToChatCompletionsPolicy: ChatCompletionsToResponsesPolicy{
 		Enabled:     false,
 		AllChannels: true,
 	},
