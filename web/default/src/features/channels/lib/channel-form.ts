@@ -57,6 +57,38 @@ function isOptionalModelMapping(value: string | undefined): boolean {
   }
 }
 
+function isOptionalRequestPathRewrite(value: string | undefined): boolean {
+  try {
+    const parsed = parseOptionalJson(value)
+    if (parsed === undefined) return true
+    if (!Array.isArray(parsed)) return false
+    return parsed.every((rule) => {
+      if (!isJsonObjectValue(rule)) return false
+      if (
+        typeof rule.target_path !== 'string' ||
+        !rule.target_path.startsWith('/')
+      ) {
+        return false
+      }
+      if (!isJsonObjectValue(rule.conditions)) return false
+      const conditions = Object.entries(rule.conditions)
+      return (
+        conditions.length > 0 &&
+        conditions.every(
+          ([condition, conditionValue]) =>
+            condition === 'request_path' &&
+            typeof conditionValue === 'string' &&
+            ['/v1/chat/completions', '/v1/responses', '/v1/messages'].includes(
+              conditionValue
+            )
+        )
+      )
+    })
+  } catch {
+    return false
+  }
+}
+
 function isOptionalStatusCodeMapping(value: string | undefined): boolean {
   try {
     const parsed = parseOptionalJson(value)
@@ -161,6 +193,13 @@ export const channelFormSchema = z
       .string()
       .optional()
       .refine(isOptionalJsonObject, ERROR_MESSAGES.INVALID_JSON),
+    request_path_rewrite: z
+      .string()
+      .optional()
+      .refine(
+        isOptionalRequestPathRewrite,
+        'Request path rewrite rules are invalid'
+      ),
     header_override: z
       .string()
       .optional()
@@ -286,6 +325,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   remark: '',
   setting: '',
   param_override: '',
+  request_path_rewrite: '',
   header_override: '',
   settings: '{}',
   other: '',
@@ -336,6 +376,7 @@ export function transformChannelToFormDefaults(
     pass_through_body_enabled: false,
     system_prompt: '',
     system_prompt_override: false,
+    request_path_rewrite: '',
   }
 
   if (channel.setting) {
@@ -348,6 +389,9 @@ export function transformChannelToFormDefaults(
         pass_through_body_enabled: parsed.pass_through_body_enabled || false,
         system_prompt: parsed.system_prompt || '',
         system_prompt_override: parsed.system_prompt_override || false,
+        request_path_rewrite: Array.isArray(parsed.request_path_rewrite)
+          ? JSON.stringify(parsed.request_path_rewrite, null, 2)
+          : '',
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -457,6 +501,9 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     pass_through_body_enabled: formData.pass_through_body_enabled || false,
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
+    request_path_rewrite: formData.request_path_rewrite?.trim()
+      ? JSON.parse(formData.request_path_rewrite)
+      : undefined,
   }
   return JSON.stringify(settingObj)
 }

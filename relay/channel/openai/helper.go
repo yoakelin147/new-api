@@ -165,11 +165,18 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 
 		info.ClaudeConvertInfo.Usage = usage
 
+		info.SendResponseCount++
 		claudeResponses := service.StreamResponseOpenAI2Claude(&streamResponse, info)
 		for _, resp := range claudeResponses {
 			_ = helper.ClaudeData(c, *resp)
 		}
-		info.ClaudeConvertInfo.Done = true
+		if !info.ClaudeConvertInfo.Done {
+			info.SendResponseCount++
+			finalResponses := service.StreamResponseOpenAI2Claude(&dto.ChatCompletionsStreamResponse{Usage: usage}, info)
+			for _, resp := range finalResponses {
+				_ = helper.ClaudeData(c, *resp)
+			}
+		}
 
 	case types.RelayFormatGemini:
 		var streamResponse dto.ChatCompletionsStreamResponse

@@ -113,7 +113,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if common.IsRequestBodyTooLargeError(err) || errors.Is(err, common.ErrRequestBodyTooLarge) {
 			newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
 		} else {
-			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest)
+			newAPIError = requestValidationError(c, err)
 		}
 		return
 	}
@@ -122,6 +122,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
+	}
+	if common.GetContextKeyInt(c, constant.ContextKeyChannelType) == constant.ChannelTypeMoonshot {
+		relayInfo.InitChannelMeta(c)
+		if err := relay.ValidateMoonshotRequest(relayInfo, request); err != nil {
+			newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			return
+		}
 	}
 
 	needSensitiveCheck := setting.ShouldCheckPromptSensitive()
@@ -274,6 +281,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
 	}
+}
+
+func requestValidationError(c *gin.Context, err error) *types.NewAPIError {
+	if common.GetContextKeyInt(c, constant.ContextKeyChannelType) == constant.ChannelTypeMoonshot {
+		return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+	}
+	return types.NewError(err, types.ErrorCodeInvalidRequest)
 }
 
 var upgrader = websocket.Upgrader{

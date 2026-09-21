@@ -223,7 +223,7 @@ func generateStopBlock(index int) *dto.ClaudeResponse {
 	}
 }
 
-func buildClaudeUsageFromOpenAIUsage(oaiUsage *dto.Usage) *dto.ClaudeUsage {
+func buildClaudeUsageFromOpenAIUsage(oaiUsage *dto.Usage, info *relaycommon.RelayInfo) *dto.ClaudeUsage {
 	if oaiUsage == nil {
 		return nil
 	}
@@ -237,6 +237,16 @@ func buildClaudeUsageFromOpenAIUsage(oaiUsage *dto.Usage) *dto.ClaudeUsage {
 		OutputTokens:             oaiUsage.CompletionTokens,
 		CacheCreationInputTokens: oaiUsage.PromptTokensDetails.CacheCreationTokensTotal(),
 		CacheReadInputTokens:     oaiUsage.PromptTokensDetails.CachedTokens,
+	}
+	if info != nil && info.ChannelType == constant.ChannelTypeMoonshot {
+		usage.InputTokens -= usage.CacheReadInputTokens + usage.CacheCreationInputTokens
+		if usage.InputTokens < 0 {
+			usage.InputTokens = 0
+		}
+		usage.HideLegacyCacheFields = true
+		usage.OutputTokensDetails = &dto.ClaudeOutputTokenDetails{
+			ThinkingTokens: oaiUsage.CompletionTokenDetails.ReasoningTokens,
+		}
 	}
 	if cacheCreation5m > 0 || cacheCreation1h > 0 {
 		usage.CacheCreation = &dto.ClaudeCacheCreationUsage{
@@ -267,7 +277,20 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 	// so we may have multiple open blocks and must stop each one explicitly.
 	stopOpenBlocks := func() {
 		switch info.ClaudeConvertInfo.LastMessagesType {
-		case relaycommon.LastMessageTypeText, relaycommon.LastMessageTypeThinking:
+		case relaycommon.LastMessageTypeThinking:
+			if info.ChannelType == constant.ChannelTypeMoonshot {
+				idx := info.ClaudeConvertInfo.Index
+				claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
+					Index: &idx,
+					Type:  "content_block_delta",
+					Delta: &dto.ClaudeMediaMessage{
+						Type:      "signature_delta",
+						Signature: common.GetPointer(""),
+					},
+				})
+			}
+			claudeResponses = append(claudeResponses, generateStopBlock(info.ClaudeConvertInfo.Index))
+		case relaycommon.LastMessageTypeText:
 			claudeResponses = append(claudeResponses, generateStopBlock(info.ClaudeConvertInfo.Index))
 		case relaycommon.LastMessageTypeTools:
 			base := info.ClaudeConvertInfo.ToolCallBaseIndex
@@ -303,8 +326,9 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			Type:  "message",
 			Role:  "assistant",
 			Usage: &dto.ClaudeUsage{
-				InputTokens:  info.GetEstimatePromptTokens(),
-				OutputTokens: 0,
+				InputTokens:           info.GetEstimatePromptTokens(),
+				OutputTokens:          0,
+				HideLegacyCacheFields: info.ChannelType == constant.ChannelTypeMoonshot,
 			},
 		}
 		msg.SetContent(make([]any, 0))
@@ -421,7 +445,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			if oaiUsage != nil {
 				claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
 					Type:  "message_delta",
-					Usage: buildClaudeUsageFromOpenAIUsage(oaiUsage),
+					Usage: buildClaudeUsageFromOpenAIUsage(oaiUsage, info),
 					Delta: &dto.ClaudeMediaMessage{
 						StopReason: common.GetPointer[string](stopReasonOpenAI2Claude(info.FinishReason)),
 					},
@@ -449,7 +473,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			}
 			claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
 				Type:  "message_delta",
-				Usage: buildClaudeUsageFromOpenAIUsage(oaiUsage),
+				Usage: buildClaudeUsageFromOpenAIUsage(oaiUsage, info),
 				Delta: &dto.ClaudeMediaMessage{
 					StopReason: common.GetPointer[string](stopReason),
 				},
@@ -587,7 +611,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			if oaiUsage != nil {
 				claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
 					Type:  "message_delta",
-					Usage: buildClaudeUsageFromOpenAIUsage(oaiUsage),
+					Usage: buildClaudeUsageFromOpenAIUsage(oaiUsage, info),
 					Delta: &dto.ClaudeMediaMessage{
 						StopReason: common.GetPointer[string](stopReasonOpenAI2Claude(info.FinishReason)),
 					},
@@ -615,6 +639,15 @@ func ResponseOpenAI2Claude(openAIResponse *dto.OpenAITextResponse, info *relayco
 	}
 	for _, choice := range openAIResponse.Choices {
 		stopReason = stopReasonOpenAI2Claude(choice.FinishReason)
+		if info != nil && info.ChannelType == constant.ChannelTypeMoonshot {
+			if reasoning := choice.Message.GetReasoningContent(); reasoning != "" {
+				contents = append(contents, dto.ClaudeMediaMessage{
+					Type:      "thinking",
+					Thinking:  common.GetPointer(reasoning),
+					Signature: common.GetPointer(""),
+				})
+			}
+		}
 		textContent := choice.Message.StringContent()
 		toolCalls := choice.Message.ParseToolCalls()
 		if textContent != "" || len(toolCalls) == 0 {
@@ -641,7 +674,7 @@ func ResponseOpenAI2Claude(openAIResponse *dto.OpenAITextResponse, info *relayco
 	}
 	claudeResponse.Content = contents
 	claudeResponse.StopReason = stopReason
-	claudeResponse.Usage = buildClaudeUsageFromOpenAIUsage(&openAIResponse.Usage)
+	claudeResponse.Usage = buildClaudeUsageFromOpenAIUsage(&openAIResponse.Usage, info)
 
 	return claudeResponse
 }

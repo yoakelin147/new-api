@@ -86,6 +86,12 @@ export interface ChannelSettings {
   pass_through_body_enabled?: boolean
   system_prompt?: string
   system_prompt_override?: boolean
+  request_path_rewrite?: RequestPathRewriteRule[]
+}
+
+export interface RequestPathRewriteRule {
+  target_path: string
+  conditions?: Record<string, string>
 }
 
 export interface ChannelOtherSettings {

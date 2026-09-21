@@ -48,7 +48,67 @@ func TestConvertOpenAIResponsesRequestUsesChatCompatibilityPolicy(t *testing.T) 
 	require.Equal(t, types.RelayFormatOpenAI, info.GetFinalRequestRelayFormat())
 }
 
+func TestConvertOpenAIResponsesRequestKeepsNativeProtocolByDefault(t *testing.T) {
+	settings := model_setting.GetGlobalSettings()
+	oldPolicy := settings.ResponsesToChatCompletionsPolicy
+	settings.ResponsesToChatCompletionsPolicy = model_setting.ChatCompletionsToResponsesPolicy{}
+	t.Cleanup(func() { settings.ResponsesToChatCompletionsPolicy = oldPolicy })
+
+	info := moonshotRelayInfo(types.RelayFormatOpenAIResponses)
+	info.RelayMode = relayconstant.RelayModeResponses
+	info.RequestURLPath = "/v1/responses"
+	input, err := common.Marshal("hello")
+	require.NoError(t, err)
+
+	converted, err := (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, info, dto.OpenAIResponsesRequest{Model: "kimi-k2.5", Input: input})
+	require.NoError(t, err)
+	relaycommon.AppendRequestConversionFromRequest(info, converted)
+
+	_, ok := converted.(*dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	requestURL, err := (&Adaptor{}).GetRequestURL(info)
+	require.NoError(t, err)
+	require.Equal(t, "https://api.moonshot.cn/v1/responses", requestURL)
+}
+
+func TestConvertOpenAIResponsesRequestForwardsKimiPromptCacheOptions(t *testing.T) {
+	settings := model_setting.GetGlobalSettings()
+	oldPolicy := settings.ResponsesToChatCompletionsPolicy
+	settings.ResponsesToChatCompletionsPolicy = model_setting.ChatCompletionsToResponsesPolicy{
+		Enabled:       true,
+		ChannelIDs:    []int{25},
+		ModelPatterns: []string{"^kimi-k3$"},
+	}
+	t.Cleanup(func() { settings.ResponsesToChatCompletionsPolicy = oldPolicy })
+
+	info := moonshotRelayInfo(types.RelayFormatOpenAIResponses)
+	info.OriginModelName = "kimi-k3"
+	info.UpstreamModelName = "kimi-k3"
+	info.RelayMode = relayconstant.RelayModeResponses
+	input, err := common.Marshal("hello")
+	require.NoError(t, err)
+
+	converted, err := (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, info, dto.OpenAIResponsesRequest{
+		Model:              "kimi-k3",
+		Input:              input,
+		PromptCacheOptions: []byte(`{"mode":"implicit","ttl":"1h"}`),
+	})
+	require.NoError(t, err)
+	data, err := common.Marshal(converted)
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"prompt_cache_options":{"mode":"implicit","ttl":"1h"}`)
+}
+
 func TestConvertClaudeRequestUsesOpenAICompatibilityForRegularMoonshot(t *testing.T) {
+	settings := model_setting.GetGlobalSettings()
+	oldPolicy := settings.MessagesToChatCompletionsPolicy
+	settings.MessagesToChatCompletionsPolicy = model_setting.ChatCompletionsToResponsesPolicy{
+		Enabled:       true,
+		ChannelIDs:    []int{25},
+		ModelPatterns: []string{"^kimi-k2.5$"},
+	}
+	t.Cleanup(func() { settings.MessagesToChatCompletionsPolicy = oldPolicy })
+
 	info := moonshotRelayInfo(types.RelayFormatClaude)
 	request := &dto.ClaudeRequest{Model: "kimi-k2.5"}
 	request.Messages = []dto.ClaudeMessage{{Role: "user", Content: "hello"}}
@@ -63,6 +123,91 @@ func TestConvertClaudeRequestUsesOpenAICompatibilityForRegularMoonshot(t *testin
 	requestURL, err := (&Adaptor{}).GetRequestURL(info)
 	require.NoError(t, err)
 	require.Equal(t, "https://api.moonshot.cn/v1/chat/completions", requestURL)
+}
+
+func TestConvertClaudeRequestMapsKimiK3MessagesOptions(t *testing.T) {
+	settings := model_setting.GetGlobalSettings()
+	oldPolicy := settings.MessagesToChatCompletionsPolicy
+	settings.MessagesToChatCompletionsPolicy = model_setting.ChatCompletionsToResponsesPolicy{
+		Enabled:       true,
+		ChannelIDs:    []int{25},
+		ModelPatterns: []string{"^kimi-k3$"},
+	}
+	t.Cleanup(func() { settings.MessagesToChatCompletionsPolicy = oldPolicy })
+
+	info := moonshotRelayInfo(types.RelayFormatClaude)
+	info.OriginModelName = "kimi-k3"
+	info.UpstreamModelName = "kimi-k3"
+	request := &dto.ClaudeRequest{
+		Model:        "kimi-k3",
+		MaxTokens:    common.GetPointer[uint](1024),
+		OutputConfig: []byte(`{"effort":"high","format":{"type":"json_schema","schema":{"type":"object"}}}`),
+		ToolChoice:   map[string]any{"type": "none"},
+		Messages:     []dto.ClaudeMessage{{Role: "user", Content: "hello"}},
+	}
+
+	converted, err := (&Adaptor{}).ConvertClaudeRequest(nil, info, request)
+	require.NoError(t, err)
+	chatRequest, ok := converted.(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.Equal(t, "high", chatRequest.ReasoningEffort)
+	require.Equal(t, "none", chatRequest.ToolChoice)
+	require.NotNil(t, chatRequest.ResponseFormat)
+	require.Equal(t, "json_schema", chatRequest.ResponseFormat.Type)
+	require.JSONEq(t, `{"name":"response","schema":{"type":"object"},"strict":true}`, string(chatRequest.ResponseFormat.JsonSchema))
+}
+
+func TestConvertClaudeRequestMapsAnyToolChoiceToRequired(t *testing.T) {
+	target := &dto.GeneralOpenAIRequest{}
+	err := ApplyKimiMessagesCompatibility(&dto.ClaudeRequest{
+		ToolChoice: map[string]any{"type": "any"},
+	}, target)
+
+	require.NoError(t, err)
+	require.Equal(t, "required", target.ToolChoice)
+}
+
+func TestConvertClaudeRequestKeepsNativeProtocolByDefault(t *testing.T) {
+	settings := model_setting.GetGlobalSettings()
+	oldPolicy := settings.MessagesToChatCompletionsPolicy
+	settings.MessagesToChatCompletionsPolicy = model_setting.ChatCompletionsToResponsesPolicy{}
+	t.Cleanup(func() { settings.MessagesToChatCompletionsPolicy = oldPolicy })
+
+	info := moonshotRelayInfo(types.RelayFormatClaude)
+	request := &dto.ClaudeRequest{Model: "kimi-k2.5"}
+	request.Messages = []dto.ClaudeMessage{{Role: "user", Content: "hello"}}
+
+	converted, err := (&Adaptor{}).ConvertClaudeRequest(nil, info, request)
+	require.NoError(t, err)
+	relaycommon.AppendRequestConversionFromRequest(info, converted)
+
+	_, ok := converted.(*dto.ClaudeRequest)
+	require.True(t, ok)
+	requestURL, err := (&Adaptor{}).GetRequestURL(info)
+	require.NoError(t, err)
+	require.Equal(t, "https://api.moonshot.cn/anthropic/v1/messages", requestURL)
+}
+
+func TestNativeMessagesDoesNotHardcodeAliyunEndpoint(t *testing.T) {
+	info := moonshotRelayInfo(types.RelayFormatClaude)
+	info.ChannelBaseUrl = "https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode"
+	info.RequestURLPath = "/v1/messages"
+
+	requestURL, err := (&Adaptor{}).GetRequestURL(info)
+
+	require.NoError(t, err)
+	require.Equal(t, "https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/messages", requestURL)
+}
+
+func TestNativeMessagesUsesClientPathForOtherCustomBase(t *testing.T) {
+	info := moonshotRelayInfo(types.RelayFormatClaude)
+	info.ChannelBaseUrl = "https://provider.example"
+	info.RequestURLPath = "/v1/messages"
+
+	requestURL, err := (&Adaptor{}).GetRequestURL(info)
+
+	require.NoError(t, err)
+	require.Equal(t, "https://provider.example/v1/messages", requestURL)
 }
 
 func TestConvertClaudeRequestKeepsNativeKimiCodingPlan(t *testing.T) {

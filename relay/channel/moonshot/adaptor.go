@@ -32,14 +32,20 @@ func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dt
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, req *dto.ClaudeRequest) (any, error) {
-	if info != nil {
-		if _, ok := channelconstant.ChannelSpecialBases[info.ChannelBaseUrl]; ok {
-			adaptor := claude.Adaptor{}
-			return adaptor.ConvertClaudeRequest(c, info, req)
-		}
+	if info == nil {
+		adaptor := claude.Adaptor{}
+		return adaptor.ConvertClaudeRequest(c, info, req)
+	}
+	if _, ok := channelconstant.ChannelSpecialBases[info.ChannelBaseUrl]; ok ||
+		!service.ShouldMessagesUseChatCompletionsGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		adaptor := claude.Adaptor{}
+		return adaptor.ConvertClaudeRequest(c, info, req)
 	}
 	request, err := service.ClaudeToOpenAIRequest(*req, info)
 	if err != nil {
+		return nil, err
+	}
+	if err := ApplyKimiMessagesCompatibility(req, request); err != nil {
 		return nil, err
 	}
 	if info.SupportStreamOptions && info.IsStream {
@@ -74,7 +80,12 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 
 	switch info.GetFinalRequestRelayFormat() {
 	case types.RelayFormatClaude:
-		return fmt.Sprintf("%s/anthropic/v1/messages", info.ChannelBaseUrl), nil
+		if normalizedBaseURL := strings.TrimRight(info.ChannelBaseUrl, "/"); strings.EqualFold(normalizedBaseURL, "https://api.moonshot.cn") {
+			return fmt.Sprintf("%s/anthropic/v1/messages", normalizedBaseURL), nil
+		}
+		return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, info.RequestURLPath, info.ChannelType), nil
+	case types.RelayFormatOpenAIResponses:
+		return relaycommon.GetFullRequestURL(info.ChannelBaseUrl, info.RequestURLPath, info.ChannelType), nil
 	default:
 		if info.RelayMode == constant.RelayModeRerank {
 			return fmt.Sprintf("%s/v1/rerank", info.ChannelBaseUrl), nil
@@ -120,25 +131,41 @@ func isTemperatureOneOnlyModel(model string) bool {
 }
 
 func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
-	if info != nil &&
-		info.RelayMode == constant.RelayModeResponses &&
-		service.ShouldResponsesUseChatCompletionsGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
-		chatRequest, err := service.ResponsesRequestToChatCompletionsRequest(&request)
-		if err != nil {
-			return nil, err
-		}
-		converted, err := a.ConvertOpenAIRequest(c, info, chatRequest)
-		if err != nil {
-			return nil, err
-		}
-		info.RequestURLPath = "/v1/chat/completions"
-		info.FinalRequestRelayFormat = types.RelayFormatOpenAI
-		if c != nil {
-			c.Set(ginKeyResponsesViaChatCompletions, true)
-		}
-		return converted, nil
+	if info == nil || info.RelayMode != constant.RelayModeResponses ||
+		!service.ShouldResponsesUseChatCompletionsGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		return &request, nil
 	}
-	return nil, errors.New("not implemented")
+	chatRequest, err := service.ResponsesRequestToChatCompletionsRequest(&request)
+	if err != nil {
+		return nil, err
+	}
+	converted, err := a.ConvertOpenAIRequest(c, info, chatRequest)
+	if err != nil {
+		return nil, err
+	}
+	info.RequestURLPath = "/v1/chat/completions"
+	info.FinalRequestRelayFormat = types.RelayFormatOpenAI
+	if c != nil {
+		c.Set(ginKeyResponsesViaChatCompletions, true)
+	}
+	if len(request.PromptCacheOptions) > 0 {
+		data, err := common.Marshal(converted)
+		if err != nil {
+			return nil, err
+		}
+		var body map[string]any
+		if err := common.Unmarshal(data, &body); err != nil {
+			return nil, err
+		}
+		var options any
+		if err := common.Unmarshal(request.PromptCacheOptions, &options); err != nil {
+			return nil, err
+		}
+		body["prompt_cache_options"] = options
+		info.AppendRequestConversion(types.RelayFormatOpenAI)
+		return body, nil
+	}
+	return converted, nil
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {

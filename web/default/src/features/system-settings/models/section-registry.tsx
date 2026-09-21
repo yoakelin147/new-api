@@ -58,6 +58,10 @@ const MODELS_SECTIONS = [
               settings['global.responses_to_chat_completions_policy'],
               '{}'
             ),
+            messages_to_chat_completions_policy: formatJsonForEditor(
+              settings['global.messages_to_chat_completions_policy'],
+              '{}'
+            ),
           },
           general_setting: {
             ping_interval_enabled:

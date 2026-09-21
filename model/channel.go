@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -961,6 +962,24 @@ func (channel *Channel) ValidateSettings() error {
 		err := common.Unmarshal([]byte(*channel.Setting), channelParams)
 		if err != nil {
 			return err
+		}
+	}
+	for index, rule := range channelParams.RequestPathRewrite {
+		source := strings.TrimSpace(rule.Conditions["request_path"])
+		switch source {
+		case "/v1/chat/completions", "/v1/responses", "/v1/messages":
+		default:
+			return fmt.Errorf("request_path_rewrite[%d].conditions.request_path must be /v1/chat/completions, /v1/responses, or /v1/messages", index)
+		}
+		target := strings.TrimSpace(rule.TargetPath)
+		targetURL, err := url.ParseRequestURI(target)
+		if err != nil || target == "" || !strings.HasPrefix(target, "/") || targetURL.IsAbs() || targetURL.Host != "" || targetURL.Fragment != "" {
+			return fmt.Errorf("request_path_rewrite[%d].target_path must be a path starting with '/'", index)
+		}
+		for condition := range rule.Conditions {
+			if condition != "request_path" {
+				return fmt.Errorf("request_path_rewrite[%d] uses unsupported condition %q", index, condition)
+			}
 		}
 	}
 	return nil

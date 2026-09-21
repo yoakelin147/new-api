@@ -1,12 +1,18 @@
 package dto
 
 type ChannelSettings struct {
-	ForceFormat            bool   `json:"force_format,omitempty"`
-	ThinkingToContent      bool   `json:"thinking_to_content,omitempty"`
-	Proxy                  string `json:"proxy"`
-	PassThroughBodyEnabled bool   `json:"pass_through_body_enabled,omitempty"`
-	SystemPrompt           string `json:"system_prompt,omitempty"`
-	SystemPromptOverride   bool   `json:"system_prompt_override,omitempty"`
+	ForceFormat            bool                     `json:"force_format,omitempty"`
+	ThinkingToContent      bool                     `json:"thinking_to_content,omitempty"`
+	Proxy                  string                   `json:"proxy"`
+	PassThroughBodyEnabled bool                     `json:"pass_through_body_enabled,omitempty"`
+	SystemPrompt           string                   `json:"system_prompt,omitempty"`
+	SystemPromptOverride   bool                     `json:"system_prompt_override,omitempty"`
+	RequestPathRewrite     []RequestPathRewriteRule `json:"request_path_rewrite,omitempty"`
+}
+
+type RequestPathRewriteRule struct {
+	TargetPath string            `json:"target_path"`
+	Conditions map[string]string `json:"conditions,omitempty"`
 }
 
 type VertexKeyType string
